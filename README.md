@@ -11,6 +11,16 @@ The review pipeline is the same across providers:
 5. Post inline comments with optional `suggestion` blocks.
 6. Update PR body with `STATUS_LINE`. Add or remove `blocking-review` label.
 
+```mermaid
+graph TD
+    Trigger[PR Event / Comment / Label] --> Prefetch[1. Prefetch: Diff, Rules, Metadata]
+    Prefetch --> Detect[2. Detect Angles: Bugs, Security, Design, React, SEO]
+    Detect --> Audit[3. Audit: Parallel/Sequential LLM Runs]
+    Audit --> Validate[4. Validator: Dedupe & Confirm Severity]
+    Validate --> Post[5. Post Inline Comments & Suggestions]
+    Post --> Update[6. Update PR Body & Blocking Label]
+```
+
 ## Angles
 
 | Angle | Always-on | Detection trigger | Tooling |
