@@ -83,6 +83,9 @@ if [ -n "$DISABLE" ]; then
 fi
 
 CSV=$(IFS=,; echo "${ANGLES[*]}")
+JSON_ARRAY=$(printf '%s\n' "${ANGLES[@]}" | jq -R . | jq -s -c .)
+
 printf '%s\n' "${ANGLES[@]}" > "$OUTDIR/angles.txt"
 echo "angles=$CSV" >> "$GITHUB_OUTPUT"
+echo "angles_json=$JSON_ARRAY" >> "$GITHUB_OUTPUT"
 echo "Enabled review angles: $CSV"
