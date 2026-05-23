@@ -15,6 +15,14 @@ inputs:
     description: 'Model identifier passed to the chosen runner. For openrouter, use the openrouter/<model> form.'
     required: false
     default: ''
+  mode:
+    description: 'Execution mode: full (sequential) | detect | review | validate'
+    required: false
+    default: 'full'
+  angle:
+    description: 'Specific angle to run (required if mode=review)'
+    required: false
+    default: ''
 
   # Credentials — only the one for the chosen provider is required.
   anthropic_token:
@@ -119,7 +127,7 @@ runs:
 
     - name: Detect review angles
       id: angles
-      if: steps.prefetch.outputs.skip != 'true'
+      if: steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'detect')
       shell: bash
       env:
         GITHUB_WORKSPACE: ${{ github.workspace }}
@@ -127,31 +135,35 @@ runs:
       run: bash "${{ github.action_path }}/scripts/detect-angles.sh"
 
     - name: Setup Node.js (for react-doctor + impeccable CLIs)
-      if: steps.prefetch.outputs.skip != 'true' && (contains(steps.angles.outputs.angles, 'react') || contains(steps.angles.outputs.angles, 'design'))
+      if: |
+        steps.prefetch.outputs.skip != 'true' && (
+          (inputs.mode == 'full' && (contains(steps.angles.outputs.angles, 'react') || contains(steps.angles.outputs.angles, 'design'))) ||
+          (inputs.mode == 'review' && (contains(inputs.angle, 'react') || contains(inputs.angle, 'design')))
+        )
       uses: actions/setup-node@v4
       with:
         node-version: '22'
 
     - name: Load prompt
       id: load-prompt
-      if: steps.prefetch.outputs.skip != 'true'
+      if: steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review' || inputs.mode == 'validate')
       shell: bash
       env:
         PROVIDER: ${{ steps.detect.outputs.provider }}
         ACTION_PATH: ${{ github.action_path }}
-        INPUT_PROMPT_OVERRIDE: ${{ inputs.prompt_override }}
+        INPUT_PROMPT_OVERRIDE: ${{ (inputs.mode == 'validate' && format('{0}/prompts/validator.md', github.action_path)) || inputs.prompt_override }}
         PR_NUMBER: ${{ steps.pr.outputs.number }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         EVENT_NAME: ${{ github.event_name }}
         COMMENT_BODY: ${{ github.event.comment.body }}
-        ENABLED_ANGLES: ${{ steps.angles.outputs.angles }}
+        ENABLED_ANGLES: ${{ (inputs.mode == 'review' && inputs.angle) || steps.angles.outputs.angles }}
       run: bash "${{ github.action_path }}/scripts/load-prompt.sh"
 
     # --- Provider runners (mutually exclusive) ---
 
     - name: Run review (Anthropic)
       id: run-anthropic
-      if: steps.detect.outputs.provider == 'anthropic' && steps.prefetch.outputs.skip != 'true'
+      if: steps.detect.outputs.provider == 'anthropic' && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review' || inputs.mode == 'validate')
       continue-on-error: true
       uses: anthropics/claude-code-action@v1
       with:
@@ -181,13 +193,13 @@ runs:
           }
       env:
         WOO_REVIEW_ACTION_PATH: ${{ github.action_path }}
-        ENABLED_ANGLES: ${{ steps.angles.outputs.angles }}
+        ENABLED_ANGLES: ${{ (inputs.mode == 'review' && inputs.angle) || steps.angles.outputs.angles }}
         IMPECCABLE_VERSION: ${{ inputs.impeccable_version }}
         REACT_DOCTOR_VERSION: ${{ inputs.react_doctor_version }}
 
     - name: Run review (OpenAI Codex)
       id: run-openai
-      if: steps.detect.outputs.provider == 'openai' && steps.prefetch.outputs.skip != 'true'
+      if: steps.detect.outputs.provider == 'openai' && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review' || inputs.mode == 'validate')
       continue-on-error: true
       uses: openai/codex-action@v1
       with:
@@ -200,13 +212,13 @@ runs:
         GH_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         WOO_REVIEW_ACTION_PATH: ${{ github.action_path }}
-        ENABLED_ANGLES: ${{ steps.angles.outputs.angles }}
+        ENABLED_ANGLES: ${{ (inputs.mode == 'review' && inputs.angle) || steps.angles.outputs.angles }}
         IMPECCABLE_VERSION: ${{ inputs.impeccable_version }}
         REACT_DOCTOR_VERSION: ${{ inputs.react_doctor_version }}
 
     - name: Run review (Google Gemini)
       id: run-google
-      if: steps.detect.outputs.provider == 'google' && steps.prefetch.outputs.skip != 'true'
+      if: steps.detect.outputs.provider == 'google' && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review' || inputs.mode == 'validate')
       continue-on-error: true
       uses: google-github-actions/run-gemini-cli@v0
       with:
@@ -218,13 +230,13 @@ runs:
         GH_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         WOO_REVIEW_ACTION_PATH: ${{ github.action_path }}
-        ENABLED_ANGLES: ${{ steps.angles.outputs.angles }}
+        ENABLED_ANGLES: ${{ (inputs.mode == 'review' && inputs.angle) || steps.angles.outputs.angles }}
         IMPECCABLE_VERSION: ${{ inputs.impeccable_version }}
         REACT_DOCTOR_VERSION: ${{ inputs.react_doctor_version }}
 
     - name: Run review (OpenRouter via opencode)
       id: run-opencode
-      if: steps.detect.outputs.provider == 'openrouter' && steps.prefetch.outputs.skip != 'true'
+      if: steps.detect.outputs.provider == 'openrouter' && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review' || inputs.mode == 'validate')
       continue-on-error: true
       uses: sst/opencode/github@latest
       with:
@@ -236,13 +248,13 @@ runs:
         GH_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         WOO_REVIEW_ACTION_PATH: ${{ github.action_path }}
-        ENABLED_ANGLES: ${{ steps.angles.outputs.angles }}
+        ENABLED_ANGLES: ${{ (inputs.mode == 'review' && inputs.angle) || steps.angles.outputs.angles }}
         IMPECCABLE_VERSION: ${{ inputs.impeccable_version }}
         REACT_DOCTOR_VERSION: ${{ inputs.react_doctor_version }}
 
     - name: Check review results
       id: post-check
-      if: always() && steps.prefetch.outputs.skip != 'true'
+      if: always() && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'validate' || inputs.mode == 'review')
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
