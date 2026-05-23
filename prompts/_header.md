@@ -5,8 +5,9 @@ This contract is identical across every provider runner. The orchestration secti
 ## Prefetched Artifacts (do NOT re-fetch)
 
 - **Diff**: `/tmp/pr-review/diff.txt`
-- **PR metadata** (title, body, headRefOid, files): `/tmp/pr-review/meta.json`
+- **PR metadata** (title, body, headRefOid, baseRefName, files): `/tmp/pr-review/meta.json`
 - **Combined rules** (constitution.md + applicable CLAUDE.md files): `/tmp/pr-review/rules.md`
+- **Enabled angles** (one per line): `/tmp/pr-review/angles.txt`
 
 Set `PR_NUMBER` and `HEAD_SHA` as shell variables before posting anything:
 
@@ -14,6 +15,20 @@ Set `PR_NUMBER` and `HEAD_SHA` as shell variables before posting anything:
 PR_NUMBER="<from Review Context>"
 HEAD_SHA="$(jq -r '.headRefOid' /tmp/pr-review/meta.json)"
 ```
+
+## Review Angles
+
+This action runs up to five distinct review angles, auto-selected from the changed files. The set of enabled angles is listed in `/tmp/pr-review/angles.txt`. The per-angle prompt bodies live at `${ACTION_PATH}/prompts/angles/<angle>.md` and are loaded by the orchestrator.
+
+| Angle | Always-on | Tooling |
+|---|---|---|
+| `bugs` | yes | LLM only |
+| `security` | yes | LLM only |
+| `seo` | no | LLM only |
+| `design` | no | LLM + `npx -y impeccable@$IMPECCABLE_VERSION detect --json` (anti-pattern CLI) |
+| `react` | no | `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline` (React linter) + LLM |
+
+Each angle writes its findings to `/tmp/pr-review/findings.<angle>.json`. The orchestrator merges them into `/tmp/pr-review/findings.json` after the validator pass, then posts inline comments and manages the blocking label.
 
 ## Output Contract
 
@@ -93,11 +108,12 @@ Body rules: status line + credits line only. Do **not** list finding titles, fil
 
 ## Findings Schema (`/tmp/pr-review/findings.json`)
 
-Every runner MUST write a final `findings.json` (for debugging + potential post-processing parity):
+Every runner MUST write a final `findings.json` (for debugging + potential post-processing parity). Each per-angle step writes to `/tmp/pr-review/findings.<angle>.json`; the orchestrator merges them after validation:
 
 ```json
 [
   {
+    "angle": "bugs",
     "file": "src/foo.ts",
     "line": 42,
     "severity": "HIGH",
@@ -107,6 +123,8 @@ Every runner MUST write a final `findings.json` (for debugging + potential post-
   }
 ]
 ```
+
+`angle` is one of `bugs | security | seo | design | react`.
 
 ## Blocking Criteria
 

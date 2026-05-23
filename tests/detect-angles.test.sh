@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+# Unit test for scripts/detect-angles.sh. Builds synthetic prefetch artifacts
+# for three diff scenarios and asserts the emitted angles CSV.
+#
+# Exits non-zero on the first failure. Designed to run in CI without network.
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT="$REPO_ROOT/scripts/detect-angles.sh"
+WORK="$(mktemp -d)"
+PREFETCH="/tmp/pr-review"
+mkdir -p "$PREFETCH"
+
+# Mimic GITHUB_OUTPUT
+OUTPUT_FILE="$WORK/output"
+export GITHUB_OUTPUT="$OUTPUT_FILE"
+export GITHUB_WORKSPACE="$WORK/workspace"
+mkdir -p "$GITHUB_WORKSPACE"
+
+fail=0
+
+run_case() {
+  local name="$1" expected="$2"
+  : > "$OUTPUT_FILE"
+  bash "$SCRIPT"
+  local actual
+  actual=$(grep '^angles=' "$OUTPUT_FILE" | head -n1 | cut -d= -f2-)
+  if [ "$actual" = "$expected" ]; then
+    echo "ok   $name -> $actual"
+  else
+    echo "FAIL $name: expected '$expected', got '$actual'"
+    fail=1
+  fi
+}
+
+# --- Case 1: backend-only diff (Python + Go) -> bugs,security
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "deadbeef",
+  "baseRefName": "main",
+  "title": "feat: refactor auth",
+  "body": "",
+  "files": [
+    {"path": "server/auth.py", "additions": 20, "deletions": 5},
+    {"path": "cmd/api/main.go", "additions": 10, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/server/auth.py b/server/auth.py
++def login(user, password):
++    return bcrypt.check(password, user.hash)
+DIFF
+rm -f "$GITHUB_WORKSPACE/package.json"
+run_case "backend-only" "bugs,security"
+
+# --- Case 2: React app PR touching layout.tsx with metadata -> bugs,security,seo,design,react
+cat > "$GITHUB_WORKSPACE/package.json" <<'PKG'
+{
+  "dependencies": { "react": "^18.0.0", "react-dom": "^18.0.0" }
+}
+PKG
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "feedface",
+  "baseRefName": "main",
+  "title": "feat: new product page",
+  "body": "",
+  "files": [
+    {"path": "app/layout.tsx", "additions": 30, "deletions": 0},
+    {"path": "app/page.tsx", "additions": 50, "deletions": 0},
+    {"path": "app/globals.css", "additions": 10, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/app/layout.tsx b/app/layout.tsx
++export const metadata = {
++  title: 'Product',
++  openGraph: { 'og:title': 'Product' }
++};
+DIFF
+run_case "react+seo+design" "bugs,security,seo,design,react"
+
+# --- Case 3: pure CSS change -> bugs,security,design
+rm -f "$GITHUB_WORKSPACE/package.json"
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "cafebabe",
+  "baseRefName": "main",
+  "title": "style: tighten spacing",
+  "body": "",
+  "files": [
+    {"path": "src/styles/main.css", "additions": 12, "deletions": 3}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/src/styles/main.css b/src/styles/main.css
++.card { padding: 12px; }
+DIFF
+run_case "design-only" "bugs,security,design"
+
+# --- Case 4: disable_angles=design,react drops design from CSS PR -> bugs,security
+INPUT_DISABLE_ANGLES="design,react" \
+  bash "$SCRIPT" > /dev/null
+actual=$(grep '^angles=' "$OUTPUT_FILE" | tail -n1 | cut -d= -f2-)
+if [ "$actual" = "bugs,security" ]; then
+  echo "ok   disable_angles=design,react -> $actual"
+else
+  echo "FAIL disable_angles: expected 'bugs,security', got '$actual'"
+  fail=1
+fi
+
+# --- Case 5: disable_angles cannot drop bugs/security
+: > "$OUTPUT_FILE"
+INPUT_DISABLE_ANGLES="bugs,security,design" \
+  bash "$SCRIPT" > /dev/null
+actual=$(grep '^angles=' "$OUTPUT_FILE" | tail -n1 | cut -d= -f2-)
+if [ "$actual" = "bugs,security" ]; then
+  echo "ok   disable_angles refuses to drop bugs/security -> $actual"
+else
+  echo "FAIL disable_angles refusal: expected 'bugs,security', got '$actual'"
+  fail=1
+fi
+
+if [ $fail -ne 0 ]; then
+  echo "TESTS FAILED"
+  exit 1
+fi
+echo "All detect-angles tests passed."

@@ -1,47 +1,49 @@
-# OpenRouter (OpenCode) — Agentic Loop Review
+# OpenRouter (OpenCode) — Multi-Angle Agentic Review
 
 OpenCode runs an agentic shell. Use its subagent system if available (`@subagent`-style spawning); otherwise fall back to the sequential structure shown below. The output contract is identical to the other providers.
 
+The shared header above lists prefetched artifacts, findings schema, blocking criteria, and the do-NOT-flag list. **Apply them verbatim.** Per-angle prompt bodies live at `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md` in the bundled action repo.
+
 ## Phase 1 — Read artifacts + draft summary
 
-Read `/tmp/pr-review/diff.txt`, `/tmp/pr-review/meta.json`, `/tmp/pr-review/rules.md`. Generate a Conventional Commit title and update via `gh pr edit "$PR_NUMBER" --title "<title>"`. Draft 1–2 sentence summary, change bullets, files-by-category, optional manual test plan.
+Read `/tmp/pr-review/diff.txt`, `/tmp/pr-review/meta.json`, `/tmp/pr-review/rules.md`, `/tmp/pr-review/angles.txt`. Generate a Conventional Commit title; update via `gh pr edit "$PR_NUMBER" --title "<title>"`. Draft 1–2 sentence summary, change bullets, files-by-category, optional manual test plan.
 
-## Phase 2 — Audit (constitution + bugs, security + logic)
+## Phase 2 — Per-Angle Audit
 
-Run two audit lenses, in parallel via subagents if the runtime supports it, otherwise sequentially:
+For each angle listed in `/tmp/pr-review/angles.txt`:
 
-**Lens A — Constitution + bugs**
-- Audit diff against `rules.md`. CLAUDE.md rules apply only at-or-above the changed file's dir.
-- Find obvious bugs: syntax/type errors, missing imports, unresolved references, clearly-wrong logic.
-- Defensible non-blocking suggestions. Skip lint-catchable.
+- If the OpenCode runtime supports parallel subagents, spawn one subagent per angle in parallel.
+- Otherwise run them sequentially in the order listed.
 
-**Lens B — Security + logic**
-- Security vulnerabilities introduced by this PR.
-- Incorrect logic shipping wrong results.
-- Non-blocking: defensive coding, edge cases, performance smells.
-- Skip pre-existing issues.
+Each angle agent:
 
-(See `_header.md` for blocking-criteria + do-NOT-flag list.)
+1. Loads `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md`.
+2. Executes the angle prompt. For `design` run `npx -y impeccable@$IMPECCABLE_VERSION detect --json`. For `react` run `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline`.
+3. Writes findings to `/tmp/pr-review/findings.<angle>.json` (JSON array per the schema in `_header.md`).
+
+Stay within each angle's scope; do not let one angle flag issues that belong to another.
 
 ## Phase 3 — Self-Validation
 
-Merge findings from both lenses. For each finding:
-1. Real, in-diff, this-PR-introduced? If NO → drop.
-2. If YES, confirm or downgrade `blocking`. Never upgrade.
+Sequential (do not parallelize validation). Merge all `findings.<angle>.json`. For each finding:
 
-Persist to `/tmp/pr-review/findings.json` per `_header.md` schema.
+1. Real, in-diff, this-PR-introduced? If NO → drop.
+2. Confirm or downgrade `blocking`. Never upgrade.
+3. Dedupe across angles.
+
+Persist to `/tmp/pr-review/findings.json` per `_header.md`.
 
 ## Phase 4 — Post Inline Comments
 
-Loop over `findings.json`. Follow the inline-comment-posting procedure in `_header.md` exactly.
+For each finding in `findings.json`, follow `_header.md`'s inline-comment-posting procedure exactly.
 
 ## Phase 5 — Update PR Body + Manage Label
 
-Compute counts. Build `STATUS_LINE`. Update PR body. Add/remove `blocking-review` label per `_header.md`.
+Compute counts. Build `STATUS_LINE`. Update PR body. Add or remove `blocking-review` label per `_header.md`.
 
 ## Rules
 
 - Execute autonomously — never request user confirmation.
 - Trust prefetched artifacts.
 - `findings.json` is the single source of truth for posting.
-- If parallel subagents are available, use them for Phase 2; do not parallelize Phase 3 (validation is sequential).
+- Parallel subagents in Phase 2 must complete before Phase 3.

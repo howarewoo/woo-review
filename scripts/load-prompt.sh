@@ -33,6 +33,8 @@ CONTEXT_HEAD=$(cat <<CTX_EOF
 - PR Number: ${PR_NUMBER:-unknown}
 - Trigger event: ${EVENT_NAME:-unknown}
 - Comment body (populated only for issue_comment trigger): ${COMMENT_BODY:-}
+- Enabled review angles: ${ENABLED_ANGLES:-bugs,security}
+- Bundled action path (per-angle prompts live at \$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md): \$WOO_REVIEW_ACTION_PATH
 
 CTX_EOF
 )

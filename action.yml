@@ -67,6 +67,18 @@ inputs:
     description: 'Optional path (relative to the consumer repo) to a custom prompt that replaces the bundled per-provider prompt. The shared _header.md contract is still prepended.'
     required: false
     default: ''
+  disable_angles:
+    description: 'Comma-separated list of review angles to skip (seo, design, react). `bugs` and `security` are always on and cannot be disabled.'
+    required: false
+    default: ''
+  react_doctor_version:
+    description: 'npm version of react-doctor to invoke via npx (used by the react angle).'
+    required: false
+    default: 'latest'
+  impeccable_version:
+    description: 'npm version of impeccable CLI to invoke via npx (used by the design angle).'
+    required: false
+    default: 'latest'
 
 runs:
   using: 'composite'
@@ -105,6 +117,21 @@ runs:
         INPUT_SKIP_LABELS: ${{ inputs.skip_labels }}
       run: bash "${{ github.action_path }}/scripts/prefetch.sh"
 
+    - name: Detect review angles
+      id: angles
+      if: steps.prefetch.outputs.skip != 'true'
+      shell: bash
+      env:
+        GITHUB_WORKSPACE: ${{ github.workspace }}
+        INPUT_DISABLE_ANGLES: ${{ inputs.disable_angles }}
+      run: bash "${{ github.action_path }}/scripts/detect-angles.sh"
+
+    - name: Setup Node.js (for react-doctor + impeccable CLIs)
+      if: steps.prefetch.outputs.skip != 'true' && (contains(steps.angles.outputs.angles, 'react') || contains(steps.angles.outputs.angles, 'design'))
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
     - name: Load prompt
       id: load-prompt
       if: steps.prefetch.outputs.skip != 'true'
@@ -117,6 +144,7 @@ runs:
         GITHUB_REPOSITORY: ${{ github.repository }}
         EVENT_NAME: ${{ github.event_name }}
         COMMENT_BODY: ${{ github.event.comment.body }}
+        ENABLED_ANGLES: ${{ steps.angles.outputs.angles }}
       run: bash "${{ github.action_path }}/scripts/load-prompt.sh"
 
     # --- Provider runners (mutually exclusive) ---
@@ -151,6 +179,11 @@ runs:
               "deny": []
             }
           }
+      env:
+        WOO_REVIEW_ACTION_PATH: ${{ github.action_path }}
+        ENABLED_ANGLES: ${{ steps.angles.outputs.angles }}
+        IMPECCABLE_VERSION: ${{ inputs.impeccable_version }}
+        REACT_DOCTOR_VERSION: ${{ inputs.react_doctor_version }}
 
     - name: Run review (OpenAI Codex)
       id: run-openai
@@ -166,6 +199,10 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
+        WOO_REVIEW_ACTION_PATH: ${{ github.action_path }}
+        ENABLED_ANGLES: ${{ steps.angles.outputs.angles }}
+        IMPECCABLE_VERSION: ${{ inputs.impeccable_version }}
+        REACT_DOCTOR_VERSION: ${{ inputs.react_doctor_version }}
 
     - name: Run review (Google Gemini)
       id: run-google
@@ -180,6 +217,10 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
+        WOO_REVIEW_ACTION_PATH: ${{ github.action_path }}
+        ENABLED_ANGLES: ${{ steps.angles.outputs.angles }}
+        IMPECCABLE_VERSION: ${{ inputs.impeccable_version }}
+        REACT_DOCTOR_VERSION: ${{ inputs.react_doctor_version }}
 
     - name: Run review (OpenRouter via opencode)
       id: run-opencode
@@ -194,6 +235,10 @@ runs:
         OPENROUTER_API_KEY: ${{ inputs.openrouter_api_key }}
         GH_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
+        WOO_REVIEW_ACTION_PATH: ${{ github.action_path }}
+        ENABLED_ANGLES: ${{ steps.angles.outputs.angles }}
+        IMPECCABLE_VERSION: ${{ inputs.impeccable_version }}
+        REACT_DOCTOR_VERSION: ${{ inputs.react_doctor_version }}
 
     - name: Check review results
       id: post-check
