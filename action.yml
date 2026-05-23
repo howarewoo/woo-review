@@ -246,7 +246,7 @@ runs:
       with:
         gemini_api_key: ${{ inputs.gemini_api_key }}
         google_api_key: ${{ inputs.google_api_key }}
-        gemini_model: ${{ inputs.model || 'gemini-2.5-pro' }}
+        gemini_model: ${{ inputs.model || 'gemini-3-5-flash' }}
         prompt: ${{ steps.load-prompt.outputs.prompt }}
       env:
         GH_TOKEN: ${{ github.token }}
