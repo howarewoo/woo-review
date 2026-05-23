@@ -14,11 +14,11 @@ Unlike traditional sequential reviewers, `woo-review` uses a three-stage paralle
 graph TD
     Trigger[PR Event / Comment] --> Detect[1. Detect: dispatcher job]
     
-    Detect -- "JSON Array" --> Angle_Bugs
-    Detect -- "JSON Array" --> Angle_Security
-    Detect -- "JSON Array" --> Angle_React
-    Detect -- "JSON Array" --> Angle_Design
-    Detect -- "JSON Array" --> Angle_SEO
+    Detect -- "fan-out (JSON Array)" --> Angle_Bugs
+    Detect --> Angle_Security
+    Detect --> Angle_React
+    Detect --> Angle_Design
+    Detect --> Angle_SEO
 
     subgraph Parallel_Audits [2. Matrix: Parallel Angle Jobs]
         direction LR
@@ -29,11 +29,11 @@ graph TD
         Angle_SEO[seo]
     end
     
-    Angle_Bugs -- "Artifact" --> Validate
-    Angle_Security -- "Artifact" --> Validate
-    Angle_React -- "Artifact" --> Validate
-    Angle_Design -- "Artifact" --> Validate
-    Angle_SEO -- "Artifact" --> Validate
+    Angle_Bugs -- "fan-in (Artifacts)" --> Validate
+    Angle_Security --> Validate
+    Angle_React --> Validate
+    Angle_Design --> Validate
+    Angle_SEO --> Validate
 
     Validate[3. Validate: Skeptical Validator Agent] --> Post[4. Post Inline Comments & Labels]
 ```
