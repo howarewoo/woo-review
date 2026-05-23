@@ -21,17 +21,31 @@ mkdir -p "$GITHUB_WORKSPACE"
 fail=0
 
 run_case() {
-  local name="$1" expected="$2"
+  local name="$1" expected_csv="$2"
   : > "$OUTPUT_FILE"
   bash "$SCRIPT"
-  local actual
-  actual=$(grep '^angles=' "$OUTPUT_FILE" | head -n1 | cut -d= -f2-)
-  if [ "$actual" = "$expected" ]; then
-    echo "ok   $name -> $actual"
-  else
-    echo "FAIL $name: expected '$expected', got '$actual'"
+  
+  # Check CSV output
+  local actual_csv
+  actual_csv=$(grep '^angles=' "$OUTPUT_FILE" | head -n1 | cut -d= -f2-)
+  if [ "$actual_csv" != "$expected_csv" ]; then
+    echo "FAIL $name (csv): expected '$expected_csv', got '$actual_csv'"
     fail=1
+    return
   fi
+
+  # Check JSON output
+  local actual_json
+  actual_json=$(grep '^angles_json=' "$OUTPUT_FILE" | head -n1 | cut -d= -f2-)
+  local expected_json
+  expected_json=$(echo "$expected_csv" | tr ',' '\n' | jq -R . | jq -s -c .)
+  if [ "$actual_json" != "$expected_json" ]; then
+    echo "FAIL $name (json): expected '$expected_json', got '$actual_json'"
+    fail=1
+    return
+  fi
+
+  echo "ok   $name -> $actual_csv"
 }
 
 # --- Case 1: backend-only diff (Python + Go) -> bugs,security

@@ -47,3 +47,59 @@ jobs:
           anthropic_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           model: claude-sonnet-4-6
           constitution_path: constitution.md
+
+  parallel-review:
+    name: Parallel self-review
+    needs: unit
+    runs-on: ubuntu-latest
+    if: >
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
+      github.event_name == 'workflow_dispatch'
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Detect
+        id: detect
+        if: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+        uses: ./
+        with:
+          mode: detect
+          provider: anthropic
+          anthropic_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+      - name: Review
+        if: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' && steps.detect.outputs.angles_json != '[]' }}
+        # We manually simulate matrix by looping or just running one representative angle
+        # since strategy.matrix only works at the job level. 
+        # For self-test, we'll run the 'bugs' angle.
+        uses: ./
+        with:
+          mode: review
+          angle: bugs
+          provider: anthropic
+          anthropic_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          model: claude-sonnet-4-6
+
+      - name: Mock findings for other angles
+        if: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+        shell: bash
+        run: |
+          mkdir -p /tmp/pr-review
+          echo "[]" > /tmp/pr-review/findings.security.json
+
+      - name: Validate
+        if: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+        uses: ./
+        with:
+          mode: validate
+          provider: anthropic
+          anthropic_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          model: claude-sonnet-4-6
