@@ -2,10 +2,35 @@
 
 You are reviewing a pull request using Claude Code's `Task` tool. Every tool call must serve a clear purpose. Create a todo list before starting.
 
-The shared header above lists prefetched artifacts, the findings schema, the blocking criteria, and the do-NOT-flag list. **Apply them verbatim.** Per-angle prompt bodies live at `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md`. They share these conventions:
+The shared header above lists prefetched artifacts, the findings schema, the blocking criteria, and the do-NOT-flag list. **Apply them verbatim.** Per-angle prompt bodies live at `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md`.
 
-- Each angle reads its own scope from its prompt file.
-- Each angle writes findings to `/tmp/pr-review/findings.<angle>.json`.
+---
+
+## IMPORTANT: MODE-BASED EXECUTION
+
+Check the `Execution mode` in the Review Context above.
+
+### MODE: review
+You are running as a parallel worker for a specific angle.
+- The `Target angle` in Review Context is the only angle you must audit.
+- Do NOT post inline comments.
+- Do NOT update the PR body or title.
+- Do NOT manage labels.
+- Do NOT launch subagents for other angles.
+- Run ONLY the logic for your target angle (loading its prompt from `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md`).
+- Write your findings to `/tmp/pr-review/findings.<angle>.json` and then EXIT.
+
+### MODE: validate
+You are running as the final aggregator.
+- Read all `/tmp/pr-review/findings.<angle>.json` files from the disk.
+- Perform the validation step (Step 3 below).
+- Perform the final output step (Step 4 below): post inline comments, update PR body, manage label.
+- Exit.
+
+### MODE: full (or detect)
+Perform all steps (1 through 4) as the main orchestrator.
+
+---
 
 ## Step 1 — Context + Title + Summary (single Haiku subagent)
 

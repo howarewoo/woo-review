@@ -177,6 +177,8 @@ runs:
         EVENT_NAME: ${{ github.event_name }}
         COMMENT_BODY: ${{ github.event.comment.body }}
         ENABLED_ANGLES: ${{ (inputs.mode == 'review' && inputs.angle) || steps.angles.outputs.angles }}
+        MODE: ${{ inputs.mode }}
+        ANGLE: ${{ inputs.angle }}
       run: bash "${{ github.action_path }}/scripts/load-prompt.sh"
 
     # --- Provider runners (mutually exclusive) ---

@@ -74,7 +74,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: woo
-        uses: ./
+        uses: howarewoo/woo-review@main
         with:
           mode: detect
           disable_angles: ${{ inputs.disable_angles }}
@@ -89,7 +89,7 @@ jobs:
         angle: ${{ fromJson(needs.detect.outputs.angles) }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./
+      - uses: howarewoo/woo-review@main
         with:
           mode: review
           angle: ${{ matrix.angle }}
@@ -115,18 +115,19 @@ jobs:
           retention-days: 1
 
   validate:
-    needs: review
-    if: always()
+    needs: [detect, review]
+    if: always() && needs.detect.result == 'success' && (needs.review.result == 'success' || needs.review.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Download findings
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           pattern: findings-*
           path: /tmp/pr-review/
           merge-multiple: true
-      - uses: ./
+      - uses: howarewoo/woo-review@main
         with:
           mode: validate
           provider: ${{ inputs.provider }}
