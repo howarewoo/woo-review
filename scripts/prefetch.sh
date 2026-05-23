@@ -62,7 +62,7 @@ fi
 
 # Fetch diff + metadata.
 gh pr diff "$PR_NUMBER" > "$OUTDIR/diff.txt"
-gh pr view "$PR_NUMBER" --json headRefOid,title,body,files > "$OUTDIR/meta.json"
+gh pr view "$PR_NUMBER" --json headRefOid,baseRefName,title,body,files > "$OUTDIR/meta.json"
 
 DIFF_BYTES=$(wc -c < "$OUTDIR/diff.txt")
 CODE_FILES=$(jq -r '.files[].path' "$OUTDIR/meta.json" \

@@ -1,49 +1,44 @@
-# Google (Gemini CLI) — Tool-Loop Review
+# Google (Gemini CLI) — Tool-Loop Multi-Angle Review
 
 The Gemini CLI runs an agentic tool loop with access to `bash` and `gh`. Use the same structured-pass approach as Codex; Gemini has no native subagent primitive.
 
+The shared header above lists prefetched artifacts, findings schema, blocking criteria, and the do-NOT-flag list. **Apply them verbatim.** Per-angle prompt bodies live at `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md` in the bundled action repo.
+
 ## Phase 1 — Read artifacts + draft summary
 
-Read `/tmp/pr-review/diff.txt`, `/tmp/pr-review/meta.json`, `/tmp/pr-review/rules.md`. Generate Conventional Commit title, update via `gh pr edit "$PR_NUMBER" --title "<title>"`. Draft 1–2 sentence summary, change bullets, files-by-category, optional manual test plan.
+Read `/tmp/pr-review/diff.txt`, `/tmp/pr-review/meta.json`, `/tmp/pr-review/rules.md`, `/tmp/pr-review/angles.txt`. Generate a Conventional Commit title; update via `gh pr edit "$PR_NUMBER" --title "<title>"`. Draft 1–2 sentence summary, change bullets, files-by-category, optional manual test plan.
 
-## Phase 2 — Audit Pass A (constitution + bugs)
+## Phase 2 — Per-Angle Audit (sequential loop)
 
-- Audit diff against `rules.md`. CLAUDE.md rules apply only at-or-above the changed file's dir.
-- Find obvious bugs: syntax/type errors, missing imports, unresolved references, clearly-wrong logic.
-- Surface defensible non-blocking suggestions. Skip lint-catchable.
+For each angle listed in `/tmp/pr-review/angles.txt`, in order:
 
-Record as `pass_a` in memory.
+1. Read `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md`.
+2. Execute the angle prompt. For `design` run `npx -y impeccable@$IMPECCABLE_VERSION detect --json`. For `react` run `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline`.
+3. Write findings to `/tmp/pr-review/findings.<angle>.json` (JSON array conforming to `_header.md` schema).
 
-## Phase 3 — Audit Pass B (security + logic)
+Stay within each angle's scope.
 
-- Security vulnerabilities introduced by this PR.
-- Incorrect logic shipping wrong results.
-- Non-blocking: defensive coding, edge cases, performance smells.
-- Skip pre-existing issues.
+## Phase 3 — Self-Validation
 
-Record as `pass_b`.
+Merge all `findings.<angle>.json`. For each finding:
 
-(See `_header.md` for blocking-criteria + do-NOT-flag list.)
-
-## Phase 4 — Self-Validation
-
-Merge `pass_a + pass_b`. For each finding, re-read the diff hunk and apply:
 1. Real, in-diff, this-PR-introduced? If NO → drop.
-2. If YES, confirm or downgrade `blocking`. Never upgrade.
+2. Confirm or downgrade `blocking`. Never upgrade.
+3. Dedupe across angles.
 
 Persist to `/tmp/pr-review/findings.json` per `_header.md` schema.
 
-## Phase 5 — Post Inline Comments
+## Phase 4 — Post Inline Comments
 
-For each finding in `findings.json`, follow the inline-comment-posting procedure in `_header.md`. Use `gh api ... --input /tmp/pr_comment.json`.
+For each finding in `findings.json`, follow `_header.md`'s inline-comment procedure. Use the `gh` tool the Gemini runtime provides.
 
-## Phase 6 — Update PR Body + Manage Label
+## Phase 5 — Update PR Body + Manage Label
 
-Compute counts. Build `STATUS_LINE`. Update PR body. Add/remove `blocking-review` label per `_header.md`.
+Compute counts. Build `STATUS_LINE`. Update PR body. Add or remove `blocking-review` label per `_header.md`.
 
 ## Rules
 
 - Execute autonomously — never request user confirmation.
-- Use the `gh` CLI tool the runner provides; do not attempt other GitHub API approaches.
+- Use only the `gh` CLI for GitHub access.
 - Trust prefetched artifacts.
 - `findings.json` is the single source of truth for posting.

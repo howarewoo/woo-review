@@ -5,9 +5,9 @@ Reusable GitHub Action that runs an agentic AI pull request review and dispatche
 The review pipeline is the same across providers:
 
 1. Prefetch diff, metadata, and rules (`constitution.md` + applicable `CLAUDE.md` files).
-2. Audit lens A: constitution + bug detection.
-3. Audit lens B: security + logic.
-4. Self-validation to drop false positives and confirm severity.
+2. Detect enabled **review angles** from the changed file types (see [Angles](#angles) below).
+3. Run one audit per enabled angle. Anthropic runs them as parallel `Task` subagents; other providers loop sequentially.
+4. Validator pass to drop false positives, dedupe across angles, and confirm severity.
 5. Post inline comments with optional `suggestion` blocks.
 6. Update PR body with `STATUS_LINE`. Add or remove `blocking-review` label.
 
@@ -21,7 +21,19 @@ graph TD
     Post --> Update[6. Update PR Body & Blocking Label]
 ```
 
-Anthropic uses Claude Code's native `Task` tool to run the two audit lenses as parallel subagents. The other providers run them sequentially in a single agentic loop (same output contract).
+## Angles
+
+| Angle | Always-on | Detection trigger | Tooling |
+|---|---|---|---|
+| `bugs` | yes | — | LLM only |
+| `security` | yes | — | LLM only |
+| `seo` | no | `*.html`, `head.{ts,tsx}`, `layout.{ts,tsx}`, `robots.txt`, `sitemap.{xml,ts}`, `next.config.*`, `app/manifest.*`, OR diff body contains `<meta` / `og:` / `twitter:` / `canonical` / `robots` / `sitemap` | LLM only |
+| `design` | no | `*.{tsx,jsx,vue,svelte,html,css,scss,sass,less,styl,astro}` | LLM + `npx -y impeccable detect --json` ([pbakaus/impeccable](https://github.com/pbakaus/impeccable)) |
+| `react` | no | `*.{tsx,jsx}` AND consumer `package.json` declares a `react` dep | `npx -y react-doctor --diff $BASE_REF --offline` ([millionco/react-doctor](https://github.com/millionco/react-doctor)) + LLM summarization |
+
+Detection is automatic from the PR diff — consumers don't enable angles manually. Use `disable_angles:` to opt out of any of the optional ones (`bugs` and `security` cannot be disabled). When `design` or `react` are enabled, the action sets up Node.js 22 so the bundled CLIs work via `npx`.
+
+Impeccable and React Doctor are invoked as CLIs from inside the agent's shell, not as sibling GitHub Action steps. This keeps a single unified `findings.json` and one sticky PR-comment thread.
 
 ## Quickstart
 
@@ -82,6 +94,9 @@ Pin to a specific SHA for production use, especially when triggering on `pull_re
 | `max_turns` | `30` | Anthropic-specific cap; ignored by other runners. |
 | `skip_labels` | `""` | Comma-separated label list that force-skips the review. |
 | `prompt_override` | `""` | Path (relative to your repo) to a custom prompt that replaces the bundled per-provider prompt. The shared output-contract header is still prepended. |
+| `disable_angles` | `""` | Comma-separated list of optional angles to skip (`seo`, `design`, `react`). `bugs` and `security` are always on. |
+| `react_doctor_version` | `latest` | npm version of `react-doctor` invoked via `npx` when the react angle is active. |
+| `impeccable_version` | `latest` | npm version of the `impeccable` CLI invoked via `npx` when the design angle is active. |
 
 ## Triggers
 
