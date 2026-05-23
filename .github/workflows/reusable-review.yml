@@ -78,6 +78,11 @@ jobs:
         with:
           mode: detect
           disable_angles: ${{ inputs.disable_angles }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-artifacts
+          path: /tmp/pr-review/
+          retention-days: 1
 
   review:
     needs: detect
@@ -89,6 +94,11 @@ jobs:
         angle: ${{ fromJson(needs.detect.outputs.angles) }}
     steps:
       - uses: actions/checkout@v4
+      - name: Download base artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: review-artifacts
+          path: /tmp/pr-review/
       - uses: howarewoo/woo-review@main
         with:
           mode: review
@@ -120,6 +130,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Download base artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: review-artifacts
+          path: /tmp/pr-review/
       - name: Download findings
         uses: actions/download-artifact@v4
         continue-on-error: true
@@ -130,6 +145,7 @@ jobs:
       - uses: howarewoo/woo-review@main
         with:
           mode: validate
+          disable_angles: ${{ inputs.disable_angles }}
           provider: ${{ inputs.provider }}
           model: ${{ inputs.model }}
           anthropic_token: ${{ secrets.anthropic_token }}
