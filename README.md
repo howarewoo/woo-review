@@ -13,8 +13,18 @@ Unlike traditional sequential reviewers, `woo-review` uses a three-stage paralle
 ```mermaid
 graph TD
     Trigger[PR Event / Comment] --> Detect[1. Detect: dispatcher job]
-    Detect -- JSON Array --> Matrix[2. Review Matrix: Parallel Angle Jobs]
-    Matrix -- Artifacts --> Validate[3. Validate: Skeptical Validator Agent]
+    
+    subgraph Parallel_Audits [2. Matrix: Parallel Angle Jobs]
+        direction LR
+        Angle_Bugs[bugs]
+        Angle_Security[security]
+        Angle_React[react]
+        Angle_Design[design]
+        Angle_SEO[seo]
+    end
+    
+    Detect -- "JSON Array" --> Parallel_Audits
+    Parallel_Audits -- "Artifacts" --> Validate[3. Validate: Skeptical Validator Agent]
     Validate --> Post[4. Post Inline Comments & Labels]
 ```
 
