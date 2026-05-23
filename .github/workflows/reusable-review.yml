@@ -1,0 +1,141 @@
+name: Parallel AI Review
+on:
+  workflow_call:
+    inputs:
+      provider:
+        description: 'Explicit provider: anthropic | openai | google | openrouter.'
+        type: string
+        required: false
+      model:
+        description: 'Model identifier passed to the chosen runner.'
+        type: string
+        required: false
+      trigger_phrase:
+        description: 'Phrase that triggers a review when posted in a PR comment.'
+        type: string
+        required: false
+        default: '@review'
+      blocking_label:
+        description: 'Label applied to the PR when at least one blocking finding is detected.'
+        type: string
+        required: false
+        default: 'blocking-review'
+      constitution_path:
+        description: 'Path (relative to the consumer repo) to the rules file.'
+        type: string
+        required: false
+        default: 'constitution.md'
+      max_turns:
+        description: 'Maximum agent turns.'
+        type: string
+        required: false
+        default: '30'
+      skip_labels:
+        description: 'Comma-separated list of PR labels that force-skip the review.'
+        type: string
+        required: false
+      prompt_override:
+        description: 'Optional path (relative to the consumer repo) to a custom prompt.'
+        type: string
+        required: false
+      disable_angles:
+        description: 'Comma-separated list of review angles to skip.'
+        type: string
+        required: false
+      react_doctor_version:
+        description: 'npm version of react-doctor to invoke.'
+        type: string
+        required: false
+        default: 'latest'
+      impeccable_version:
+        description: 'npm version of impeccable CLI to invoke.'
+        type: string
+        required: false
+        default: 'latest'
+    secrets:
+      anthropic_token:
+        required: false
+      anthropic_api_key:
+        required: false
+      openai_api_key:
+        required: false
+      google_api_key:
+        required: false
+      gemini_api_key:
+        required: false
+      openrouter_api_key:
+        required: false
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      angles: ${{ steps.woo.outputs.angles_json }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: woo
+        uses: ./
+        with:
+          mode: detect
+          disable_angles: ${{ inputs.disable_angles }}
+
+  review:
+    needs: detect
+    runs-on: ubuntu-latest
+    if: needs.detect.outputs.angles != '[]' && needs.detect.outputs.angles != ''
+    strategy:
+      fail-fast: false
+      matrix:
+        angle: ${{ fromJson(needs.detect.outputs.angles) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          mode: review
+          angle: ${{ matrix.angle }}
+          provider: ${{ inputs.provider }}
+          model: ${{ inputs.model }}
+          anthropic_token: ${{ secrets.anthropic_token }}
+          anthropic_api_key: ${{ secrets.anthropic_api_key }}
+          openai_api_key: ${{ secrets.openai_api_key }}
+          google_api_key: ${{ secrets.google_api_key }}
+          gemini_api_key: ${{ secrets.gemini_api_key }}
+          openrouter_api_key: ${{ secrets.openrouter_api_key }}
+          trigger_phrase: ${{ inputs.trigger_phrase }}
+          constitution_path: ${{ inputs.constitution_path }}
+          max_turns: ${{ inputs.max_turns }}
+          skip_labels: ${{ inputs.skip_labels }}
+          prompt_override: ${{ inputs.prompt_override }}
+          react_doctor_version: ${{ inputs.react_doctor_version }}
+          impeccable_version: ${{ inputs.impeccable_version }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: findings-${{ matrix.angle }}
+          path: /tmp/pr-review/findings.${{ matrix.angle }}.json
+          retention-days: 1
+
+  validate:
+    needs: review
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download findings
+        uses: actions/download-artifact@v4
+        with:
+          pattern: findings-*
+          path: /tmp/pr-review/
+          merge-multiple: true
+      - uses: ./
+        with:
+          mode: validate
+          provider: ${{ inputs.provider }}
+          model: ${{ inputs.model }}
+          anthropic_token: ${{ secrets.anthropic_token }}
+          anthropic_api_key: ${{ secrets.anthropic_api_key }}
+          openai_api_key: ${{ secrets.openai_api_key }}
+          google_api_key: ${{ secrets.google_api_key }}
+          gemini_api_key: ${{ secrets.gemini_api_key }}
+          openrouter_api_key: ${{ secrets.openrouter_api_key }}
+          blocking_label: ${{ inputs.blocking_label }}
+          constitution_path: ${{ inputs.constitution_path }}

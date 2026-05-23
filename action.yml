@@ -6,6 +6,14 @@ branding:
   icon: 'check-circle'
   color: 'purple'
 
+outputs:
+  angles:
+    description: 'Comma-separated list of enabled review angles.'
+    value: ${{ steps.angles.outputs.angles }}
+  angles_json:
+    description: 'JSON array of enabled review angles.'
+    value: ${{ steps.angles.outputs.angles_json }}
+
 inputs:
   provider:
     description: 'Explicit provider: anthropic | openai | google | openrouter. Leave empty to auto-detect from the first non-empty API key.'
@@ -127,12 +135,24 @@ runs:
 
     - name: Detect review angles
       id: angles
-      if: steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'detect')
+      if: steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'detect' || inputs.mode == 'validate')
       shell: bash
       env:
         GITHUB_WORKSPACE: ${{ github.workspace }}
         INPUT_DISABLE_ANGLES: ${{ inputs.disable_angles }}
-      run: bash "${{ github.action_path }}/scripts/detect-angles.sh"
+      run: |
+        if [ "${{ inputs.mode }}" = "validate" ] && [ -f "/tmp/pr-review/angles.txt" ]; then
+          CSV=$(paste -sd "," /tmp/pr-review/angles.txt)
+          echo "angles=$CSV" >> "$GITHUB_OUTPUT"
+          echo "Loaded angles from angles.txt: $CSV"
+        else
+          bash "${{ github.action_path }}/scripts/detect-angles.sh"
+        fi
+
+    - name: Merge findings (validate mode)
+      if: steps.prefetch.outputs.skip != 'true' && inputs.mode == 'validate'
+      shell: bash
+      run: bash "${{ github.action_path }}/scripts/merge-findings.sh"
 
     - name: Setup Node.js (for react-doctor + impeccable CLIs)
       if: |
