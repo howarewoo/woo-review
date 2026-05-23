@@ -1,0 +1,210 @@
+name: 'AI PR Review (multi-provider)'
+description: 'Agentic PR review that dispatches to the first-party action of the chosen provider (Anthropic, OpenAI, Google, OpenRouter via opencode).'
+author: 'woo-review'
+
+branding:
+  icon: 'check-circle'
+  color: 'purple'
+
+inputs:
+  provider:
+    description: 'Explicit provider: anthropic | openai | google | openrouter. Leave empty to auto-detect from the first non-empty API key.'
+    required: false
+    default: ''
+  model:
+    description: 'Model identifier passed to the chosen runner. For openrouter, use the openrouter/<model> form.'
+    required: false
+    default: ''
+
+  # Credentials — only the one for the chosen provider is required.
+  anthropic_token:
+    description: 'Claude Code OAuth token (preferred for Anthropic).'
+    required: false
+    default: ''
+  anthropic_api_key:
+    description: 'Anthropic API key (alternative to anthropic_token).'
+    required: false
+    default: ''
+  openai_api_key:
+    description: 'OpenAI API key (used by openai/codex-action).'
+    required: false
+    default: ''
+  google_api_key:
+    description: 'Google API key for Gemini API (alias of gemini_api_key).'
+    required: false
+    default: ''
+  gemini_api_key:
+    description: 'Gemini API key (alternative to google_api_key).'
+    required: false
+    default: ''
+  openrouter_api_key:
+    description: 'OpenRouter API key (used by opencode).'
+    required: false
+    default: ''
+
+  # Review behavior.
+  trigger_phrase:
+    description: 'Phrase that triggers a review when posted in a PR comment.'
+    required: false
+    default: '@review'
+  blocking_label:
+    description: 'Label applied to the PR when at least one blocking finding is detected. Workflow fails CI when this label is present.'
+    required: false
+    default: 'blocking-review'
+  constitution_path:
+    description: 'Path (relative to the consumer repo) to the rules file fed to the reviewer alongside CLAUDE.md files.'
+    required: false
+    default: 'constitution.md'
+  max_turns:
+    description: 'Maximum agent turns (Anthropic; other runners use their own equivalent).'
+    required: false
+    default: '30'
+  skip_labels:
+    description: 'Comma-separated list of PR labels that force-skip the review.'
+    required: false
+    default: ''
+  prompt_override:
+    description: 'Optional path (relative to the consumer repo) to a custom prompt that replaces the bundled per-provider prompt. The shared _header.md contract is still prepended.'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Resolve provider
+      id: detect
+      shell: bash
+      env:
+        INPUT_PROVIDER: ${{ inputs.provider }}
+        INPUT_ANTHROPIC_TOKEN: ${{ inputs.anthropic_token }}
+        INPUT_ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        INPUT_OPENAI_API_KEY: ${{ inputs.openai_api_key }}
+        INPUT_GOOGLE_API_KEY: ${{ inputs.google_api_key }}
+        INPUT_GEMINI_API_KEY: ${{ inputs.gemini_api_key }}
+        INPUT_OPENROUTER_API_KEY: ${{ inputs.openrouter_api_key }}
+      run: bash "${{ github.action_path }}/scripts/detect-provider.sh"
+
+    - name: Resolve PR number
+      id: pr
+      shell: bash
+      env:
+        EVENT_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || github.event.number }}
+      run: |
+        echo "number=$EVENT_NUMBER" >> "$GITHUB_OUTPUT"
+
+    - name: Prefetch diff, metadata, rules
+      id: prefetch
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        PR_NUMBER: ${{ steps.pr.outputs.number }}
+        EVENT_NAME: ${{ github.event_name }}
+        EVENT_ACTION: ${{ github.event.action }}
+        INPUT_CONSTITUTION_PATH: ${{ inputs.constitution_path }}
+        INPUT_SKIP_LABELS: ${{ inputs.skip_labels }}
+      run: bash "${{ github.action_path }}/scripts/prefetch.sh"
+
+    - name: Load prompt
+      id: load-prompt
+      if: steps.prefetch.outputs.skip != 'true'
+      shell: bash
+      env:
+        PROVIDER: ${{ steps.detect.outputs.provider }}
+        ACTION_PATH: ${{ github.action_path }}
+        INPUT_PROMPT_OVERRIDE: ${{ inputs.prompt_override }}
+        PR_NUMBER: ${{ steps.pr.outputs.number }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        EVENT_NAME: ${{ github.event_name }}
+        COMMENT_BODY: ${{ github.event.comment.body }}
+      run: bash "${{ github.action_path }}/scripts/load-prompt.sh"
+
+    # --- Provider runners (mutually exclusive) ---
+
+    - name: Run review (Anthropic)
+      id: run-anthropic
+      if: steps.detect.outputs.provider == 'anthropic' && steps.prefetch.outputs.skip != 'true'
+      continue-on-error: true
+      uses: anthropics/claude-code-action@v1
+      with:
+        claude_code_oauth_token: ${{ inputs.anthropic_token }}
+        anthropic_api_key: ${{ inputs.anthropic_api_key }}
+        prompt: ${{ steps.load-prompt.outputs.prompt }}
+        claude_args: |
+          --model ${{ inputs.model || 'claude-sonnet-4-6' }}
+          --max-turns ${{ inputs.max_turns }}
+        show_full_output: true
+        settings: |
+          {
+            "permissions": {
+              "allow": [
+                "Bash(*)",
+                "Read",
+                "Write",
+                "Edit",
+                "Glob",
+                "Grep",
+                "WebFetch(*)",
+                "WebSearch",
+                "mcp__*"
+              ],
+              "deny": []
+            }
+          }
+
+    - name: Run review (OpenAI Codex)
+      id: run-openai
+      if: steps.detect.outputs.provider == 'openai' && steps.prefetch.outputs.skip != 'true'
+      continue-on-error: true
+      uses: openai/codex-action@v1
+      with:
+        openai-api-key: ${{ inputs.openai_api_key }}
+        model: ${{ inputs.model || 'gpt-5' }}
+        prompt: ${{ steps.load-prompt.outputs.prompt }}
+        sandbox: workspace-write
+        safety-strategy: drop-sudo
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+
+    - name: Run review (Google Gemini)
+      id: run-google
+      if: steps.detect.outputs.provider == 'google' && steps.prefetch.outputs.skip != 'true'
+      continue-on-error: true
+      uses: google-github-actions/run-gemini-cli@v0
+      with:
+        gemini_api_key: ${{ inputs.gemini_api_key }}
+        google_api_key: ${{ inputs.google_api_key }}
+        gemini_model: ${{ inputs.model || 'gemini-2.5-pro' }}
+        prompt: ${{ steps.load-prompt.outputs.prompt }}
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+
+    - name: Run review (OpenRouter via opencode)
+      id: run-opencode
+      if: steps.detect.outputs.provider == 'openrouter' && steps.prefetch.outputs.skip != 'true'
+      continue-on-error: true
+      uses: sst/opencode/github@latest
+      with:
+        model: ${{ inputs.model || 'openrouter/anthropic/claude-sonnet-4' }}
+        prompt: ${{ steps.load-prompt.outputs.prompt }}
+        share: 'false'
+      env:
+        OPENROUTER_API_KEY: ${{ inputs.openrouter_api_key }}
+        GH_TOKEN: ${{ github.token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+
+    - name: Check review results
+      id: post-check
+      if: always() && steps.prefetch.outputs.skip != 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ steps.pr.outputs.number }}
+        INPUT_BLOCKING_LABEL: ${{ inputs.blocking_label }}
+        OUTCOME_ANTHROPIC: ${{ steps.run-anthropic.outcome }}
+        OUTCOME_OPENAI: ${{ steps.run-openai.outcome }}
+        OUTCOME_GOOGLE: ${{ steps.run-google.outcome }}
+        OUTCOME_OPENCODE: ${{ steps.run-opencode.outcome }}
+      run: bash "${{ github.action_path }}/scripts/post-check.sh"

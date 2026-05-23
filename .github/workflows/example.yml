@@ -1,0 +1,71 @@
+# Example consumer workflow. Copy this into a consumer repo at
+# .github/workflows/pr-review.yml and fill in the secret + provider of choice.
+
+name: PR Review
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '**/package.json'
+      - 'pnpm-lock.yaml'
+      - '.gitignore'
+  pull_request_target:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+
+jobs:
+  review:
+    name: AI Code Review
+    runs-on: ubuntu-latest
+    if: >
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.user.login != 'renovate[bot]') ||
+      (github.event_name == 'pull_request_target' && github.event.label.name == 'ai-review') ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && contains(github.event.comment.body, '@review'))
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    concurrency:
+      group: pr-review-${{ github.event.pull_request.number || github.event.issue.number || github.event.number }}
+      cancel-in-progress: true
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      # === Pick exactly one of the four provider blocks below ===
+
+      # Anthropic (Claude)
+      - uses: howarewoo/woo-review@v1
+        with:
+          provider: anthropic
+          anthropic_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          model: claude-sonnet-4-6
+          constitution_path: constitution.md
+
+      # OpenAI (Codex)
+      # - uses: howarewoo/woo-review@v1
+      #   with:
+      #     provider: openai
+      #     openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+      #     model: gpt-5
+
+      # Google (Gemini)
+      # - uses: howarewoo/woo-review@v1
+      #   with:
+      #     provider: google
+      #     gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+      #     model: gemini-2.5-pro
+
+      # OpenRouter (via opencode)
+      # - uses: howarewoo/woo-review@v1
+      #   with:
+      #     provider: openrouter
+      #     openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
+      #     model: openrouter/anthropic/claude-sonnet-4
