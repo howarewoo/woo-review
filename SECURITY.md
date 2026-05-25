@@ -3,10 +3,8 @@
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability in `woo-review`, please report it
-privately. Do **not** open a public GitHub issue.
-
-- Open a [private security advisory](https://github.com/howarewoo/woo-review/security/advisories/new) on this repository, **or**
-- Email the maintainer: `adam.nathaniel.woo@gmail.com`
+privately by opening a [security advisory](https://github.com/howarewoo/woo-review/security/advisories/new)
+on this repository. Do **not** open a public GitHub issue.
 
 Please include:
 
