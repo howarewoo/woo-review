@@ -103,10 +103,17 @@ else:
 
 comments = []
 for f in findings:
-    body = f["description"]
+    # Inline comment format: bold title, issue description, recommended fix.
+    title = f["title"].strip()
+    description = f["description"].strip()
+    fix = (f.get("fix") or "").strip()
+
+    body = f"**{title}**\n\n{description}"
+    if fix:
+        body += f"\n\nFix: {fix}"
     if f.get("suggestion"):
         body += f"\n\n```suggestion\n{f['suggestion']}\n```"
-    
+
     comments.append({
         "path": f["file"],
         "line": int(f["line"]),
@@ -147,13 +154,34 @@ Every runner MUST write a final `findings.json` (for debugging + potential post-
     "line": 42,
     "severity": "HIGH",
     "blocking": true,
-    "description": "Brief problem statement + why",
+    "title": "Short bold headline (≤60 chars, no trailing punctuation)",
+    "description": "Issue description: what is wrong and why it matters. Do NOT include the fix here.",
+    "fix": "Recommended change in prose (e.g. 'use `<=` instead of `<` so the boundary value is included').",
+    "suggestion": "optional verbatim replacement snippet for the GitHub ```suggestion``` block, else null",
     "rule_quote": "exact quoted rule text if rule-based, else null"
   }
 ]
 ```
 
 `angle` is one of `bugs | security | seo | aeo | design | react`.
+
+### Inline Comment Format (rendered on the PR)
+
+Every inline comment posted to GitHub MUST follow this three-part structure, assembled from the schema fields above:
+
+```
+**<title>**
+
+<description>
+
+Fix: <fix>
+```
+
+- **Title** — bold one-liner, ≤60 characters, no trailing punctuation. Names the problem.
+- **Description** — the issue itself: what is broken, why it matters, with diff-anchored evidence. Do NOT prescribe the fix here.
+- **Fix** — recommended change, prefixed literally with `Fix: `. Required for every finding. If a verbatim replacement is possible, ALSO populate `suggestion` so a GitHub ```suggestion``` block is appended after the `Fix:` line.
+
+The body builder in the posting step (see python snippet above) renders this format automatically from `title` / `description` / `fix` / `suggestion`. Angle agents and the validator MUST populate `title`, `description`, and `fix` for every finding.
 
 ## Blocking Criteria
 

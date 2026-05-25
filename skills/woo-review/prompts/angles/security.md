@@ -47,4 +47,4 @@ Filename pattern: `<language>-<framework>-<stack>-security.md`, with `<language>
 - `MEDIUM` + `blocking: false` — exploit requires unusual conditions or impact is limited.
 - `LOW` + `blocking: false` — hardening suggestion worth surfacing.
 
-**Output.** Write findings as a JSON array to `/tmp/pr-review/findings.security.json` using the schema in `_header.md`. Each finding gets `"angle": "security"`.
+**Output.** Write findings as a JSON array to `/tmp/pr-review/findings.security.json` using the schema in `_header.md`. Each finding gets `"angle": "security"` and MUST populate `title` (bold headline ≤60 chars), `description` (issue + exploit path, no fix), and `fix` (mitigation in prose). Add `suggestion` only when a verbatim replacement snippet is safe.

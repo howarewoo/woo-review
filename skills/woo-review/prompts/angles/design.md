@@ -70,4 +70,4 @@ For each file in scope, review diff hunks using Nielsen's 10 Usability Heuristic
 
 ## Output
 
-Write all findings (quantitative + qualitative) as a single JSON array to `/tmp/pr-review/findings.design.json` using the schema in `_header.md`. Each finding gets `"angle": "design"`.
+Write all findings (quantitative + qualitative) as a single JSON array to `/tmp/pr-review/findings.design.json` using the schema in `_header.md`. Each finding gets `"angle": "design"` and MUST populate `title` (bold headline ≤60 chars), `description` (the issue only — no fix), and `fix` (recommended change in prose).

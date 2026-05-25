@@ -157,10 +157,11 @@ bash "$WOO_REVIEW_ACTION_PATH/scripts/merge-findings.sh"
 
 Now act as the **Skeptical Validator** by following `prompts/validator.md`:
 
-1. Dedupe across angles (keep the most actionable description).
+1. Dedupe across angles (keep the most actionable description; preserve the winner's `title` / `description` / `fix`).
 2. Defense-attorney audit: try to prove each finding wrong. Drop pedantic / style-only / lint-catchable / "maybe" findings.
 3. Severity check: you MAY downgrade (HIGH → MEDIUM, blocking true → false). You MAY NOT upgrade.
-4. Write the surviving array to `/tmp/pr-review/findings.json`.
+4. Comment-shape check: every surviving finding has `title` (bold headline ≤60 chars), `description` (issue only, no fix), and `fix` (recommended change in prose). Split overloaded `description` fields when an angle collapsed them.
+5. Write the surviving array to `/tmp/pr-review/findings.json`.
 
 ### Stage 5 — Report
 

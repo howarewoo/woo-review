@@ -65,4 +65,4 @@ gh api repos/coreyhaines31/marketingskills/contents/skills/ai-seo/references/con
 - `MEDIUM` + `blocking: false` — Lost citations / statistics / author attribution; FAQ or HowTo schema removed or malformed; answer passages buried below filler; comparison tables converted to prose; missing `/pricing.md` companion for new pricing page.
 - `LOW` + `blocking: false` — Heading wording drifted from query patterns; missing "Last updated" date; minor accessibility-tree regressions that hurt agentic experiences; opportunities to add machine-readable files.
 
-**Output.** Write findings as a JSON array to `/tmp/pr-review/findings.aeo.json` using the schema in `_header.md`. Each finding gets `"angle": "aeo"`.
+**Output.** Write findings as a JSON array to `/tmp/pr-review/findings.aeo.json` using the schema in `_header.md`. Each finding gets `"angle": "aeo"` and MUST populate `title` (bold headline ≤60 chars), `description` (the issue only — no fix), and `fix` (recommended change in prose).

@@ -21,11 +21,12 @@ Launch one Haiku subagent. Task:
 - Return: summary.
 
 ### Step 2 — Validation
-1. **Deduplicate**: If multiple angles flagged the same issue, pick the one with the most actionable and technical description.
+1. **Deduplicate**: If multiple angles flagged the same issue, pick the one with the most actionable and technical description. Preserve `title`, `description`, and `fix` from the winning finding.
 2. **Skeptical Audit**: For each finding in /tmp/pr-review/raw_findings.json, try to prove it is WRONG. 
    - Discard if: Pedantic, style-only (without rule backing), already caught by linting, or "maybe" behavior.
    - Keep if: Concrete bug, security risk, or objective rule violation.
 3. **Severity Check**: You can downgrade severity (HIGH -> MEDIUM) or unset blocking: true -> false. You may NOT upgrade.
+4. **Comment Shape Check**: For every surviving finding, ensure `title` (bold headline ≤60 chars, no trailing punctuation), `description` (issue only, no fix prescribed), and `fix` (recommended change in prose) are all populated. Rewrite minimally if an angle agent collapsed everything into `description` — split it into the three fields. Keep `suggestion` only when a verbatim replacement snippet is safe.
 
 Write the final validated JSON array to /tmp/pr-review/findings.json.
 
