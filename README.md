@@ -60,9 +60,9 @@ The skill calls into established domain tools instead of re-implementing them:
 |---|---|---|
 | [pbakaus/impeccable](https://github.com/pbakaus/impeccable) | `design-audit`, `design-critique` | `npx -y impeccable detect --json` |
 | [millionco/react-doctor](https://github.com/millionco/react-doctor) | `react` | `npx -y react-doctor --diff <base> --offline` |
-| [coreyhaines31/seo-audit](https://www.skills.sh/coreyhaines31/marketingskills/seo-audit) framework | `seo` | Embedded as the rubric in `prompts/angles/seo.md` |
+| [coreyhaines31/seo-audit](https://www.skills.sh/coreyhaines31/marketingskills/seo-audit) framework | `seo` | Embedded as the rubric in `skills/woo-review/prompts/angles/seo.md` |
 
-The audit rubrics live in `prompts/` so the skill is self-sufficient — recommended skills only enrich the host agent's general vocabulary.
+The audit rubrics live in `skills/woo-review/prompts/` so the skill is self-sufficient — recommended skills only enrich the host agent's general vocabulary.
 
 ---
 
