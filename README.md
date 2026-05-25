@@ -4,7 +4,7 @@ Reusable GitHub Action that runs an agentic AI pull request review and dispatche
 
 ## Architecture: The Parallel Pipeline
 
-Unlike traditional sequential reviewers, `woo-review` uses a three-stage parallel pipeline. For details on the specialized AI roles and personas, see [AGENTS.md](./AGENTS.md).
+Unlike traditional sequential reviewers, `woo-review` uses a three-stage parallel pipeline. For mandates on how AI agents should build and maintain this project, see [AGENTS.md](./AGENTS.md). For details on the internal review-swarm architecture, see the [Architecture Spec](./docs/superpowers/specs/2026-05-23-review-swarm-architecture.md).
 
 1.  **Detect (Dispatcher)**: Analyzes the diff to identify relevant **Review Angles** (Bugs, Security, SEO, etc.).
 2.  **Review (Matrix)**: Dispatches $N$ specialized agents in parallel via GitHub Actions Matrix. Each agent focuses on a single "Optimistic Audit" of its assigned angle.
