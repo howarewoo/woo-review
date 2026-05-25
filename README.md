@@ -110,12 +110,20 @@ To ensure maximum speed and accuracy, `woo-review` relies on the following envir
 
 ### AI Skill Dependencies
 - **Agent**: Requires [Gemini CLI](https://github.com/google-gemini/gemini-cli) or [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code).
-- **CLI**: Supports the [skills](https://skills.sh) CLI for easy installation.
-- **Workspace**: The `woo-review` skill should be active in your local development environment. Install it via:
-  ```bash
-  npx skills add howarewoo/woo-review
-  ```
-- **Frameworks**: The SEO agent follows the [coreyhaines31/seo-audit](https://www.skills.sh/coreyhaines31/marketingskills/seo-audit) framework for comprehensive search-engine analysis.
+- **Workspace**: Requires the `woo-review` skill (see [Installation](#installation)).
+- **Frameworks**: The SEO agent follows the [coreyhaines31/seo-audit](https://www.skills.sh/coreyhaines31/marketingskills/seo-audit) framework.
+
+## Installation
+
+### 1. Install the AI Skill
+The `woo-review` skill manages the local orchestration and debugging of reviews. Install it into your project using the [skills](https://skills.sh) CLI:
+
+```bash
+npx skills add howarewoo/woo-review
+```
+
+### 2. Configure the GitHub Action
+Add the Reusable Workflow to your repository as described in the [Quickstart](#quickstart-recommended-parallel-mode) section below.
 
 ## Quickstart (Recommended: Parallel Mode)
 
