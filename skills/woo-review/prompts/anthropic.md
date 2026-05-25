@@ -106,7 +106,7 @@ Do NOT call `gh pr edit`. Do NOT add, remove, or mutate PR labels. The PR title,
 ## Rules
 
 - Execute every step autonomously — no confirmation prompts.
-- Trust prefetched artifacts. Do NOT re-run `gh pr diff` or re-read constitution / CLAUDE.md files.
+- Trust prefetched artifacts. Do NOT re-run `gh pr diff` or re-read CLAUDE.md files.
 - Parallel angle subagents in Step 2 must complete before Step 3.
 - Each subagent stays within its angle scope; do not duplicate findings across angles (validator dedupes).
 - `findings.json` is the single source of truth for Step 4.

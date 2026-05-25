@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prefetches PR diff, metadata, and rules for the agentic review.
-# Inputs (env): GH_TOKEN, GITHUB_REPOSITORY, INPUT_CONSTITUTION_PATH, INPUT_SKIP_LABELS,
+# Inputs (env): GH_TOKEN, GITHUB_REPOSITORY, INPUT_SKIP_LABELS,
 #               PR_NUMBER, EVENT_NAME, EVENT_ACTION.
 # Outputs: skip=true|false to $GITHUB_OUTPUT.
 # Side effects: writes /tmp/pr-review/{diff.txt,meta.json,rules.md}.
@@ -16,7 +16,6 @@ EVENT_ACTION="${EVENT_ACTION:-}"
 # Hardcoded — not exposed as a knob. Fed into a jq test() regex below; allowing
 # external override would let a misconfigured caller inject arbitrary regex.
 BOT_NAME_PATTERN="claude|openai|gemini|opencode"
-CONSTITUTION_PATH="${INPUT_CONSTITUTION_PATH:-constitution.md}"
 SKIP_LABELS="${INPUT_SKIP_LABELS:-}"
 
 emit_skip() {
@@ -91,13 +90,8 @@ if [ "$DIFF_BYTES" -gt 300000 ]; then
   mv "$OUTDIR/diff.txt.capped" "$OUTDIR/diff.txt"
 fi
 
-# Compose rules: constitution.md (if present) + all CLAUDE.md files in touched dirs and parents.
+# Compose rules: all CLAUDE.md files in touched dirs and parents.
 : > "$OUTDIR/rules.md"
-if [ -f "$CONSTITUTION_PATH" ]; then
-  cat "$CONSTITUTION_PATH" >> "$OUTDIR/rules.md"
-  echo "" >> "$OUTDIR/rules.md"
-  echo "---" >> "$OUTDIR/rules.md"
-fi
 if [ -f .claude/CLAUDE.md ]; then
   echo "## .claude/CLAUDE.md" >> "$OUTDIR/rules.md"
   cat .claude/CLAUDE.md >> "$OUTDIR/rules.md"

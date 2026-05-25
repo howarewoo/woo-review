@@ -67,7 +67,6 @@ jobs:
           provider: anthropic
           anthropic_token: ${{ env.ANTHROPIC_TOKEN }}
           model: claude-sonnet-4-6
-          constitution_path: constitution.md
 
   parallel-review:
     name: Parallel self-review (manual)

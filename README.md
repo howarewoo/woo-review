@@ -124,7 +124,6 @@ The CI pipeline mirrors the skill's swarm 1:1 — detection job → matrix of an
 | `provider` | `""` | `anthropic`, `openai`, `google`, `openrouter`. Auto-detected from supplied secret. |
 | `mode` | `full` | `full`, `detect`, `review`, `validate`. Reusable workflow handles wiring. |
 | `disable_angles` | `""` | CSV of optional angles to skip. `bugs` and `security` are non-negotiable. |
-| `constitution_path` | `constitution.md` | Project rules concatenated with `CLAUDE.md` files in touched dirs. |
 | `max_turns` | `30` | Agent loop cap (Anthropic; other providers use their equivalent). |
 
 ---

@@ -6,7 +6,7 @@ This contract is identical across every provider runner. The orchestration secti
 
 - **Diff**: `/tmp/pr-review/diff.txt`
 - **PR metadata** (title, body, headRefOid, baseRefName, files): `/tmp/pr-review/meta.json`
-- **Combined rules** (constitution.md + applicable CLAUDE.md files): `/tmp/pr-review/rules.md`
+- **Combined rules** (applicable CLAUDE.md files): `/tmp/pr-review/rules.md`
 - **Enabled angles** (one per line): `/tmp/pr-review/angles.txt`
 
 Set `PR_NUMBER` and `HEAD_SHA` as shell variables before posting anything:

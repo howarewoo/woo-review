@@ -67,10 +67,6 @@ inputs:
     description: 'Phrase that triggers a review when posted in a PR comment.'
     required: false
     default: '@review'
-  constitution_path:
-    description: 'Path (relative to the consumer repo) to the rules file fed to the reviewer alongside CLAUDE.md files.'
-    required: false
-    default: 'constitution.md'
   max_turns:
     description: 'Maximum agent turns (Anthropic; other runners use their own equivalent).'
     required: false
@@ -129,7 +125,6 @@ runs:
         PR_NUMBER: ${{ steps.pr.outputs.number }}
         EVENT_NAME: ${{ github.event_name }}
         EVENT_ACTION: ${{ github.event.action }}
-        INPUT_CONSTITUTION_PATH: ${{ inputs.constitution_path }}
         INPUT_SKIP_LABELS: ${{ inputs.skip_labels }}
       run: bash "${{ github.action_path }}/skills/woo-review/scripts/prefetch.sh"
 

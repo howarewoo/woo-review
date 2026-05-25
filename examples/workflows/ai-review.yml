@@ -62,7 +62,6 @@ jobs:
           provider: anthropic
           anthropic_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           model: claude-sonnet-4-6
-          constitution_path: constitution.md
 
       # OpenAI (Codex)
       # - uses: howarewoo/woo-review@v0.1.0

@@ -86,7 +86,7 @@ git diff --name-only "$BASE"...HEAD \
     }' > /tmp/pr-review/meta.json
 ```
 
-Compose rules: copy `constitution.md` (if present) + every `CLAUDE.md` reachable from changed files into `/tmp/pr-review/rules.md`.
+Compose rules: copy every `CLAUDE.md` reachable from changed files into `/tmp/pr-review/rules.md`.
 
 ### Stage 2 — Detect Angles
 
