@@ -99,51 +99,32 @@ graph TD
 
 ## Prerequisites & Dependencies
 
-To ensure maximum speed and accuracy, `woo-review` relies on the following environment:
+### GitHub Action (CI)
+**Zero Configuration Required.**
+The GitHub Action is completely self-contained. When triggered, it automatically:
+- Sets up Node.js 22+ (for `impeccable` and `react-doctor`).
+- Prefetches the latest audit tools via `npx`.
+- Loads the embedded SEO and Design frameworks from the `prompts/` directory.
+- **The user does NOT need to install any skills or tools manually in their repository.**
 
-### GitHub Action Dependencies
-- **Runner**: `ubuntu-latest` is recommended (includes `gh` and `jq`).
-- **GitHub CLI (`gh`)**: Required for posting inline comments and managing PR labels.
-- **`jq`**: Required for JSON-based finding aggregation.
-- **Node.js 22+**: Automatically installed when `design-audit`, `design-critique`, or `react` angles are active to support [impeccable](https://github.com/pbakaus/impeccable) and [react-doctor](https://github.com/millionco/react-doctor).
-- **2026 Flagship Models**: Access to **Claude 4.7+**, **GPT-5.5+**, or **Gemini 3.5+** is required for the Skeptical Validator and specialized audit agents.
-
-### AI Skill Dependencies
-- **Agent**: Requires [Gemini CLI](https://github.com/google-gemini/gemini-cli) or [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code).
-- **Workspace**: Requires the `woo-review` skill (see [Installation](#installation)).
-- **Frameworks**: The SEO agent follows the [coreyhaines31/seo-audit](https://www.skills.sh/coreyhaines31/marketingskills/seo-audit) framework.
+### AI Skill (Local Development)
+To run reviews locally via `/woo-review`, the following are **recommended** for the best experience:
+- [GitHub CLI (gh)](https://cli.github.com/) & [jq](https://stedolan.github.io/jq/) (For local simulation)
+- [Node.js 22+](https://nodejs.org/)
+- **Optional Power-Up Skills**:
+  - `pbakaus/impeccable`: Enhances the agent's design vocabulary.
+  - `coreyhaines31/seo-audit`: Provides deeper SEO context.
 
 ## Installation
 
-### 1. Install the AI Skill
-The `woo-review` skill manages the local orchestration and debugging of reviews. 
+### 1. GitHub Action (Recommended)
+Add the Reusable Workflow to your repository. No other steps or dependencies are required. See [Quickstart](#quickstart-recommended-parallel-mode).
 
-**Prerequisites**:
-- [GitHub CLI (gh)](https://cli.github.com/)
-- [jq](https://stedolan.github.io/jq/)
-- [Node.js 22+](https://nodejs.org/)
-- **AI Skills**:
-  - `pbakaus/impeccable` (Required for Design Audit/Critique)
-  - `coreyhaines31/seo-audit` (Required for SEO Audit)
-
-Install the skill into your project using the [skills](https://skills.sh) CLI:
-
+### 2. Local AI Skill (Optional)
+If you want to run the swarm review locally before pushing, install the skill:
 ```bash
-# 1. Install required specialized skills
-npx skills add pbakaus/impeccable
-npx skills add coreyhaines31/seo-audit
-
-# 2. Install the review orchestrator
 npx skills add howarewoo/woo-review
 ```
-
-Then, run the built-in install command to verify your environment and pre-fetch audit tools:
-
-```bash
-woo-review install
-```
-
-### 2. Configure the GitHub Action
 Add the Reusable Workflow to your repository as described in the [Quickstart](#quickstart-recommended-parallel-mode) section below.
 
 ## Quickstart (Recommended: Parallel Mode)

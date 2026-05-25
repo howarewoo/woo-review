@@ -4,6 +4,7 @@ description: Managed agentic PR reviews with parallel matrix execution and skept
 install: npx skills add howarewoo/woo-review
 requires:
   bins: [gh, jq, node]
+recommends:
   skills: [pbakaus/impeccable, coreyhaines31/seo-audit]
 ---
 
@@ -13,7 +14,9 @@ Managed agentic PR reviews with parallel matrix execution and skeptical validati
 
 ## Overview
 
-Use this skill to manage, trigger, and debug `woo-review` operations. It understands the 2026 parallel architecture (Detect -> Matrix -> Validate) and can help you configure angles, providers, and rules.
+Use this skill to manage, trigger, and debug `woo-review` operations. It understands the 2026 parallel architecture (Detect -> Matrix -> Validate). 
+
+**Note**: This skill is self-sufficient. The audit frameworks (SEO, Design) are embedded in the `prompts/` directory of the repository. Installing recommended skills simply enhances the agent's general domain vocabulary.
 
 ## Commands
 
