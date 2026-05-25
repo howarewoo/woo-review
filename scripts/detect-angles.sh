@@ -10,7 +10,7 @@
 #   seo       — *.html, head.{ts,tsx}, layout.{ts,tsx}, robots.txt, sitemap.{xml,ts},
 #               next.config.{js,ts,mjs}, app/manifest.{ts,json}, OR diff body
 #               contains <meta / og: / twitter: / canonical / robots / sitemap
-#   design    — *.{tsx,jsx,vue,svelte,html,css,scss,sass,less,styl,astro}
+#   design-audit, design-critique — *.{tsx,jsx,vue,svelte,html,css,scss,sass,less,styl,astro}
 #   react     — *.{tsx,jsx} AND consumer repo's package.json declares react dep
 
 set -euo pipefail

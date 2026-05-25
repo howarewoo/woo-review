@@ -25,7 +25,8 @@ This action runs up to five distinct review angles, auto-selected from the chang
 | `bugs` | yes | LLM only |
 | `security` | yes | LLM only |
 | `seo` | no | LLM only |
-| `design` | no | LLM + `npx -y impeccable@$IMPECCABLE_VERSION detect --json` (anti-pattern CLI) |
+| `design-audit` | no | LLM + `npx -y impeccable@$IMPECCABLE_VERSION detect --json` (quantitative audit) |
+| `design-critique` | no | LLM + `npx -y impeccable@$IMPECCABLE_VERSION detect --json` (qualitative critique) |
 | `react` | no | `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline` (React linter) + LLM |
 
 Each angle writes its findings to `/tmp/pr-review/findings.<angle>.json`. The orchestrator merges them into `/tmp/pr-review/findings.json` after the validator pass, then posts inline comments and manages the blocking label.
@@ -124,7 +125,7 @@ Every runner MUST write a final `findings.json` (for debugging + potential post-
 ]
 ```
 
-`angle` is one of `bugs | security | seo | design | react`.
+`angle` is one of `bugs | security | seo | design-audit | design-critique | react`.
 
 ## Blocking Criteria
 
