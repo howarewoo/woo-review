@@ -26,7 +26,7 @@ woo-review status      # Show current PR review state
 When you invoke `/woo-review` the host agent:
 
 1. **Prefetches** diff + metadata + rules into `/tmp/pr-review/`.
-2. **Detects** which angles apply (always-on: `bugs`, `security`; conditional: `seo`, `design-audit`, `design-critique`, `react`).
+2. **Detects** which angles apply (always-on: `bugs`, `security`; conditional: `seo`, `aeo`, `design-audit`, `design-critique`, `react`).
 3. **Spawns one sub-agent per angle in parallel** (Claude Code Task, Cursor subagents, Gemini CLI sequential loop fallback — host-agnostic).
 4. **Validates** all findings through a Skeptical Validator pass (dedupe, defense-attorney audit, severity downgrade only).
 5. **Reports** locally OR posts one batched GitHub Review when a PR# was given.
@@ -38,10 +38,11 @@ flowchart TD
     C -->|always-on| D1[bugs]
     C -->|always-on| D2[security]
     C -->|*.html, meta, og:, sitemap| D3[seo]
+    C -->|llms.txt, pricing.md, AI crawler tokens, JSON-LD| D3a[aeo]
     C -->|*.tsx/css/vue/svelte| D4[design-audit]
     C -->|*.tsx/css/vue/svelte| D5[design-critique]
     C -->|*.tsx/jsx + react dep| D6[react]
-    D1 & D2 & D3 & D4 & D5 & D6 --> E[Parallel sub-agents<br/>one per angle]
+    D1 & D2 & D3 & D3a & D4 & D5 & D6 --> E[Parallel sub-agents<br/>one per angle]
     E --> F[Skeptical Validator<br/>dedupe · defense-attorney · severity downgrade only]
     F --> G{PR# given?}
     G -->|no| H[Local report]
@@ -62,6 +63,7 @@ The skill calls into established domain tools instead of re-implementing them:
 | [millionco/react-doctor](https://github.com/millionco/react-doctor) | `react` | `npx -y react-doctor --diff <base> --offline` |
 | [coreyhaines31/seo-audit](https://www.skills.sh/coreyhaines31/marketingskills/seo-audit) framework | `seo` | Embedded as the rubric in `skills/woo-review/prompts/angles/seo.md` |
 | [openai/security-best-practices](https://www.skills.sh/openai/skills/security-best-practices) | `security` | Language/framework-specific rubric loaded from `openai/skills` `references/`; fetched on demand via `gh api` if not installed locally |
+| [coreyhaines31/ai-seo](https://www.skills.sh/coreyhaines31/marketingskills/ai-seo) framework | `aeo` | Embedded as the rubric in `skills/woo-review/prompts/angles/aeo.md`; deeper `references/` fetched on demand via `gh api` |
 
 The audit rubrics live in `skills/woo-review/prompts/` so the skill is self-sufficient — recommended skills only enrich the host agent's general vocabulary.
 
@@ -74,6 +76,7 @@ The audit rubrics live in `skills/woo-review/prompts/` so the skill is self-suff
 | `bugs` | yes | — | LLM only |
 | `security` | yes | — | LLM + `openai/security-best-practices` rubric |
 | `seo` | no | `*.html`, `head.{ts,tsx}`, `layout.{ts,tsx}`, `robots.txt`, `sitemap.{xml,ts}`, `next.config.*`, `app/manifest.*`, or `<meta>`/`og:`/`canonical` tokens in diff | LLM + `coreyhaines31/seo-audit` rubric (embedded in `skills/woo-review/prompts/angles/seo.md`) |
+| `aeo` | no | `robots.txt`, `llms.txt`, `pricing.{md,txt}`, `*.{md,mdx,html}`, or diff body contains AI-crawler tokens (`GPTBot`, `PerplexityBot`, `ClaudeBot`, `Google-Extended`, `anthropic-ai`) or JSON-LD `FAQPage`/`HowTo`/`Article`/`Product`/`ItemList`/`Review` types | LLM + `coreyhaines31/ai-seo` rubric (embedded in `skills/woo-review/prompts/angles/aeo.md`) |
 | `design-audit` | no | `*.{tsx,jsx,vue,svelte,html,css,scss,sass,less,styl,astro}` | LLM + `impeccable detect` (quantitative) |
 | `design-critique` | no | same as `design-audit` | LLM + `impeccable detect` (qualitative) |
 | `react` | no | `*.{tsx,jsx}` AND `react` in `package.json` | `react-doctor` + LLM |

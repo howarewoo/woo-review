@@ -5,7 +5,7 @@ install: npx skills add howarewoo/woo-review
 requires:
   bins: [gh, jq, node]
 recommends:
-  skills: [pbakaus/impeccable, coreyhaines31/seo-audit, openai/security-best-practices]
+  skills: [pbakaus/impeccable, coreyhaines31/seo-audit, coreyhaines31/ai-seo, openai/security-best-practices]
 ---
 
 # woo-review
@@ -31,6 +31,7 @@ woo-review wires in domain skills as tool calls inside specific angles, not as a
 | [millionco/react-doctor](https://github.com/millionco/react-doctor) | `react` | `npx -y react-doctor --diff <base> --offline` |
 | [coreyhaines31/seo-audit](https://www.skills.sh/coreyhaines31/marketingskills/seo-audit) framework | `seo` | Embedded as the audit rubric in `prompts/angles/seo.md` |
 | [openai/security-best-practices](https://www.skills.sh/openai/skills/security-best-practices) | `security` | Referenced from `prompts/angles/security.md`; fetch `references/<language>-<framework>-<stack>-security.md` via `gh api` |
+| [coreyhaines31/ai-seo](https://www.skills.sh/coreyhaines31/marketingskills/ai-seo) | `aeo` | Embedded as the rubric in `prompts/angles/aeo.md`; deeper `references/` (platform-ranking-factors, content-patterns, content-types) fetched on demand via `gh api` |
 
 The audit frameworks themselves are embedded in `prompts/` (inside this skill bundle) so the skill is self-sufficient. Installing the recommended skills only enhances your host agent's general vocabulary.
 
@@ -85,7 +86,7 @@ Compose rules: copy `constitution.md` (if present) + every `CLAUDE.md` reachable
 bash "$WOO_REVIEW_ACTION_PATH/scripts/detect-angles.sh"
 ```
 
-Read the result from `/tmp/pr-review/angles.txt` (one angle per line). Always-on angles: `bugs`, `security`. Conditional: `seo`, `design-audit`, `design-critique`, `react`.
+Read the result from `/tmp/pr-review/angles.txt` (one angle per line). Always-on angles: `bugs`, `security`. Conditional: `seo`, `aeo`, `design-audit`, `design-critique`, `react`.
 
 ### Stage 3 — Spawn Parallel Sub-Agents (one per angle)
 

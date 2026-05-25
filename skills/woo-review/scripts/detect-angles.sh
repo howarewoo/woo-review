@@ -10,6 +10,10 @@
 #   seo       — *.html, head.{ts,tsx}, layout.{ts,tsx}, robots.txt, sitemap.{xml,ts},
 #               next.config.{js,ts,mjs}, app/manifest.{ts,json}, OR diff body
 #               contains <meta / og: / twitter: / canonical / robots / sitemap
+#   aeo       — robots.txt, llms.txt, pricing.{md,txt}, *.{md,mdx,html}, OR diff
+#               body contains AI-crawler tokens (GPTBot / PerplexityBot /
+#               ClaudeBot / Google-Extended / anthropic-ai) or JSON-LD schema
+#               types (FAQPage / HowTo / Article / Product / ItemList)
 #   design-audit, design-critique — *.{tsx,jsx,vue,svelte,html,css,scss,sass,less,styl,astro}
 #   react     — *.{tsx,jsx} AND consumer repo's package.json declares react dep
 
@@ -41,6 +45,17 @@ has_seo_diff_token() {
   grep -qE "</?meta\b|\bog:[a-z_-]+|\btwitter:[a-z_-]+|rel=[\"']canonical|name=[\"']robots|<loc>|(^|[[:space:]])Sitemap:" "$DIFF"
 }
 
+has_aeo_file() {
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)(robots\.txt|llms\.txt|pricing\.(md|txt))$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '\.(md|mdx|html)$' && return 0
+  return 1
+}
+
+has_aeo_diff_token() {
+  # AI-crawler bot tokens or JSON-LD schema types relevant to AEO.
+  grep -qE "GPTBot|ChatGPT-User|PerplexityBot|ClaudeBot|anthropic-ai|Google-Extended|\"@type\"[[:space:]]*:[[:space:]]*\"(FAQPage|HowTo|Article|BlogPosting|Product|ItemList|Review|AggregateRating)\"" "$DIFF"
+}
+
 has_design_file() {
   echo "$CHANGED_PATHS" | grep -qE '\.(tsx|jsx|vue|svelte|html|css|scss|sass|less|styl|astro)$'
 }
@@ -56,6 +71,10 @@ ANGLES=("bugs" "security")
 
 if has_seo_file || has_seo_diff_token; then
   ANGLES+=("seo")
+fi
+
+if has_aeo_file || has_aeo_diff_token; then
+  ANGLES+=("aeo")
 fi
 
 if has_design_file; then

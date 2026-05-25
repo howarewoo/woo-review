@@ -186,6 +186,65 @@ DIFF
 : > "$OUTPUT_FILE"
 run_case "real-meta-robots-triggers-seo" "bugs,security,seo,design-audit,design-critique"
 
+# --- Case 8: new llms.txt triggers aeo (and seo via robots-family fileset is unrelated).
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "11ff5b00",
+  "baseRefName": "main",
+  "title": "feat: ship llms.txt",
+  "body": "",
+  "files": [
+    {"path": "public/llms.txt", "additions": 30, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/public/llms.txt b/public/llms.txt
++# Acme — context for AI assistants
++Acme is a SaaS product for X. See /pricing.md for tiers.
+DIFF
+: > "$OUTPUT_FILE"
+run_case "llms-txt-triggers-aeo" "bugs,security,aeo"
+
+# --- Case 9: AI crawler token in robots.txt triggers BOTH seo (robots.txt fileset) AND aeo.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "b07b07ed",
+  "baseRefName": "main",
+  "title": "chore: block GPTBot",
+  "body": "",
+  "files": [
+    {"path": "public/robots.txt", "additions": 2, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/public/robots.txt b/public/robots.txt
++User-agent: GPTBot
++Disallow: /
+DIFF
+: > "$OUTPUT_FILE"
+run_case "robots-gptbot-triggers-seo-and-aeo" "bugs,security,seo,aeo"
+
+# --- Case 10: JSON-LD FAQPage in a .mdx page triggers aeo.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "facade01",
+  "baseRefName": "main",
+  "title": "docs: FAQ section",
+  "body": "",
+  "files": [
+    {"path": "content/help/faq.mdx", "additions": 40, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/content/help/faq.mdx b/content/help/faq.mdx
++<script type="application/ld+json">{ "@type": "FAQPage", "mainEntity": [] }</script>
+DIFF
+: > "$OUTPUT_FILE"
+run_case "faq-schema-mdx-triggers-aeo" "bugs,security,aeo"
+
 if [ $fail -ne 0 ]; then
   echo "TESTS FAILED"
   exit 1

@@ -80,7 +80,7 @@ inputs:
     required: false
     default: ''
   disable_angles:
-    description: 'Comma-separated list of review angles to skip (seo, design-audit, design-critique, react). `bugs` and `security` are always on and cannot be disabled.'
+    description: 'Comma-separated list of review angles to skip (seo, aeo, design-audit, design-critique, react). `bugs` and `security` are always on and cannot be disabled.'
     required: false
     default: ''
   react_doctor_version:
