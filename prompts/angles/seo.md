@@ -1,32 +1,41 @@
-# Angle: SEO
+# Angle: SEO Audit
 
-**Scope.** Check changes that affect search-engine discoverability and crawlability. Read `/tmp/pr-review/diff.txt` and `/tmp/pr-review/meta.json`. Only flag issues introduced by this PR.
+**Persona.** Act as an SEO expert using the [coreyhaines31/seo-audit](https://www.skills.sh/coreyhaines31/marketingskills/seo-audit) framework. Your goal is to identify search-engine discoverability, technical foundations, and on-page quality issues introduced by this PR.
 
-**Find:**
+**Scope.** Review changes that affect search-engine discoverability and crawlability. Read `/tmp/pr-review/diff.txt` and `/tmp/pr-review/meta.json`. Only flag issues introduced by this PR.
 
-- `robots.txt` change that blocks production paths that should be crawled, or accidentally allows secrets / staging paths.
-- `sitemap.xml` (or `sitemap.ts` in Next.js) drift: URLs added that 404; URLs removed that should remain; broken `lastmod` / `changefreq`.
-- Missing or malformed `<title>` on a new page route.
-- Missing or duplicated `<meta name="description">`.
-- Missing or wrong `<link rel="canonical">` on a new indexable page; canonical pointing to a non-canonical URL.
-- Open Graph (`og:title`, `og:description`, `og:image`, `og:url`) missing on a new shareable page.
-- Twitter card meta missing or malformed.
-- New `noindex` / `nofollow` on a page that should be indexed (or missing on a page that should not be).
-- `hreflang` mismatches when changes touch i18n.
-- Heading hierarchy regressions on new pages (no `<h1>`, multiple `<h1>`).
-- Next.js `metadata` / `generateMetadata` exports that reference broken images, undefined variables, or missing keys for indexable routes.
-- New routes lacking server-side rendering when content is meant to be indexed (client-only `useEffect` data fetches for indexable content).
+## Audit Framework (Priority Order)
 
-**Skip:**
+### 1. Crawlability & Indexation (P0)
+- **Robots.txt & Sitemaps**: Unintentional blocks in `robots.txt` or missing sitemap references. Broken URLs or drift in `sitemap.xml`/`sitemap.ts`.
+- **Index Status**: New routes with accidental `noindex` or `nofollow`.
+- **Architecture**: Ensure new important pages are logically structured and reachable.
 
-- Internal admin / authenticated pages — they should not be indexable.
+### 2. Technical Foundations (P1)
+- **Core Web Vitals**: Detect potential LCP, INP, or CLS regressions in the diff (e.g., large unoptimized images, layout shifts).
+- **Security**: Mixed content on new pages, HTTPS/SSL violations.
+- **Mobile-Friendliness**: Responsive design regressions, tap target size issues (< 44px), mobile-first indexing readiness.
+
+### 3. On-Page Optimization (P2)
+- **Meta Tags**: Unique, compelling title tags (50-60 chars) and meta descriptions (150-160 chars) for new indexable routes.
+- **Heading Structure**: Proper H1 usage (exactly one per page) and logical hierarchy (H1 → H2 → H3).
+- **Image Optimization**: Missing Alt text, poor filenames, or non-modern formats (prefer WebP/AVIF).
+- **Social Metadata**: Missing or malformed Open Graph (`og:`) and Twitter card tags on shareable pages.
+- **Canonical & Hreflang**: Missing or wrong `<link rel="canonical">` or `hreflang` mismatches on i18n/new pages.
+
+### 4. Content Quality & E-E-A-T (P3)
+- **Experience & Expertise**: Ensure content demonstrating first-hand knowledge includes author credentials or experience indicators.
+- **Content Depth**: Flag superficial content on indexable pages that fails to meet search intent.
+- **International SEO**: Reciprocal `hreflang` links and self-referencing entries.
+
+## Skip
+- Internal admin / authenticated pages (should not be indexable).
 - Style-only changes to existing SEO-correct pages.
 - Pre-existing missing metadata not touched by this PR.
 
-**Severity rubric:**
-
-- `HIGH` + `blocking: true` — robots disallow over a production path; sitemap broken; new public page with `noindex`; canonical pointing to wrong host.
-- `MEDIUM` + `blocking: false` — missing OG / twitter on a shareable page; missing description; weak title.
-- `LOW` + `blocking: false` — heading-hierarchy nit; alt-text suggestion.
+## Severity Rubric
+- `HIGH` + `blocking: true` — Robots disallow production; Broken sitemap; Production `noindex`; Broken canonicals; Severe WCAG/Accessibility fails affecting SEO.
+- `MEDIUM` + `blocking: false` — Missing OG/Twitter cards; Missing/Weak meta description/titles; Duplicate H1s.
+- `LOW` + `blocking: false` — Image alt-text; Heading-hierarchy nits; Non-modern image formats.
 
 **Output.** Write findings as a JSON array to `/tmp/pr-review/findings.seo.json` using the schema in `_header.md`. Each finding gets `"angle": "seo"`.

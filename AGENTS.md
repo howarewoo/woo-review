@@ -49,7 +49,7 @@ The Auditor agents are designed to be **thorough and optimistic**. Their goal is
 | **React Auditor** | Component Lifecycle | Prop-types, hooks rules, unnecessary re-renders, state management. |
 | **Design Auditor** | Technical UI Quality | Token usage, WCAG contrast, spacing scales, impeccable anti-patterns. |
 | **Design Critique** | UX & Heuristics | Nielsen's 10, cognitive load, layout hierarchy, interaction polish. |
-| **SEO Auditor** | Discoverability | Meta tags, OG/Twitter cards, indexing rules, semantic HTML. |
+| **SEO Auditor** | Discoverability | [coreyhaines31/seo-audit](https://www.skills.sh/coreyhaines31/marketingskills/seo-audit) framework: Crawlability, Technical, On-Page, E-E-A-T. |
 
 ### 2.3 The Skeptic (Validator)
 *   **Persona**: The "Defense Attorney" for the Code.
