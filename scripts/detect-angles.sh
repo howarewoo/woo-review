@@ -56,7 +56,7 @@ if has_seo_file || has_seo_diff_token; then
 fi
 
 if has_design_file; then
-  ANGLES+=("design")
+  ANGLES+=("design-audit" "design-critique")
 fi
 
 if has_react_signal; then
