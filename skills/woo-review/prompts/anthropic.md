@@ -43,7 +43,25 @@ Claude Code's `Task` tool supports per-subagent model routing. Read each angle p
 | `standard` | `claude-sonnet-4-6` | `bugs`, `security`, `design`, `react` |
 | `deep` | `claude-opus-4-7` | skeptical validator |
 
-Pass the resolved model explicitly when spawning each Task subagent (e.g. `model: "claude-haiku-4-5"` for a `tier: fast` angle). Do not default the validator to Sonnet — Opus's stricter false-positive filter pays for itself in review quality.
+**Every Task/Agent spawn MUST pass `model:` explicitly.** Omitting it makes the subagent inherit the parent session's model — typically Opus — which silently defeats tier routing and burns ~5x the tokens on rubric angles. The `tier:` frontmatter is informational unless the spawning call passes the resolved slug.
+
+Concrete invocation (Claude Code `Task` / `Agent` tool):
+
+```
+Task({
+  subagent_type: "general-purpose",
+  model: "claude-sonnet-4-6",   // resolved from angle's `tier: standard`
+  description: "bugs angle audit",
+  prompt: "<angle prompt body + Review Context>"
+})
+```
+
+Resolution rule per spawn:
+1. Read the angle file's frontmatter `tier:` value.
+2. Look up the Anthropic column in the tier table above.
+3. Pass that slug as `model:` on the Task call.
+
+Do not default the validator to Sonnet — pass `model: "claude-opus-4-7"` explicitly. Opus's stricter false-positive filter pays for itself in review quality.
 
 ## Step 1 — Context + Summary (single `fast`-tier subagent; full mode only)
 
@@ -61,7 +79,7 @@ Do NOT call `gh pr edit`. The PR title and description are immutable for this ac
 Read `/tmp/pr-review/angles.txt`. Launch **one subagent per enabled angle in the same response** to maximize parallelism. Each subagent:
 
 - Loads its angle prompt: `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md`.
-- Runs on the Anthropic model resolved from that prompt's `tier:` frontmatter via the table above (Sonnet for `bugs`/`security`/`design`/`react`, Haiku for `seo`/`aeo`).
+- Runs on the Anthropic model resolved from that prompt's `tier:` frontmatter via the table above (Sonnet for `bugs`/`security`/`design`/`react`, Haiku for `seo`/`aeo`). The spawning Task call MUST pass `model:` explicitly — see Model Routing section above.
 - Reads `/tmp/pr-review/diff.txt`, `/tmp/pr-review/rules.md`, and the prompts/meta as required by the angle file.
 - For `react`: runs `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline`, parses output, then performs LLM review per the react prompt.
 - Returns its findings list AND writes them to `/tmp/pr-review/findings.<angle>.json`.
