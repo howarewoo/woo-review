@@ -160,7 +160,7 @@ runs:
           (inputs.mode == 'full' && (contains(steps.angles.outputs.angles, 'react') || contains(steps.angles.outputs.angles, 'design-audit') || contains(steps.angles.outputs.angles, 'design-critique'))) ||
           (inputs.mode == 'review' && (contains(inputs.angle, 'react') || contains(inputs.angle, 'design-audit') || contains(inputs.angle, 'design-critique')))
         )
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v6
       with:
         node-version: '22'
 

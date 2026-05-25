@@ -83,7 +83,7 @@ jobs:
         with:
           mode: detect
           disable_angles: ${{ inputs.disable_angles }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: review-artifacts
           path: /tmp/pr-review/
@@ -104,7 +104,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Download base artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: review-artifacts
           path: /tmp/pr-review/
@@ -127,7 +127,7 @@ jobs:
           prompt_override: ${{ inputs.prompt_override }}
           react_doctor_version: ${{ inputs.react_doctor_version }}
           impeccable_version: ${{ inputs.impeccable_version }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: findings-${{ matrix.angle }}
           path: /tmp/pr-review/findings.${{ matrix.angle }}.json
@@ -147,12 +147,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Download base artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: review-artifacts
           path: /tmp/pr-review/
       - name: Download findings
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           pattern: findings-*
