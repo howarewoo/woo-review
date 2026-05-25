@@ -17,7 +17,7 @@ Requires `gh`, `jq`, `node` on PATH. Optional power-ups: `pbakaus/impeccable`, `
 ## Use (skill)
 
 ```text
-/woo-review            # Review the local diff against origin/main
+/woo-review            # Auto-detect: if current branch has an open PR, behave as /woo-review <PR#>; else review local diff against origin/main
 /woo-review 123        # Fetch PR #123, run the swarm, post a native GitHub Review
 woo-review install     # Verify deps + warm npx caches
 woo-review status      # Show current PR review state

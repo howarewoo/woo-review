@@ -16,7 +16,7 @@ This skill is **host-agnostic**: it works in any AI coding agent that supports s
 
 ## Commands
 
-- `/woo-review` — Review the current local diff (no GitHub posting).
+- `/woo-review` — Auto-detect: if the current branch has an open PR (via `gh pr view --json number`), behave as `/woo-review <PR#>`. Otherwise review the local diff (no GitHub posting).
 - `/woo-review <PR#>` — Fetch the PR via `gh`, run the swarm, and post a native batched GitHub Review.
 - `woo-review install` — Verify local deps (`gh`, `jq`, `node`) and pre-fetch `impeccable` + `react-doctor`.
 - `woo-review status` — Show the current PR's review status.
@@ -52,7 +52,15 @@ export WOO_REVIEW_ACTION_PATH="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)
 
 Build the same `/tmp/pr-review/` artifact tree the GitHub Action builds.
 
-**If a PR number was supplied:**
+**If no PR number was supplied**, first try to resolve one from the current branch:
+
+```bash
+PR_NUMBER="$(gh pr view --json number --jq .number 2>/dev/null || true)"
+```
+
+If `PR_NUMBER` is non-empty, proceed as if it had been passed in. If empty (no open PR for this branch, or no GitHub remote), fall back to local-diff mode.
+
+**If a PR number is set (supplied or auto-detected):**
 
 ```bash
 mkdir -p /tmp/pr-review
@@ -61,7 +69,7 @@ gh pr view "$PR_NUMBER" --json headRefOid,baseRefName,title,body,files \
   > /tmp/pr-review/meta.json
 ```
 
-**If no PR number was supplied (local mode):**
+**If no PR number resolved (local mode):**
 
 ```bash
 mkdir -p /tmp/pr-review
