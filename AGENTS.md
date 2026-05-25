@@ -44,6 +44,7 @@ The 2026 architecture depends on a strict 3-stage pipeline (Detect -> Fan-out ->
   - [impeccable](https://github.com/pbakaus/impeccable)
   - [react-doctor](https://github.com/millionco/react-doctor)
   - [seo-audit](https://www.skills.sh/coreyhaines31/marketingskills/seo-audit)
+  - [security-best-practices](https://www.skills.sh/openai/skills/security-best-practices) (sourced from [openai/skills](https://github.com/openai/skills/tree/main/skills/.curated/security-best-practices); language/framework-specific rubric for the `security` angle)
 
 ### 5. Skills CLI Compatibility
 - Always maintain the `skills/` directory structure with `SKILL.md` files.

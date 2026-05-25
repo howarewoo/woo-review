@@ -2,6 +2,20 @@
 
 **Scope.** Find security vulnerabilities introduced by this PR's diff. Read `/tmp/pr-review/diff.txt` and `/tmp/pr-review/rules.md`.
 
+**Reference rubric.** Use OpenAI's `security-best-practices` skill as the language/framework-specific rubric.
+
+- Registry: <https://www.skills.sh/openai/skills/security-best-practices>
+- Source: <https://github.com/openai/skills/tree/main/skills/.curated/security-best-practices>
+- Install (optional, host-dependent): `npx skills add https://github.com/openai/skills --skill security-best-practices`
+
+Before scanning, identify the languages/frameworks touched by the diff (frontend + backend), then load the matching reference files. If the skill is installed, read them from the installed `references/` directory. Otherwise fetch on demand:
+
+```bash
+gh api repos/openai/skills/contents/skills/.curated/security-best-practices/references/<file> --jq .content | base64 -d
+```
+
+Filename pattern: `<language>-<framework>-<stack>-security.md`, with `<language>-general-<stack>-security.md` as the framework-agnostic fallback. Available today: `python` (django, fastapi, flask), `javascript`/`typescript` (express, nextjs, react, vue, jquery, general frontend), `go` (general backend). If no matching reference exists, fall back to the OWASP list below plus the general advice in that skill's `SKILL.md` (avoid incrementing public IDs, do not flag missing TLS in dev, no HSTS recommendations).
+
 **Find (OWASP-shaped, diff-bound):**
 
 - Injection: SQL, command, LDAP, XPath, template, prompt injection at trust boundaries.

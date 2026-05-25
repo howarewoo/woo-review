@@ -61,6 +61,7 @@ The skill calls into established domain tools instead of re-implementing them:
 | [pbakaus/impeccable](https://github.com/pbakaus/impeccable) | `design-audit`, `design-critique` | `npx -y impeccable detect --json` |
 | [millionco/react-doctor](https://github.com/millionco/react-doctor) | `react` | `npx -y react-doctor --diff <base> --offline` |
 | [coreyhaines31/seo-audit](https://www.skills.sh/coreyhaines31/marketingskills/seo-audit) framework | `seo` | Embedded as the rubric in `skills/woo-review/prompts/angles/seo.md` |
+| [openai/security-best-practices](https://www.skills.sh/openai/skills/security-best-practices) | `security` | Language/framework-specific rubric loaded from `openai/skills` `references/`; fetched on demand via `gh api` if not installed locally |
 
 The audit rubrics live in `skills/woo-review/prompts/` so the skill is self-sufficient — recommended skills only enrich the host agent's general vocabulary.
 
@@ -71,7 +72,7 @@ The audit rubrics live in `skills/woo-review/prompts/` so the skill is self-suff
 | Angle | Always-on | Detection trigger | Tooling |
 |---|---|---|---|
 | `bugs` | yes | — | LLM only |
-| `security` | yes | — | LLM only |
+| `security` | yes | — | LLM + `openai/security-best-practices` rubric |
 | `seo` | no | `*.html`, `head.{ts,tsx}`, `layout.{ts,tsx}`, `robots.txt`, `sitemap.{xml,ts}`, `next.config.*`, `app/manifest.*`, or `<meta>`/`og:`/`canonical` tokens in diff | LLM only |
 | `design-audit` | no | `*.{tsx,jsx,vue,svelte,html,css,scss,sass,less,styl,astro}` | LLM + `impeccable detect` (quantitative) |
 | `design-critique` | no | same as `design-audit` | LLM + `impeccable detect` (qualitative) |
