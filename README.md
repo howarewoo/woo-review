@@ -12,33 +12,81 @@ Unlike traditional sequential reviewers, `woo-review` uses a three-stage paralle
 
 ```mermaid
 graph TD
-    Trigger[PR Event / Comment] --> Detect[1. Detect: dispatcher job]
+    %% Stage 1: Detection
+    Trigger[PR Event / Comment] --> Prefetch[Prefetch: Diff, Rules, Meta]
+    Prefetch --> Detect[1. Detect: dispatcher job]
     
-    Detect --> JSON_Array((JSON Array))
-    
-    JSON_Array --> Angle_Bugs
-    JSON_Array --> Angle_Security
-    JSON_Array --> Angle_React
-    JSON_Array --> Angle_Design
-    JSON_Array --> Angle_SEO
+    Detect -- "angles_json" --> Matrix_Start{Matrix Fan-out}
+    Detect -- "Artifact: review-artifacts" --> Storage[(GHA Artifact Storage)]
 
+    %% Stage 2: Parallel Matrix
     subgraph Parallel_Audits [2. Matrix: Parallel Angle Jobs]
-        direction LR
-        Angle_Bugs[bugs]
-        Angle_Security[security]
-        Angle_React[react]
-        Angle_Design[design]
-        Angle_SEO[seo]
+        direction TB
+        
+        subgraph Logic_Audits [Logic & Security]
+            direction LR
+            Bugs[bugs<br/>Sonnet 4.6]
+            Security[security<br/>Sonnet 4.6]
+        end
+        
+        subgraph UI_UX_Audits [Design & Frontend]
+            direction LR
+            D_Audit[design-audit<br/>Sonnet 4.6 + Impeccable]
+            D_Critique[design-critique<br/>Sonnet 4.6 + Heuristics]
+            React[react<br/>Sonnet 4.6 + React-Doctor]
+        end
+        
+        subgraph Speed_Audits [Metadata & SEO]
+            direction LR
+            SEO[seo<br/>Flash 3.5]
+        end
+    end
+
+    Matrix_Start --> Bugs
+    Matrix_Start --> Security
+    Matrix_Start --> D_Audit
+    Matrix_Start --> D_Critique
+    Matrix_Start --> React
+    Matrix_Start --> SEO
+    
+    Storage -.-> Bugs
+    Storage -.-> Security
+    Storage -.-> D_Audit
+    Storage -.-> D_Critique
+    Storage -.-> React
+    Storage -.-> SEO
+
+    %% Stage 3: Fan-in & Validation
+    Bugs --> Findings_Group
+    Security --> Findings_Group
+    D_Audit --> Findings_Group
+    D_Critique --> Findings_Group
+    React --> Findings_Group
+    SEO --> Findings_Group
+
+    Findings_Group{Matrix Fan-in} -- "Artifacts: findings-*" --> Merge[Merge: raw_findings.json]
+    
+    Merge --> Validate[3. Validate: Skeptical Validator<br/>Opus 4.7]
+    
+    subgraph Validator_Internal [Internal Logic]
+        direction TB
+        Dedupe[Deduplication] --> Skeptical[Skeptical Audit]
+        Skeptical --> Severity[Severity Verification]
     end
     
-    Angle_Bugs --> Artifacts((Artifacts))
-    Angle_Security --> Artifacts
-    Angle_React --> Artifacts
-    Angle_Design --> Artifacts
-    Angle_SEO --> Artifacts
+    Validate --> Validator_Internal
 
-    Artifacts --> Validate[3. Validate: Skeptical Validator Agent]
-    Validate --> Post[4. Post Inline Comments & Labels]
+    %% Stage 4: Output
+    Validator_Internal -- "findings.json" --> Post[4. Post Results]
+    
+    subgraph Output_Actions [Final Actions]
+        direction LR
+        Comments[Inline Comments<br/>gh api]
+        Status[PR Body Summary<br/>STATUS_LINE]
+        Labels[blocking-review label<br/>gh pr edit]
+    end
+    
+    Post --> Output_Actions
 ```
 
 ## Features
