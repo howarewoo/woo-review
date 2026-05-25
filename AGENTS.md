@@ -41,9 +41,9 @@ The 2026 architecture depends on a strict 3-stage pipeline (Detect -> Fan-out ->
 - Only add new tools if they support `--json` output or can be reliably parsed via Bash/jq.
 - Prefer `npx` for CLI tools to keep the runner environment clean.
 - Reference the following tool repositories in documentation:
-  - [impeccable](https://github.com/pbakaus/impeccable)
-  - [react-doctor](https://github.com/millionco/react-doctor)
-  - [seo-audit](https://www.skills.sh/coreyhaines31/marketingskills/seo-audit)
+  - [impeccable](https://github.com/pbakaus/impeccable) (one run per PR drives quant + qual passes inside the `design` angle)
+  - [react-doctor](https://github.com/millionco/react-doctor) (linter feed for the `react` angle)
+  - [seo-audit](https://www.skills.sh/coreyhaines31/marketingskills/seo-audit) (embedded rubric for the `seo` angle)
   - [ai-seo](https://www.skills.sh/coreyhaines31/marketingskills/ai-seo) (AEO / Answer Engine Optimization rubric for the `aeo` angle)
   - [security-best-practices](https://www.skills.sh/openai/skills/security-best-practices) (sourced from [openai/skills](https://github.com/openai/skills/tree/main/skills/.curated/security-best-practices); language/framework-specific rubric for the `security` angle)
 

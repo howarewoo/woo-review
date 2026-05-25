@@ -14,7 +14,7 @@
 #               body contains AI-crawler tokens (GPTBot / PerplexityBot /
 #               ClaudeBot / Google-Extended / anthropic-ai) or JSON-LD schema
 #               types (FAQPage / HowTo / Article / Product / ItemList)
-#   design-audit, design-critique — *.{tsx,jsx,vue,svelte,html,css,scss,sass,less,styl,astro}
+#   design    — *.{tsx,jsx,vue,svelte,html,css,scss,sass,less,styl,astro}
 #   react     — *.{tsx,jsx} AND consumer repo's package.json declares react dep
 
 set -euo pipefail
@@ -78,7 +78,7 @@ if has_aeo_file || has_aeo_diff_token; then
 fi
 
 if has_design_file; then
-  ANGLES+=("design-audit" "design-critique")
+  ANGLES+=("design")
 fi
 
 if has_react_signal; then

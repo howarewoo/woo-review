@@ -53,7 +53,7 @@ Read `/tmp/pr-review/angles.txt`. Launch **one Sonnet subagent per enabled angle
 - For `react`: runs `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline`, parses output, then performs LLM review per the react prompt.
 - Returns its findings list AND writes them to `/tmp/pr-review/findings.<angle>.json`.
 
-If the Task tool caps practical parallelism below the angle count (≥5), spawn the angles in two waves: `[bugs, security, seo]` then `[design-audit, design-critique, react]`. Do not skip any enabled angle.
+If the Task tool caps practical parallelism below the angle count, spawn the angles in two waves: `[bugs, security, seo, aeo]` then `[design, react]`. Do not skip any enabled angle.
 
 ## Step 3 — Validation (Sonnet, only if any findings)
 

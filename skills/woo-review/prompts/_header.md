@@ -26,8 +26,7 @@ This action runs up to five distinct review angles, auto-selected from the chang
 | `security` | yes | LLM + `openai/security-best-practices` rubric (loaded from installed skill or fetched via `gh api repos/openai/skills/contents/skills/.curated/security-best-practices/references/<file>`) |
 | `seo` | no | LLM + `coreyhaines31/seo-audit` rubric (embedded in `prompts/angles/seo.md`) |
 | `aeo` | no | LLM + `coreyhaines31/ai-seo` rubric (embedded in `prompts/angles/aeo.md`); deeper `references/` fetched on demand via `gh api repos/coreyhaines31/marketingskills/contents/skills/ai-seo/references/<file>` |
-| `design-audit` | no | LLM + `npx -y impeccable@$IMPECCABLE_VERSION detect --json` (quantitative audit) |
-| `design-critique` | no | LLM + `npx -y impeccable@$IMPECCABLE_VERSION detect --json` (qualitative critique) |
+| `design` | no | LLM + `npx -y impeccable@$IMPECCABLE_VERSION detect --json` (one run; quantitative pass from JSON + qualitative critique scoped to flagged files) |
 | `react` | no | `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline` (React linter) + LLM |
 
 Each angle writes its findings to `/tmp/pr-review/findings.<angle>.json`. The orchestrator merges them into `/tmp/pr-review/findings.json` after the validator pass, then posts inline comments via a single batched GitHub Review. PR labels MUST NOT be mutated — blocking is signalled exclusively through the native `REQUEST_CHANGES` review event.
@@ -133,7 +132,7 @@ Every runner MUST write a final `findings.json` (for debugging + potential post-
 ]
 ```
 
-`angle` is one of `bugs | security | seo | design-audit | design-critique | react`.
+`angle` is one of `bugs | security | seo | aeo | design | react`.
 
 ## Blocking Criteria
 

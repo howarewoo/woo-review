@@ -27,7 +27,7 @@ woo-review wires in domain skills as tool calls inside specific angles, not as a
 
 | Source | Used by | How |
 |---|---|---|
-| [pbakaus/impeccable](https://github.com/pbakaus/impeccable) | `design-audit`, `design-critique` | `npx -y impeccable detect --json` inside the angle prompt |
+| [pbakaus/impeccable](https://github.com/pbakaus/impeccable) | `design` | `npx -y impeccable detect --json` (run once; feeds both quant + qual passes inside the angle prompt) |
 | [millionco/react-doctor](https://github.com/millionco/react-doctor) | `react` | `npx -y react-doctor --diff <base> --offline` |
 | [coreyhaines31/seo-audit](https://www.skills.sh/coreyhaines31/marketingskills/seo-audit) framework | `seo` | Embedded as the audit rubric in `prompts/angles/seo.md` |
 | [openai/security-best-practices](https://www.skills.sh/openai/skills/security-best-practices) | `security` | Referenced from `prompts/angles/security.md`; fetch `references/<language>-<framework>-<stack>-security.md` via `gh api` |
@@ -86,7 +86,7 @@ Compose rules: copy `constitution.md` (if present) + every `CLAUDE.md` reachable
 bash "$WOO_REVIEW_ACTION_PATH/scripts/detect-angles.sh"
 ```
 
-Read the result from `/tmp/pr-review/angles.txt` (one angle per line). Always-on angles: `bugs`, `security`. Conditional: `seo`, `aeo`, `design-audit`, `design-critique`, `react`.
+Read the result from `/tmp/pr-review/angles.txt` (one angle per line). Always-on angles: `bugs`, `security`. Conditional: `seo`, `aeo`, `design`, `react`.
 
 ### Stage 3 — Spawn Parallel Sub-Agents (one per angle)
 
@@ -173,7 +173,7 @@ Zero local setup required in the consumer repo — the action ships its own prom
 - Always parallelize Stage 3 when the host supports it; the validator pass is calibrated for ~5 angles' worth of input.
 - Trust the Skeptical Validator. Disabling it produces noisy reviews.
 - Keep `action.yml` pinned to May 2026 flagships (Opus 4.7 validator, Sonnet 4.6 workers, Flash 3.5 for SEO).
-- Pass `disable_angles` to skip optional angles when scope is narrow (e.g. backend-only PR → `disable_angles: "seo,design-audit,design-critique,react"`).
+- Pass `disable_angles` to skip optional angles when scope is narrow (e.g. backend-only PR → `disable_angles: "seo,design,react"`).
 
 ## Troubleshooting
 
