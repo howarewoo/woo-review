@@ -27,9 +27,10 @@ Launch one Haiku subagent. Task:
 
 Write the final validated JSON array to /tmp/pr-review/findings.json.
 
-### Step 3 — Post Inline Comments + Update PR Body + Manage Label
+### Step 3 — Post Native PR Review + Update PR Body + Manage Label
 Follow _header.md exactly. Compute BLOCKING_COUNT, NONBLOCKING_COUNT, HIGH_COUNT, MEDIUM_COUNT, LOW_COUNT. Build STATUS_LINE.
 - Use the findings from /tmp/pr-review/findings.json.
-- Post inline comments via gh api.
-- Update PR body with summary, changes, files, test plan, and STATUS_LINE.
-- Manage blocking-review label.
+- Submit a single native GitHub PR Review (Batch) including all inline comments and the summary/status line.
+- Determine review state: APPROVE (0 findings), REQUEST_CHANGES (blocking > 0), or COMMENT (non-blocking > 0).
+- Update the main PR body with the deep-dive details (bullets, files, test plan).
+- Manage the "blocking-review" label for secondary visibility.

@@ -41,71 +41,72 @@ Every run MUST end with **(a)** zero-or-more inline review comments posted via `
 - `BLOCKING_COUNT == 0, NONBLOCKING_COUNT >= 1` → `**Status: APPROVED WITH SUGGESTIONS** — N non-blocking finding(s) (H HIGH, M MEDIUM, L LOW). See inline comments.`
 - Both zero → `**Status: APPROVED** — No validated findings.`
 
-### Inline Comment Posting
+### Pull Request Review (Batch)
 
-For each validated finding, build a JSON payload and POST it to the PR comments endpoint:
-
-```bash
-cat > /tmp/pr_comment_body.txt <<'BODY_EOF'
-<comment text — see Comment Body Rules below>
-BODY_EOF
-
-python3 -c '
-import json, sys
-body = open("/tmp/pr_comment_body.txt").read()
-payload = {"commit_id": sys.argv[1], "path": sys.argv[2], "line": int(sys.argv[3]), "side": "RIGHT", "body": body}
-print(json.dumps(payload))
-' "$HEAD_SHA" "<file_path>" "<line_number>" > /tmp/pr_comment.json
-
-gh api "repos/${GITHUB_REPOSITORY}/pulls/$PR_NUMBER/comments" \
-  --method POST --input /tmp/pr_comment.json
-```
-
-Replace `${GITHUB_REPOSITORY}` with the repo slug from the Review Context if the env var is not available.
-
-### Comment Body Rules
-
-- Brief description of the issue + why it's a problem.
-- Small self-contained fixes (≤5 lines): include a ` ```suggestion ` block that, when applied verbatim, fully resolves the issue.
-- Larger or multi-location fixes: describe without a suggestion block.
-- One comment per unique issue. When citing a rule, quote exact text.
-
-### Blocking Label
+Instead of posting individual comments, batch all findings into a single GitHub Review. This uses the `pull_request_review` API.
 
 ```bash
-# When BLOCKING_COUNT >= 1:
-gh pr edit "$PR_NUMBER" --add-label "blocking-review"
-# Otherwise:
-gh pr edit "$PR_NUMBER" --remove-label "blocking-review" 2>/dev/null || true
-```
+# 1. Prepare the review body (Summary + Status Line)
+cat <<'BODY_EOF' > /tmp/pr_review_body.txt
+## AI Deep Code Review Summary
 
-### PR Body Update
-
-```bash
-gh pr edit "$PR_NUMBER" --body "$(cat <<BODY_EOF
-## Summary
-<1-2 sentence summary>
-
-## Changes
-<bullet list>
-
-## Files Changed
-<files grouped by category>
-
-<if functional changes, include Manual Test Plan checklist>
+<1-2 sentence high-level summary of the review results>
 
 ---
-
-## AI-Driven Deep Code Review
-
 ${STATUS_LINE}
-
 *Audited by woo-review · Provider: <provider> · Model: <model>*
 BODY_EOF
-)"
-```
 
-Body rules: status line + credits line only. Do **not** list finding titles, file paths, or severity tables in the PR body — inline comments carry the per-finding detail.
+# 2. Prepare the review payload with inline comments
+python3 -c '
+import json, sys, os
+
+try:
+    findings = json.load(open("/tmp/pr-review/findings.json"))
+except:
+    findings = []
+
+commit_id = os.environ.get("HEAD_SHA")
+pr_body = open("/tmp/pr_review_body.txt").read()
+
+# Determine event: REQUEST_CHANGES if any blocking findings exist, else COMMENT (or APPROVE if 0 findings)
+has_blocking = any(f.get("blocking", False) for f in findings)
+if not findings:
+    event = "APPROVE"
+elif has_blocking:
+    event = "REQUEST_CHANGES"
+else:
+    event = "COMMENT"
+
+comments = []
+for f in findings:
+    body = f["description"]
+    if f.get("suggestion"):
+        body += f"\n\n```suggestion\n{f['suggestion']}\n```"
+    
+    comments.append({
+        "path": f["file"],
+        "line": int(f["line"]),
+        "side": "RIGHT",
+        "body": body
+    })
+
+payload = {
+    "commit_id": commit_id,
+    "body": pr_body,
+    "event": event,
+    "comments": comments
+}
+print(json.dumps(payload))
+' > /tmp/pr_review_payload.json
+
+# 3. Submit the review
+gh api "repos/${GITHUB_REPOSITORY}/pulls/$PR_NUMBER/reviews" \
+  --method POST --input /tmp/pr_review_payload.json
+
+# 4. Optional: Update PR Body with secondary details (Changes list, Files, Test Plan)
+gh pr edit "$PR_NUMBER" --body-file /tmp/pr_body_update.txt
+```
 
 ## Findings Schema (`/tmp/pr-review/findings.json`)
 

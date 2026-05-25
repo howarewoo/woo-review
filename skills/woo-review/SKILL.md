@@ -19,6 +19,12 @@ This skill enforces the 3-stage parallel pipeline:
 2. **Review**: Dispatches parallel optimistic audits.
 3. **Validate**: Runs the **Skeptical Validator** (Claude Opus 4.7) to dedupe and filter.
 
+### Native PR Reviews
+As of May 2026, `woo-review` uses native GitHub Pull Request Reviews:
+- **Batching**: All inline comments are submitted in a single "Review" event to minimize noise.
+- **States**: The system automatically sets the review state to `APPROVE`, `REQUEST_CHANGES`, or `COMMENT` based on the finding severity and blocking status.
+- **Summary**: The Review Body contains the high-level summary and status line, while the PR description contains the full audit details.
+
 ## Best Practices
 
 - **Speed**: Always prefer the parallel matrix mode for PRs with >3 files.

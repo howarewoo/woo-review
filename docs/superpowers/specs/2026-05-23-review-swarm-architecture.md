@@ -71,6 +71,7 @@ All agents communicate via standardized JSON artifacts in `/tmp/pr-review/`.
 - **Primary Source**: `diff.txt` (The raw patch).
 - **Rules**: `rules.md` (Constitution + CLAUDE.md files).
 - **Findings**: `findings.<angle>.json` -> Merged to `raw_findings.json`.
+- **Output**: The Validator produces a single **Native GitHub PR Review** payload.
 
 ### 3.2 Model Mapping (May 2026 Standards)
 To maintain the efficiency of the swarm, we match task complexity to model capability:

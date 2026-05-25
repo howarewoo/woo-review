@@ -44,3 +44,4 @@ The 2026 architecture depends on a strict 3-stage pipeline (Detect -> Matrix -> 
 ### 5. Architectural Guardrails
 - **The Skeptic (Opus 4.7)** is the final authority. Do not move critical logic out of the validation stage if it requires high-reasoning deduplication.
 - **The Auditors (Sonnet 4.6)** should remain focused and optimistic. Do not bloat their scopes.
+- **Output**: Always use the native GitHub PR Review API (batched) for final feedback. Avoid posting individual comments outside of a review.
