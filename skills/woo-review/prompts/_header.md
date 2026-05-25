@@ -24,7 +24,7 @@ This action runs up to five distinct review angles, auto-selected from the chang
 |---|---|---|
 | `bugs` | yes | LLM only |
 | `security` | yes | LLM + `openai/security-best-practices` rubric (loaded from installed skill or fetched via `gh api repos/openai/skills/contents/skills/.curated/security-best-practices/references/<file>`) |
-| `seo` | no | LLM only |
+| `seo` | no | LLM + `coreyhaines31/seo-audit` rubric (embedded in `prompts/angles/seo.md`) |
 | `design-audit` | no | LLM + `npx -y impeccable@$IMPECCABLE_VERSION detect --json` (quantitative audit) |
 | `design-critique` | no | LLM + `npx -y impeccable@$IMPECCABLE_VERSION detect --json` (qualitative critique) |
 | `react` | no | `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline` (React linter) + LLM |

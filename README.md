@@ -73,7 +73,7 @@ The audit rubrics live in `skills/woo-review/prompts/` so the skill is self-suff
 |---|---|---|---|
 | `bugs` | yes | — | LLM only |
 | `security` | yes | — | LLM + `openai/security-best-practices` rubric |
-| `seo` | no | `*.html`, `head.{ts,tsx}`, `layout.{ts,tsx}`, `robots.txt`, `sitemap.{xml,ts}`, `next.config.*`, `app/manifest.*`, or `<meta>`/`og:`/`canonical` tokens in diff | LLM only |
+| `seo` | no | `*.html`, `head.{ts,tsx}`, `layout.{ts,tsx}`, `robots.txt`, `sitemap.{xml,ts}`, `next.config.*`, `app/manifest.*`, or `<meta>`/`og:`/`canonical` tokens in diff | LLM + `coreyhaines31/seo-audit` rubric (embedded in `skills/woo-review/prompts/angles/seo.md`) |
 | `design-audit` | no | `*.{tsx,jsx,vue,svelte,html,css,scss,sass,less,styl,astro}` | LLM + `impeccable detect` (quantitative) |
 | `design-critique` | no | same as `design-audit` | LLM + `impeccable detect` (qualitative) |
 | `react` | no | `*.{tsx,jsx}` AND `react` in `package.json` | `react-doctor` + LLM |
