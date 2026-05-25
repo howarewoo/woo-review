@@ -45,6 +45,7 @@ jobs:
       # === Pick exactly one of the four provider blocks below ===
 
       # Anthropic (Claude)
+      # Production: replace @main with a full commit SHA (supply-chain hardening).
       - uses: howarewoo/woo-review@main
         with:
           provider: anthropic

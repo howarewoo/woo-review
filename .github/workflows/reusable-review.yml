@@ -69,10 +69,15 @@ on:
 jobs:
   detect:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       angles: ${{ steps.woo.outputs.angles_json }}
     steps:
       - uses: actions/checkout@v4
+      # Self-references float at @main because woo-review has no tagged release yet.
+      # Once a release exists, swap @main for a SHA matching the workflow_ref the consumer pinned.
       - id: woo
         uses: howarewoo/woo-review@main
         with:
@@ -87,6 +92,10 @@ jobs:
   review:
     needs: detect
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      id-token: write
     if: needs.detect.outputs.angles != '[]' && needs.detect.outputs.angles != ''
     strategy:
       fail-fast: false
@@ -128,6 +137,10 @@ jobs:
     needs: [detect, review]
     if: always() && needs.detect.result == 'success' && (needs.review.result == 'success' || needs.review.result == 'skipped')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
     steps:
       - uses: actions/checkout@v4
       - name: Download base artifacts

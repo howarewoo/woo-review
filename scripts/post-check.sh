@@ -17,8 +17,12 @@ for v in "$OUTCOME_ANTHROPIC" "$OUTCOME_OPENAI" "$OUTCOME_GOOGLE" "$OUTCOME_OPEN
 done
 
 if [ "$RUNNER_OUTCOME" = "failure" ]; then
-  echo "::warning::Review runner step failed (likely first-run workflow validation — this is expected)"
-  exit 0
+  if [ "${WOO_REVIEW_ALLOW_RUNNER_FAILURE:-}" = "1" ]; then
+    echo "::warning::Review runner step failed; WOO_REVIEW_ALLOW_RUNNER_FAILURE=1 set — exiting 0"
+    exit 0
+  fi
+  echo "::error::Review runner step failed. Set WOO_REVIEW_ALLOW_RUNNER_FAILURE=1 to tolerate (e.g. first-run validation)."
+  exit 1
 fi
 
 if [ -z "$RUNNER_OUTCOME" ]; then

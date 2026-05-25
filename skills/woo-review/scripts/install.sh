@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install dependencies for woo-review skill
 
-set -e
+set -euo pipefail
 
 echo "🔍 Checking dependencies for woo-review..."
 

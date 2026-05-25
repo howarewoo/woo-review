@@ -260,7 +260,7 @@ runs:
       id: run-opencode
       if: steps.detect.outputs.provider == 'openrouter' && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review' || inputs.mode == 'validate')
       continue-on-error: true
-      uses: sst/opencode/github@latest
+      uses: sst/opencode/github@v1.15.10
       with:
         model: ${{ inputs.model || 'openrouter/anthropic/claude-sonnet-4' }}
         prompt: ${{ steps.load-prompt.outputs.prompt }}
