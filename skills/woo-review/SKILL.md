@@ -13,9 +13,42 @@ Use this skill to manage, trigger, and debug `woo-review` operations. It underst
 
 ## Commands
 
-- `woo-review review` - Trigger a local review simulation or a remote PR review.
+- `/woo-review` - Run the full agent swarm review locally on the current diff.
 - `woo-review status` - Check the current review status and blocking labels.
-- `woo-review config` - Configure review angles, models (Opus 4.7, etc.), and providers.
+- `woo-review config` - Configure review angles, models, and providers.
+
+## Local Swarm Execution (`/woo-review`)
+
+When the user invokes `/woo-review`, the agent MUST perform the following multi-step workflow:
+
+### 1. Prefetch & Context
+- Ensure `/tmp/pr-review` exists and is clean.
+- Generate `/tmp/pr-review/diff.txt` for the current unstaged/staged changes (or `origin/main..HEAD`).
+- Generate a mock `/tmp/pr-review/meta.json` containing the current branch info and a summary of changes.
+- Copy or symlink project rules (e.g., `CLAUDE.md`) to `/tmp/pr-review/rules.md`.
+
+### 2. Detection
+- Run `bash scripts/detect-angles.sh`.
+- Read the detected angles from `/tmp/pr-review/angles.txt`.
+
+### 3. Orchestrate Auditors
+For each detected angle (e.g., `bugs`, `security`, `design-audit`):
+- Read the corresponding prompt from `prompts/angles/<angle>.md`.
+- Execute any shell commands specified in the prompt (e.g., `impeccable detect`).
+- Perform the LLM audit as described in the prompt.
+- Write the findings as a JSON array to `/tmp/pr-review/findings.<angle>.json`.
+
+### 4. Merge & Validate
+- Run `bash scripts/merge-findings.sh` to create `/tmp/pr-review/raw_findings.json`.
+- Read `prompts/validator.md`.
+- Act as the **Skeptical Validator**:
+  - Deduplicate and audit the findings.
+  - Apply the severity rubric.
+  - Produce the final `/tmp/pr-review/findings.json`.
+
+### 5. Report
+- Present the final validated findings to the user in a structured format.
+- Do NOT attempt to post to GitHub unless explicitly asked; this is a local simulation.
 
 ## Architecture Guidelines
 
