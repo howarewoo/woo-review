@@ -1,5 +1,8 @@
 # Example consumer workflow. Copy this into a consumer repo at
 # .github/workflows/pr-review.yml and fill in the secret + provider of choice.
+#
+# NOTE: This file is intentionally NOT under .github/workflows/ in the
+# woo-review repo itself — it's a template for downstream users.
 
 name: PR Review
 
@@ -42,7 +45,7 @@ jobs:
       # === Pick exactly one of the four provider blocks below ===
 
       # Anthropic (Claude)
-      - uses: howarewoo/woo-review@v1
+      - uses: howarewoo/woo-review@main
         with:
           provider: anthropic
           anthropic_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -50,21 +53,21 @@ jobs:
           constitution_path: constitution.md
 
       # OpenAI (Codex)
-      # - uses: howarewoo/woo-review@v1
+      # - uses: howarewoo/woo-review@main
       #   with:
       #     provider: openai
       #     openai_api_key: ${{ secrets.OPENAI_API_KEY }}
       #     model: gpt-5
 
       # Google (Gemini)
-      # - uses: howarewoo/woo-review@v1
+      # - uses: howarewoo/woo-review@main
       #   with:
       #     provider: google
       #     gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
       #     model: gemini-2.5-pro
 
       # OpenRouter (via opencode)
-      # - uses: howarewoo/woo-review@v1
+      # - uses: howarewoo/woo-review@main
       #   with:
       #     provider: openrouter
       #     openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}

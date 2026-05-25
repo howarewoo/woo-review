@@ -10,83 +10,163 @@ recommends:
 
 # woo-review
 
-Managed agentic PR reviews with parallel matrix execution and skeptical validation.
+Spawn a parallel swarm of review sub-agents against a pull request (or the local diff), validate their findings with a Skeptical Validator, and — when a PR is targeted — post a single batched GitHub Review.
 
-## Overview
-
-Use this skill to manage, trigger, and debug `woo-review` operations. It understands the 2026 parallel architecture (Detect -> Matrix -> Validate). 
-
-**Note**: This skill is self-sufficient. The audit frameworks (SEO, Design) are embedded in the `prompts/` directory of the repository. Installing recommended skills simply enhances the agent's general domain vocabulary.
+This skill is **host-agnostic**: it works in any AI coding agent that supports sub-agent / task spawning (Claude Code, Cursor, Gemini CLI, opencode, etc.). Hosts without parallel sub-agents fall back to a sequential loop.
 
 ## Commands
 
-- `/woo-review` - Run the full agent swarm review locally on the current diff.
-- `woo-review install` - Ensure all local dependencies (gh, jq, impeccable, react-doctor) are installed and ready.
-- `woo-review status` - Check the current review status and blocking labels.
-- `woo-review config` - Configure review angles, models, and providers.
+- `/woo-review` — Review the current local diff (no GitHub posting).
+- `/woo-review <PR#>` — Fetch the PR via `gh`, run the swarm, and post a native batched GitHub Review.
+- `woo-review install` — Verify local deps (`gh`, `jq`, `node`) and pre-fetch `impeccable` + `react-doctor`.
+- `woo-review status` — Show the current PR's review status and blocking labels.
 
-## Local Swarm Execution (`/woo-review`)
+## Knowledge Aggregation
 
-When the user invokes `/woo-review`, the agent MUST perform the following multi-step workflow:
+woo-review wires in domain skills as tool calls inside specific angles, not as a runtime dependency:
 
-### 1. Prefetch & Context
-- Ensure `/tmp/pr-review` exists and is clean.
-- Generate `/tmp/pr-review/diff.txt` for the current unstaged/staged changes (or `origin/main..HEAD`).
-- Generate a mock `/tmp/pr-review/meta.json` containing the current branch info and a summary of changes.
-- Copy or symlink project rules (e.g., `CLAUDE.md`) to `/tmp/pr-review/rules.md`.
+| Source | Used by | How |
+|---|---|---|
+| [pbakaus/impeccable](https://github.com/pbakaus/impeccable) | `design-audit`, `design-critique` | `npx -y impeccable detect --json` inside the angle prompt |
+| [millionco/react-doctor](https://github.com/millionco/react-doctor) | `react` | `npx -y react-doctor --diff <base> --offline` |
+| [coreyhaines31/seo-audit](https://www.skills.sh/coreyhaines31/marketingskills/seo-audit) framework | `seo` | Embedded as the audit rubric in `prompts/angles/seo.md` |
 
-### 2. Detection
-- Run `bash scripts/detect-angles.sh`.
-- Read the detected angles from `/tmp/pr-review/angles.txt`.
+The audit frameworks themselves are embedded in `prompts/` so the skill is self-sufficient. Installing the recommended skills only enhances your host agent's general vocabulary.
 
-### 3. Orchestrate Auditors
-For each detected angle (e.g., `bugs`, `security`, `design-audit`):
-- Read the corresponding prompt from `prompts/angles/<angle>.md`.
-- Execute any shell commands specified in the prompt (e.g., `impeccable detect`).
-- Perform the LLM audit as described in the prompt.
-- Write the findings as a JSON array to `/tmp/pr-review/findings.<angle>.json`.
+## `/woo-review` Workflow
 
-### 4. Merge & Validate
-- Run `bash scripts/merge-findings.sh` to create `/tmp/pr-review/raw_findings.json`.
-- Read `prompts/validator.md`.
-- Act as the **Skeptical Validator**:
-  - Deduplicate and audit the findings.
-  - Apply the severity rubric.
-  - Produce the final `/tmp/pr-review/findings.json`.
+When the user invokes `/woo-review [PR#]`, the host agent MUST perform the following stages. **All file paths below are relative to `$WOO_REVIEW_ACTION_PATH`** (the cloned skill repo).
 
-### 5. Report
-- Present the final validated findings to the user in a structured format.
-- Do NOT attempt to post to GitHub unless explicitly asked; this is a local simulation.
+### Stage 1 — Prefetch
 
-## Architecture Guidelines
+Build the same `/tmp/pr-review/` artifact tree the GitHub Action builds.
 
-This skill enforces the 3-stage parallel pipeline:
-1. **Detect**: Identifies review angles (Bugs, Security, SEO, Design, React).
-2. **Review**: Dispatches parallel optimistic audits.
-3. **Validate**: Runs the **Skeptical Validator** (Claude Opus 4.7) to dedupe and filter.
+**If a PR number was supplied:**
 
-### Native PR Reviews
-As of May 2026, `woo-review` uses native GitHub Pull Request Reviews:
-- **Batching**: All inline comments are submitted in a single "Review" event to minimize noise.
-- **States**: The system automatically sets the review state to `APPROVE`, `REQUEST_CHANGES`, or `COMMENT` based on the finding severity and blocking status.
-- **Scope**: The action is strictly focused on the **Review** event. It does **not** modify the PR title or description.
+```bash
+mkdir -p /tmp/pr-review
+gh pr diff "$PR_NUMBER" > /tmp/pr-review/diff.txt
+gh pr view "$PR_NUMBER" --json headRefOid,baseRefName,title,body,files \
+  > /tmp/pr-review/meta.json
+```
+
+**If no PR number was supplied (local mode):**
+
+```bash
+mkdir -p /tmp/pr-review
+BASE="$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main)"
+git diff "$BASE"...HEAD > /tmp/pr-review/diff.txt
+# Synthesize meta.json from git for downstream scripts.
+git diff --name-only "$BASE"...HEAD \
+  | jq -R . | jq -s '{
+      headRefOid: "'"$(git rev-parse HEAD)"'",
+      baseRefName: "'"$(git rev-parse --abbrev-ref "$BASE@{upstream}" 2>/dev/null || echo main)"'",
+      title: "(local diff)",
+      body: "",
+      files: [.[] | {path: .}]
+    }' > /tmp/pr-review/meta.json
+```
+
+Compose rules: copy `constitution.md` (if present) + every `CLAUDE.md` reachable from changed files into `/tmp/pr-review/rules.md`.
+
+### Stage 2 — Detect Angles
+
+```bash
+bash "$WOO_REVIEW_ACTION_PATH/scripts/detect-angles.sh"
+```
+
+Read the result from `/tmp/pr-review/angles.txt` (one angle per line). Always-on angles: `bugs`, `security`. Conditional: `seo`, `design-audit`, `design-critique`, `react`.
+
+### Stage 3 — Spawn Parallel Sub-Agents (one per angle)
+
+**This is the swarm step.** For each detected angle, spawn a sub-agent in parallel using your host's primitive:
+
+- Claude Code: `Task` tool, one call per angle in a single message.
+- Cursor / Composer: parallel subagent dispatch.
+- Gemini CLI / opencode: sequential loop (no native subagents — still launch them one at a time inside this stage).
+
+Each sub-agent receives the same brief:
+
+```
+You are the <angle> reviewer for this PR. Read:
+- $WOO_REVIEW_ACTION_PATH/prompts/_header.md   (shared contract)
+- $WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md   (your scope)
+- /tmp/pr-review/diff.txt, /tmp/pr-review/rules.md, /tmp/pr-review/meta.json
+
+Execute any shell commands the angle prompt specifies (e.g. impeccable detect,
+react-doctor). Write your findings as a JSON array to
+/tmp/pr-review/findings.<angle>.json per the schema in _header.md. EXIT.
+```
+
+Sub-agents MUST NOT post comments, edit the PR, or touch other angles' files.
+
+### Stage 4 — Merge + Skeptical Validation
+
+After every sub-agent has finished:
+
+```bash
+bash "$WOO_REVIEW_ACTION_PATH/scripts/merge-findings.sh"
+# Produces /tmp/pr-review/raw_findings.json
+```
+
+Now act as the **Skeptical Validator** by following `prompts/validator.md`:
+
+1. Dedupe across angles (keep the most actionable description).
+2. Defense-attorney audit: try to prove each finding wrong. Drop pedantic / style-only / lint-catchable / "maybe" findings.
+3. Severity check: you MAY downgrade (HIGH → MEDIUM, blocking true → false). You MAY NOT upgrade.
+4. Write the surviving array to `/tmp/pr-review/findings.json`.
+
+### Stage 5 — Report
+
+**If invoked with a PR number** — post a single native batched GitHub Review per the procedure in `prompts/_header.md`:
+
+- Build the STATUS_LINE (`APPROVED` / `APPROVED WITH SUGGESTIONS` / `CHANGES REQUESTED`).
+- Submit one `gh api repos/<repo>/pulls/<PR>/reviews` POST containing all inline comments + the summary + status line.
+- Add or remove the `blocking-review` label.
+- DO NOT modify the PR title or body.
+
+**If invoked locally (no PR#)** — print the validated findings to the terminal grouped by severity, then stop. Do not touch any remote.
+
+## Architecture
+
+```
+detect ─► fan-out (parallel sub-agents, one per angle) ─► merge ─► skeptical validator ─► post
+```
+
+This mirrors the cloud GitHub Action exactly (`.github/workflows/reusable-review.yml`), just with sub-agents standing in for GHA matrix jobs.
+
+## Companion GitHub Action
+
+For a fully-managed CI flow, drop this into the consumer repo at `.github/workflows/ai-review.yml`:
+
+```yaml
+name: AI PR Review
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+
+jobs:
+  review:
+    uses: howarewoo/woo-review/.github/workflows/reusable-review.yml@main
+    with:
+      provider: anthropic
+    secrets:
+      anthropic_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+```
+
+Zero local setup required in the consumer repo — the action ships its own prompts, scripts, and Node tools.
 
 ## Best Practices
 
-- **Speed**: Always prefer the parallel matrix mode for PRs with >3 files.
-- **Accuracy**: Trust the Skeptical Validator to filter noise; do not manually disable it.
-- **Models**: Ensure `action.yml` uses May 2026 flagships (Opus 4.7, GPT-5.5, Gemini 3.5).
-
-## Configuration
-
-Angles are auto-detected, but you can override them in `action.yml` or via the `disable_angles` input.
-
-```yaml
-with:
-  disable_angles: "seo,design" # Keep bugs, security, react
-```
+- Always parallelize Stage 3 when the host supports it; the validator pass is calibrated for ~5 angles' worth of input.
+- Trust the Skeptical Validator. Disabling it produces noisy reviews.
+- Keep `action.yml` pinned to May 2026 flagships (Opus 4.7 validator, Sonnet 4.6 workers, Flash 3.5 for SEO).
+- Pass `disable_angles` to skip optional angles when scope is narrow (e.g. backend-only PR → `disable_angles: "seo,design-audit,design-critique,react"`).
 
 ## Troubleshooting
 
-- **Missing Artifacts**: Ensure the `detect` job is successfully uploading `review-artifacts`.
-- **Validation Failures**: Check `/tmp/pr-review/raw_findings.json` to see if worker results were merged correctly.
+- **Missing artifacts** in cloud mode — verify the `detect` job uploaded `review-artifacts`.
+- **Empty validator output** — inspect `/tmp/pr-review/raw_findings.json`. If empty, no angle wrote findings; check each `findings.<angle>.json`.
+- **Sub-agents posting prematurely** — re-read the Stage 3 brief; workers must write JSON only.

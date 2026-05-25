@@ -1,14 +1,17 @@
-# Self-test: runs the action against PRs opened in this repo, using whichever
-# provider secret is available. Lets us validate the action end-to-end before
-# tagging a release.
+# Self-test: validates this repo on every push / PR.
+#
+# The `unit` job runs on every event and is the only required check.
+# The `review` and `parallel-review` jobs require the CLAUDE_CODE_OAUTH_TOKEN
+# secret and are manual-only (workflow_dispatch) to avoid billing live AI calls
+# on every push.
 
 name: Self-test
 
 on:
   pull_request:
-    types: [opened, reopened, ready_for_review]
-  issue_comment:
-    types: [created]
+    types: [opened, reopened, synchronize, ready_for_review]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -21,18 +24,17 @@ jobs:
         run: bash tests/detect-angles.test.sh
 
   review:
-    name: Run self-review
+    name: Run self-review (manual)
     runs-on: ubuntu-latest
     needs: unit
-    if: >
-      (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
-      (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && contains(github.event.comment.body, '@review')) ||
-      github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch'
     timeout-minutes: 15
     permissions:
       contents: read
       pull-requests: write
       id-token: write
+    env:
+      ANTHROPIC_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
     steps:
       - uses: actions/checkout@v6
@@ -40,26 +42,26 @@ jobs:
           fetch-depth: 1
 
       - name: Run woo-review (Anthropic)
-        if: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+        if: env.ANTHROPIC_TOKEN != ''
         uses: ./
         with:
           provider: anthropic
-          anthropic_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic_token: ${{ env.ANTHROPIC_TOKEN }}
           model: claude-sonnet-4-6
           constitution_path: constitution.md
 
   parallel-review:
-    name: Parallel self-review
+    name: Parallel self-review (manual)
     needs: unit
     runs-on: ubuntu-latest
-    if: >
-      (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
-      github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch'
     timeout-minutes: 20
     permissions:
       contents: read
       pull-requests: write
       id-token: write
+    env:
+      ANTHROPIC_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
     steps:
       - uses: actions/checkout@v6
@@ -68,38 +70,35 @@ jobs:
 
       - name: Detect
         id: detect
-        if: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+        if: env.ANTHROPIC_TOKEN != ''
         uses: ./
         with:
           mode: detect
           provider: anthropic
-          anthropic_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic_token: ${{ env.ANTHROPIC_TOKEN }}
 
-      - name: Review
-        if: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' && steps.detect.outputs.angles_json != '[]' }}
-        # We manually simulate matrix by looping or just running one representative angle
-        # since strategy.matrix only works at the job level. 
-        # For self-test, we'll run the 'bugs' angle.
+      - name: Review (bugs angle only — matrix is exercised by reusable workflow)
+        if: env.ANTHROPIC_TOKEN != '' && steps.detect.outputs.angles_json != '[]'
         uses: ./
         with:
           mode: review
           angle: bugs
           provider: anthropic
-          anthropic_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic_token: ${{ env.ANTHROPIC_TOKEN }}
           model: claude-sonnet-4-6
 
       - name: Mock findings for other angles
-        if: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+        if: env.ANTHROPIC_TOKEN != ''
         shell: bash
         run: |
           mkdir -p /tmp/pr-review
           echo "[]" > /tmp/pr-review/findings.security.json
 
       - name: Validate
-        if: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+        if: env.ANTHROPIC_TOKEN != ''
         uses: ./
         with:
           mode: validate
           provider: anthropic
-          anthropic_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic_token: ${{ env.ANTHROPIC_TOKEN }}
           model: claude-sonnet-4-6
