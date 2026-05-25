@@ -116,10 +116,23 @@ To ensure maximum speed and accuracy, `woo-review` relies on the following envir
 ## Installation
 
 ### 1. Install the AI Skill
-The `woo-review` skill manages the local orchestration and debugging of reviews. Install it into your project using the [skills](https://skills.sh) CLI:
+The `woo-review` skill manages the local orchestration and debugging of reviews. 
+
+**Prerequisites**:
+- [GitHub CLI (gh)](https://cli.github.com/)
+- [jq](https://stedolan.github.io/jq/)
+- [Node.js 22+](https://nodejs.org/)
+
+Install the skill into your project using the [skills](https://skills.sh) CLI:
 
 ```bash
 npx skills add howarewoo/woo-review
+```
+
+Then, run the built-in install command to verify your environment and pre-fetch audit tools:
+
+```bash
+woo-review install
 ```
 
 ### 2. Configure the GitHub Action
