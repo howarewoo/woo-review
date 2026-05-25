@@ -49,6 +49,21 @@ graph TD
 -   **Multi-Provider**: Supports Anthropic, OpenAI, Google, and OpenRouter.
 -   **Integrated Tooling**: Runs `react-doctor` and `impeccable` (visual audit) natively within the agentic loop.
 
+## Prerequisites & Dependencies
+
+To ensure maximum speed and accuracy, `woo-review` relies on the following environment:
+
+### GitHub Action Dependencies
+- **Runner**: `ubuntu-latest` is recommended (includes `gh` and `jq`).
+- **GitHub CLI (`gh`)**: Required for posting inline comments and managing PR labels.
+- **`jq`**: Required for JSON-based finding aggregation.
+- **Node.js 22+**: Automatically installed when `design-audit`, `design-critique`, or `react` angles are active to support `impeccable` and `react-doctor`.
+- **2026 Flagship Models**: Access to **Claude 4.7+**, **GPT-5.5+**, or **Gemini 3.5+** is required for the Skeptical Validator and specialized audit agents.
+
+### AI Skill Dependencies
+- **Agent**: Requires [Gemini CLI](https://github.com/google-gemini/gemini-cli) or [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code).
+- **Workspace**: The `woo-review` skill (found in `skills/woo-review/`) should be active in your local development environment to manage and simulate reviews.
+
 ## Quickstart (Recommended: Parallel Mode)
 
 To get the full benefit of parallelism, use the provided **Reusable Workflow**:
