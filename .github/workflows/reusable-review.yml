@@ -75,7 +75,7 @@ jobs:
     outputs:
       angles: ${{ steps.woo.outputs.angles_json }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       # Self-references float at @main because woo-review has no tagged release yet.
       # Once a release exists, swap @main for a SHA matching the workflow_ref the consumer pinned.
       - id: woo
@@ -102,7 +102,7 @@ jobs:
       matrix:
         angle: ${{ fromJson(needs.detect.outputs.angles) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Download base artifacts
         uses: actions/download-artifact@v4
         with:
@@ -135,14 +135,17 @@ jobs:
 
   validate:
     needs: [detect, review]
-    if: always() && needs.detect.result == 'success' && (needs.review.result == 'success' || needs.review.result == 'skipped')
+    # Validator runs on partial review failures too — fail-fast is off so a single
+    # angle failure must not prevent posting findings from the angles that did succeed.
+    # Only skip if detection failed/cancelled or the whole run was cancelled.
+    if: always() && needs.detect.result == 'success' && needs.review.result != 'cancelled'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
       issues: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Download base artifacts
         uses: actions/download-artifact@v4
         with:

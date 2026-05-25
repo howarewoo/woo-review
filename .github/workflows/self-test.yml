@@ -16,10 +16,28 @@ on:
 
 jobs:
   unit:
-    name: Unit tests (detect-angles)
+    name: Unit tests + lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
+      - name: shellcheck (shell scripts)
+        run: |
+          shellcheck --version
+          # --severity=error keeps the gate strict on real bugs (parse failures,
+          # broken redirects, etc.) while allowing progressive style cleanup.
+          shellcheck --severity=error scripts/*.sh tests/*.sh skills/woo-review/scripts/*.sh
+
+      - name: actionlint (workflow YAML)
+        env:
+          ACTIONLINT_VERSION: 1.7.7
+        run: |
+          set -euo pipefail
+          curl -fsSL -o actionlint.tar.gz \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          tar -xzf actionlint.tar.gz actionlint
+          ./actionlint -color
+
       - name: Run detect-angles tests
         run: bash tests/detect-angles.test.sh
 

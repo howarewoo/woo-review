@@ -35,7 +35,10 @@ has_seo_file() {
 }
 
 has_seo_diff_token() {
-  grep -qE '<meta|og:|twitter:|canonical|robots|sitemap' "$DIFF"
+  # Anchored to reduce false positives in docs/comments/JSON keys.
+  # Matches: meta tags, og:/twitter: prefixed props, rel=canonical, name=robots,
+  # <loc> sitemap entries, Sitemap: directive.
+  grep -qE "</?meta\b|\bog:[a-z_-]+|\btwitter:[a-z_-]+|rel=[\"']canonical|name=[\"']robots|<loc>|(^|[[:space:]])Sitemap:" "$DIFF"
 }
 
 has_design_file() {
@@ -79,7 +82,8 @@ if [ -n "$DISABLE" ]; then
     done
     [ $keep -eq 1 ] && FILTERED+=("$a")
   done
-  ANGLES=("${FILTERED[@]}")
+  # ${arr[@]+...} guards empty-array expansion under `set -u` on Bash 3.2 (macOS).
+  ANGLES=("${FILTERED[@]+"${FILTERED[@]}"}")
 fi
 
 CSV=$(IFS=,; echo "${ANGLES[*]}")

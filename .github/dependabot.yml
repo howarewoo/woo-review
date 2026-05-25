@@ -1,0 +1,16 @@
+# Keep GitHub Actions pins fresh. Major-version bumps land as PRs that go
+# through the same self-test gate before merge.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(actions)"
+    labels:
+      - "dependencies"
+      - "github-actions"

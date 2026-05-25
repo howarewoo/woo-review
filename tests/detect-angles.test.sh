@@ -139,6 +139,49 @@ else
   fail=1
 fi
 
+# --- Case 6: bare "robots" / "sitemap" / "canonical" words in non-SEO diff
+#            should NOT trigger seo (regex tightening regression guard).
+rm -f "$GITHUB_WORKSPACE/package.json"
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "0badf00d",
+  "baseRefName": "main",
+  "title": "feat: crawler config",
+  "body": "",
+  "files": [
+    {"path": "server/crawler.py", "additions": 20, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/server/crawler.py b/server/crawler.py
++def fetch_robots(url):
++    """Download the canonical robots.txt for the given site sitemap."""
++    return requests.get(url)
+DIFF
+unset INPUT_DISABLE_ANGLES
+: > "$OUTPUT_FILE"
+run_case "bare-words-no-seo-trigger" "bugs,security"
+
+# --- Case 7: a real <meta name="robots"> in a non-SEO-filename diff SHOULD trigger seo.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "fee15bad",
+  "baseRefName": "main",
+  "title": "feat: noindex marketing page",
+  "body": "",
+  "files": [
+    {"path": "src/pages/marketing/Special.tsx", "additions": 5, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/src/pages/marketing/Special.tsx b/src/pages/marketing/Special.tsx
++<meta name="robots" content="noindex" />
+DIFF
+: > "$OUTPUT_FILE"
+run_case "real-meta-robots-triggers-seo" "bugs,security,seo,design-audit,design-critique"
+
 if [ $fail -ne 0 ]; then
   echo "TESTS FAILED"
   exit 1
