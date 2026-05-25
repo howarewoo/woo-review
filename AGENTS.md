@@ -9,8 +9,8 @@ The companion GitHub Action (`action.yml` + `.github/workflows/reusable-review.y
 
 ## Tech Stack
 - **Skill contract**: Markdown (`skills/woo-review/SKILL.md`, the source of truth).
-- **Shared prompts**: Markdown (`prompts/_header.md`, `prompts/angles/*.md`, `prompts/validator.md`) — consumed by both the skill and the action.
-- **CI orchestration**: GitHub Actions (YAML), Bash (`scripts/`).
+- **Shared prompts**: Markdown (`skills/woo-review/prompts/_header.md`, `skills/woo-review/prompts/angles/*.md`, `skills/woo-review/prompts/validator.md`) — consumed by both the skill and the action.
+- **CI orchestration**: GitHub Actions (YAML), Bash (`skills/woo-review/scripts/`).
 - **Audit Tools**: Node.js/npx (`react-doctor`, `impeccable`).
 - **Testing**: Bash tests (`tests/`), GHA self-tests.
 
@@ -20,20 +20,20 @@ The companion GitHub Action (`action.yml` + `.github/workflows/reusable-review.y
 The 2026 architecture depends on a strict 3-stage pipeline (Detect -> Fan-out -> Validate). The skill spawns sub-agents in parallel; the action runs them as GHA matrix jobs. Both share the same artifact tree under `/tmp/pr-review/`.
 - **NEVER** introduce sequential dependencies between angle workers.
 - **ALWAYS** communicate via artifacts in `/tmp/pr-review/`.
-- **ALWAYS** follow the JSON schema in `prompts/_header.md` for findings.
+- **ALWAYS** follow the JSON schema in `skills/woo-review/prompts/_header.md` for findings.
 - **ALWAYS** keep the skill (`skills/woo-review/SKILL.md`) and the action in sync — the skill is the source of truth; the action is its CI extension.
 
 ### 2. Prompt Synchronization
 `woo-review` supports multiple providers (Anthropic, OpenAI, Google, OpenRouter).
 - When adding or renaming a review angle, you **MUST** update all orchestrator prompts:
-  - `prompts/anthropic.md`
-  - `prompts/openai.md`
-  - `prompts/google.md`
-  - `prompts/opencode.md`
-- Ensure the `angle` enum in `prompts/_header.md` is updated.
+  - `skills/woo-review/prompts/anthropic.md`
+  - `skills/woo-review/prompts/openai.md`
+  - `skills/woo-review/prompts/google.md`
+  - `skills/woo-review/prompts/opencode.md`
+- Ensure the `angle` enum in `skills/woo-review/prompts/_header.md` is updated.
 
 ### 3. Testing Protocol
-- **Unit Tests**: Run `bash tests/detect-angles.test.sh` after modifying `scripts/detect-angles.sh`.
+- **Unit Tests**: Run `bash tests/detect-angles.test.sh` after modifying `skills/woo-review/scripts/detect-angles.sh`.
 - **Integration**: Verify changes via `.github/workflows/self-test.yml` by simulating a PR environment.
 - **Reproductions**: Before fixing a bug in the review logic, create a test case in `tests/` that fails.
 

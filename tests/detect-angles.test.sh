@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Unit test for scripts/detect-angles.sh. Builds synthetic prefetch artifacts
+# Unit test for skills/woo-review/scripts/detect-angles.sh. Builds synthetic prefetch artifacts
 # for three diff scenarios and asserts the emitted angles CSV.
 #
 # Exits non-zero on the first failure. Designed to run in CI without network.
@@ -7,7 +7,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SCRIPT="$REPO_ROOT/scripts/detect-angles.sh"
+SCRIPT="$REPO_ROOT/skills/woo-review/scripts/detect-angles.sh"
 WORK="$(mktemp -d)"
 PREFETCH="/tmp/pr-review"
 mkdir -p "$PREFETCH"

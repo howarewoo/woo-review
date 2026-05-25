@@ -31,11 +31,20 @@ woo-review wires in domain skills as tool calls inside specific angles, not as a
 | [millionco/react-doctor](https://github.com/millionco/react-doctor) | `react` | `npx -y react-doctor --diff <base> --offline` |
 | [coreyhaines31/seo-audit](https://www.skills.sh/coreyhaines31/marketingskills/seo-audit) framework | `seo` | Embedded as the audit rubric in `prompts/angles/seo.md` |
 
-The audit frameworks themselves are embedded in `prompts/` so the skill is self-sufficient. Installing the recommended skills only enhances your host agent's general vocabulary.
+The audit frameworks themselves are embedded in `prompts/` (inside this skill bundle) so the skill is self-sufficient. Installing the recommended skills only enhances your host agent's general vocabulary.
 
 ## `/woo-review` Workflow
 
-When the user invokes `/woo-review [PR#]`, the host agent MUST perform the following stages. **All file paths below are relative to `$WOO_REVIEW_ACTION_PATH`** (the cloned skill repo).
+When the user invokes `/woo-review [PR#]`, the host agent MUST perform the following stages. **All file paths below are relative to `$WOO_REVIEW_ACTION_PATH`**.
+
+### Stage 0 — Resolve skill path
+
+Set `WOO_REVIEW_ACTION_PATH` to the directory containing this `SKILL.md` (the installed skill bundle). All `prompts/` and `scripts/` assets ship inside that directory.
+
+```bash
+export WOO_REVIEW_ACTION_PATH="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# Or however your host exposes the skill's install dir (e.g. $SKILL_DIR).
+```
 
 ### Stage 1 — Prefetch
 

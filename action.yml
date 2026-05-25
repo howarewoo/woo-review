@@ -110,7 +110,7 @@ runs:
         INPUT_GOOGLE_API_KEY: ${{ inputs.google_api_key }}
         INPUT_GEMINI_API_KEY: ${{ inputs.gemini_api_key }}
         INPUT_OPENROUTER_API_KEY: ${{ inputs.openrouter_api_key }}
-      run: bash "${{ github.action_path }}/scripts/detect-provider.sh"
+      run: bash "${{ github.action_path }}/skills/woo-review/scripts/detect-provider.sh"
 
     - name: Resolve PR number
       id: pr
@@ -131,7 +131,7 @@ runs:
         EVENT_ACTION: ${{ github.event.action }}
         INPUT_CONSTITUTION_PATH: ${{ inputs.constitution_path }}
         INPUT_SKIP_LABELS: ${{ inputs.skip_labels }}
-      run: bash "${{ github.action_path }}/scripts/prefetch.sh"
+      run: bash "${{ github.action_path }}/skills/woo-review/scripts/prefetch.sh"
 
     - name: Detect review angles
       id: angles
@@ -146,13 +146,13 @@ runs:
           echo "angles=$CSV" >> "$GITHUB_OUTPUT"
           echo "Loaded angles from angles.txt: $CSV"
         else
-          bash "${{ github.action_path }}/scripts/detect-angles.sh"
+          bash "${{ github.action_path }}/skills/woo-review/scripts/detect-angles.sh"
         fi
 
     - name: Merge findings (validate mode)
       if: steps.prefetch.outputs.skip != 'true' && inputs.mode == 'validate'
       shell: bash
-      run: bash "${{ github.action_path }}/scripts/merge-findings.sh"
+      run: bash "${{ github.action_path }}/skills/woo-review/scripts/merge-findings.sh"
 
     - name: Setup Node.js (for react-doctor + impeccable CLIs)
       if: |
@@ -170,8 +170,8 @@ runs:
       shell: bash
       env:
         PROVIDER: ${{ steps.detect.outputs.provider }}
-        ACTION_PATH: ${{ github.action_path }}
-        INPUT_PROMPT_OVERRIDE: ${{ (inputs.mode == 'validate' && format('{0}/prompts/validator.md', github.action_path)) || inputs.prompt_override }}
+        ACTION_PATH: ${{ github.action_path }}/skills/woo-review
+        INPUT_PROMPT_OVERRIDE: ${{ (inputs.mode == 'validate' && format('{0}/skills/woo-review/prompts/validator.md', github.action_path)) || inputs.prompt_override }}
         PR_NUMBER: ${{ steps.pr.outputs.number }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         EVENT_NAME: ${{ github.event_name }}
@@ -179,7 +179,7 @@ runs:
         ENABLED_ANGLES: ${{ (inputs.mode == 'review' && inputs.angle) || steps.angles.outputs.angles }}
         MODE: ${{ inputs.mode }}
         ANGLE: ${{ inputs.angle }}
-      run: bash "${{ github.action_path }}/scripts/load-prompt.sh"
+      run: bash "${{ github.action_path }}/skills/woo-review/scripts/load-prompt.sh"
 
     # --- Provider runners (mutually exclusive) ---
 
@@ -250,7 +250,7 @@ runs:
             }
           }
       env:
-        WOO_REVIEW_ACTION_PATH: ${{ github.action_path }}
+        WOO_REVIEW_ACTION_PATH: ${{ github.action_path }}/skills/woo-review
         ENABLED_ANGLES: ${{ (inputs.mode == 'review' && inputs.angle) || steps.angles.outputs.angles }}
         IMPECCABLE_VERSION: ${{ inputs.impeccable_version }}
         REACT_DOCTOR_VERSION: ${{ inputs.react_doctor_version }}
@@ -269,7 +269,7 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
-        WOO_REVIEW_ACTION_PATH: ${{ github.action_path }}
+        WOO_REVIEW_ACTION_PATH: ${{ github.action_path }}/skills/woo-review
         ENABLED_ANGLES: ${{ (inputs.mode == 'review' && inputs.angle) || steps.angles.outputs.angles }}
         IMPECCABLE_VERSION: ${{ inputs.impeccable_version }}
         REACT_DOCTOR_VERSION: ${{ inputs.react_doctor_version }}
@@ -287,7 +287,7 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
-        WOO_REVIEW_ACTION_PATH: ${{ github.action_path }}
+        WOO_REVIEW_ACTION_PATH: ${{ github.action_path }}/skills/woo-review
         ENABLED_ANGLES: ${{ (inputs.mode == 'review' && inputs.angle) || steps.angles.outputs.angles }}
         IMPECCABLE_VERSION: ${{ inputs.impeccable_version }}
         REACT_DOCTOR_VERSION: ${{ inputs.react_doctor_version }}
@@ -307,7 +307,7 @@ runs:
         OPENROUTER_API_KEY: ${{ inputs.openrouter_api_key }}
         GH_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
-        WOO_REVIEW_ACTION_PATH: ${{ github.action_path }}
+        WOO_REVIEW_ACTION_PATH: ${{ github.action_path }}/skills/woo-review
         ENABLED_ANGLES: ${{ (inputs.mode == 'review' && inputs.angle) || steps.angles.outputs.angles }}
         IMPECCABLE_VERSION: ${{ inputs.impeccable_version }}
         REACT_DOCTOR_VERSION: ${{ inputs.react_doctor_version }}
@@ -324,4 +324,4 @@ runs:
         OUTCOME_OPENAI: ${{ steps.run-openai.outcome }}
         OUTCOME_GOOGLE: ${{ steps.run-google.outcome }}
         OUTCOME_OPENCODE: ${{ steps.run-opencode.outcome }}
-      run: bash "${{ github.action_path }}/scripts/post-check.sh"
+      run: bash "${{ github.action_path }}/skills/woo-review/scripts/post-check.sh"
