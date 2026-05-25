@@ -122,10 +122,18 @@ The `woo-review` skill manages the local orchestration and debugging of reviews.
 - [GitHub CLI (gh)](https://cli.github.com/)
 - [jq](https://stedolan.github.io/jq/)
 - [Node.js 22+](https://nodejs.org/)
+- **AI Skills**:
+  - `pbakaus/impeccable` (Required for Design Audit/Critique)
+  - `coreyhaines31/seo-audit` (Required for SEO Audit)
 
 Install the skill into your project using the [skills](https://skills.sh) CLI:
 
 ```bash
+# 1. Install required specialized skills
+npx skills add pbakaus/impeccable
+npx skills add coreyhaines31/seo-audit
+
+# 2. Install the review orchestrator
 npx skills add howarewoo/woo-review
 ```
 

@@ -34,4 +34,10 @@ echo "📦 Pre-fetching Node tools (impeccable, react-doctor)..."
 npx -y impeccable@latest --version > /dev/null
 npx -y react-doctor@latest --version > /dev/null
 
+# 5. Check for dependent AI skills
+echo "🤖 Checking for dependent AI skills..."
+# Note: Since the skills CLI doesn't have a 'list' or 'check' command for specific skills yet,
+# we simply suggest the user ensures they are installed.
+echo "Tip: Ensure you have run 'npx skills add pbakaus/impeccable' and 'npx skills add coreyhaines31/seo-audit'."
+
 echo "🎉 All dependencies are ready!"

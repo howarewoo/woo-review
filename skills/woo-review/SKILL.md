@@ -4,6 +4,7 @@ description: Managed agentic PR reviews with parallel matrix execution and skept
 install: npx skills add howarewoo/woo-review
 requires:
   bins: [gh, jq, node]
+  skills: [pbakaus/impeccable, coreyhaines31/seo-audit]
 ---
 
 # woo-review
