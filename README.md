@@ -106,7 +106,7 @@ jobs:
 
 Zero local setup in the consumer repo — the action ships its own Node tools and prompts. Full template at [`examples/workflows/ai-review.yml`](./examples/workflows/ai-review.yml).
 
-The CI pipeline mirrors the skill's swarm 1:1 — detection job → matrix of angle workers → validator → batched review. See [`docs/superpowers/specs/2026-05-23-review-swarm-architecture.md`](./docs/superpowers/specs/2026-05-23-review-swarm-architecture.md) for the full design.
+The CI pipeline mirrors the skill's swarm 1:1 — detection job → matrix of angle workers → validator → batched review.
 
 ### Provider matrix (May 2026 defaults)
 
@@ -148,7 +148,6 @@ When wiring the action behind `pull_request_target` (write-scope), always pin to
 ## Project docs
 
 - Skill contract: [`skills/woo-review/SKILL.md`](./skills/woo-review/SKILL.md)
-- Architecture spec: [`docs/superpowers/specs/2026-05-23-review-swarm-architecture.md`](./docs/superpowers/specs/2026-05-23-review-swarm-architecture.md)
 - Agent mandates: [`AGENTS.md`](./AGENTS.md)
 
 ## License
