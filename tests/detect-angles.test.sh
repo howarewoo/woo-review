@@ -12,6 +12,10 @@ WORK="$(mktemp -d)"
 PREFETCH="/tmp/pr-review"
 mkdir -p "$PREFETCH"
 
+# Clean up scratch dirs on exit so consecutive runs (CI or local) start from a
+# known state. WORK is mktemp-owned; PREFETCH is a fixed path the test creates.
+trap 'rm -rf "$WORK" "$PREFETCH"' EXIT
+
 # Mimic GITHUB_OUTPUT
 OUTPUT_FILE="$WORK/output"
 export GITHUB_OUTPUT="$OUTPUT_FILE"

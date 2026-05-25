@@ -29,10 +29,14 @@ else
     echo "✅ Node.js found."
 fi
 
-# 4. Pre-fetch Node dependencies to speed up first run
-echo "📦 Pre-fetching Node tools (impeccable, react-doctor)..."
-npx -y impeccable@latest --version > /dev/null
-npx -y react-doctor@latest --version > /dev/null
+# 4. Pre-fetch Node dependencies to speed up first run.
+# Versions are overridable via env so the skill and the action stay in lockstep.
+# Defaults mirror action.yml inputs (latest).
+IMPECCABLE_VERSION="${IMPECCABLE_VERSION:-latest}"
+REACT_DOCTOR_VERSION="${REACT_DOCTOR_VERSION:-latest}"
+echo "📦 Pre-fetching Node tools (impeccable@${IMPECCABLE_VERSION}, react-doctor@${REACT_DOCTOR_VERSION})..."
+npx -y "impeccable@${IMPECCABLE_VERSION}" --version > /dev/null
+npx -y "react-doctor@${REACT_DOCTOR_VERSION}" --version > /dev/null
 
 # 5. Check for dependent AI skills
 echo "🤖 Checking for dependent AI skills..."

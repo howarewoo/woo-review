@@ -3,6 +3,16 @@
 #
 # NOTE: This file is intentionally NOT under .github/workflows/ in the
 # woo-review repo itself — it's a template for downstream users.
+#
+# !!! SECURITY: pull_request_target trigger !!!
+# The job below runs on `pull_request_target`, which executes with the base
+# branch's write-scope token. The default `actions/checkout` below intentionally
+# omits `ref:` — that makes it check out the BASE ref (safe). DO NOT add
+# `ref: ${{ github.event.pull_request.head.sha }}` or you will be running
+# untrusted PR code with a token that can comment/label/merge. The `labeled`
+# event filter + `ai-review` label gate further reduce blast radius by
+# requiring a maintainer to opt-in each PR.
+# See https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions
 
 name: PR Review
 
@@ -38,7 +48,8 @@ jobs:
       cancel-in-progress: true
 
     steps:
-      - uses: actions/checkout@v6
+      # Do NOT add `ref: pull_request.head.sha` — see security note at top.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 1
 

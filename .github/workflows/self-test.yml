@@ -19,7 +19,7 @@ jobs:
     name: Unit tests + lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: shellcheck (shell scripts)
         run: |
@@ -50,16 +50,17 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-      id-token: write
-    env:
-      ANTHROPIC_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 1
 
       - name: Run woo-review (Anthropic)
+        # Token scoped to the single step that consumes it — keep it out of env
+        # for shellcheck/actionlint/setup steps.
+        env:
+          ANTHROPIC_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         if: env.ANTHROPIC_TOKEN != ''
         uses: ./
         with:
@@ -77,17 +78,16 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-      id-token: write
-    env:
-      ANTHROPIC_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 1
 
       - name: Detect
         id: detect
+        env:
+          ANTHROPIC_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         if: env.ANTHROPIC_TOKEN != ''
         uses: ./
         with:
@@ -96,6 +96,8 @@ jobs:
           anthropic_token: ${{ env.ANTHROPIC_TOKEN }}
 
       - name: Review (bugs angle only — matrix is exercised by reusable workflow)
+        env:
+          ANTHROPIC_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         if: env.ANTHROPIC_TOKEN != '' && steps.detect.outputs.angles_json != '[]'
         uses: ./
         with:
@@ -106,6 +108,8 @@ jobs:
           model: claude-sonnet-4-6
 
       - name: Mock findings for other angles
+        env:
+          ANTHROPIC_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         if: env.ANTHROPIC_TOKEN != ''
         shell: bash
         run: |
@@ -113,6 +117,8 @@ jobs:
           echo "[]" > /tmp/pr-review/findings.security.json
 
       - name: Validate
+        env:
+          ANTHROPIC_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         if: env.ANTHROPIC_TOKEN != ''
         uses: ./
         with:

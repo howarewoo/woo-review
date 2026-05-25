@@ -66,6 +66,12 @@ on:
       openrouter_api_key:
         required: false
 
+# Cancel superseded runs on the same PR so rapid pushes do not queue parallel
+# expensive AI passes.
+concurrency:
+  group: woo-review-${{ github.event.pull_request.number || github.event.issue.number || github.event.number }}
+  cancel-in-progress: true
+
 jobs:
   detect:
     runs-on: ubuntu-latest
@@ -75,14 +81,14 @@ jobs:
     outputs:
       angles: ${{ steps.woo.outputs.angles_json }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       # Self-references pinned to the current tag. Bump in lockstep with releases.
       - id: woo
         uses: howarewoo/woo-review@v0.1.0
         with:
           mode: detect
           disable_angles: ${{ inputs.disable_angles }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: review-artifacts
           path: /tmp/pr-review/
@@ -94,16 +100,15 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-      id-token: write
     if: needs.detect.outputs.angles != '[]' && needs.detect.outputs.angles != ''
     strategy:
       fail-fast: false
       matrix:
         angle: ${{ fromJson(needs.detect.outputs.angles) }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Download base artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: review-artifacts
           path: /tmp/pr-review/
@@ -126,7 +131,7 @@ jobs:
           prompt_override: ${{ inputs.prompt_override }}
           react_doctor_version: ${{ inputs.react_doctor_version }}
           impeccable_version: ${{ inputs.impeccable_version }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: findings-${{ matrix.angle }}
           path: /tmp/pr-review/findings.${{ matrix.angle }}.json
@@ -144,14 +149,14 @@ jobs:
       pull-requests: write
       issues: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Download base artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: review-artifacts
           path: /tmp/pr-review/
       - name: Download findings
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         continue-on-error: true
         with:
           pattern: findings-*
@@ -171,3 +176,6 @@ jobs:
           openrouter_api_key: ${{ secrets.openrouter_api_key }}
           blocking_label: ${{ inputs.blocking_label }}
           constitution_path: ${{ inputs.constitution_path }}
+          max_turns: ${{ inputs.max_turns }}
+          skip_labels: ${{ inputs.skip_labels }}
+          prompt_override: ${{ inputs.prompt_override }}

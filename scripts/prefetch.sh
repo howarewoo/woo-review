@@ -2,7 +2,7 @@
 # Prefetches PR diff, metadata, and rules for the agentic review.
 # Ported from TrioSens .github/workflows/pr-review.yml.
 # Inputs (env): GH_TOKEN, GITHUB_REPOSITORY, INPUT_CONSTITUTION_PATH, INPUT_SKIP_LABELS,
-#               PR_NUMBER, EVENT_NAME, EVENT_ACTION, BOT_NAME_PATTERN.
+#               PR_NUMBER, EVENT_NAME, EVENT_ACTION.
 # Outputs: skip=true|false to $GITHUB_OUTPUT.
 # Side effects: writes /tmp/pr-review/{diff.txt,meta.json,rules.md}.
 
@@ -14,7 +14,9 @@ mkdir -p "$OUTDIR"
 PR_NUMBER="${PR_NUMBER:-}"
 EVENT_NAME="${EVENT_NAME:-}"
 EVENT_ACTION="${EVENT_ACTION:-}"
-BOT_NAME_PATTERN="${BOT_NAME_PATTERN:-claude|openai|gemini|opencode}"
+# Hardcoded — not exposed as a knob. Fed into a jq test() regex below; allowing
+# external override would let a misconfigured caller inject arbitrary regex.
+BOT_NAME_PATTERN="claude|openai|gemini|opencode"
 CONSTITUTION_PATH="${INPUT_CONSTITUTION_PATH:-constitution.md}"
 SKIP_LABELS="${INPUT_SKIP_LABELS:-}"
 
@@ -80,12 +82,14 @@ if [ "$LOC_CHANGED" -lt 10 ]; then
   emit_skip "<10 LOC changed"
 fi
 
-# Cap diff at 300KB.
+# Cap diff at 300KB. Build the capped copy in one shot (truncated bytes + sentinel)
+# then atomically replace — so a failure mid-write cannot corrupt the original.
 if [ "$DIFF_BYTES" -gt 300000 ]; then
-  head -c 300000 "$OUTDIR/diff.txt" > "$OUTDIR/diff.txt.capped"
+  {
+    head -c 300000 "$OUTDIR/diff.txt"
+    printf '\n[DIFF TRUNCATED AT 300KB]\n'
+  } > "$OUTDIR/diff.txt.capped"
   mv "$OUTDIR/diff.txt.capped" "$OUTDIR/diff.txt"
-  echo "" >> "$OUTDIR/diff.txt"
-  echo "[DIFF TRUNCATED AT 300KB]" >> "$OUTDIR/diff.txt"
 fi
 
 # Compose rules: constitution.md (if present) + all CLAUDE.md files in touched dirs and parents.

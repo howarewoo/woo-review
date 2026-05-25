@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Shell scripts MUST stay LF-only — CRLF endings break /usr/bin/env bash on Linux runners.
+*.sh text eol=lf
+*.bash text eol=lf
