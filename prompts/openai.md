@@ -41,7 +41,7 @@ Read `/tmp/pr-review/diff.txt`, `/tmp/pr-review/meta.json`, `/tmp/pr-review/rule
 For each angle listed in `/tmp/pr-review/angles.txt`, in order:
 
 1. Read `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md`.
-2. Execute the angle prompt against the diff and rules. For `design` run `npx -y impeccable@$IMPECCABLE_VERSION detect --json`. For `react` run `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline`.
+2. Execute the angle prompt against the diff and rules. For `react` run `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline`.
 3. Write the angle's findings to `/tmp/pr-review/findings.<angle>.json` (JSON array conforming to the schema in `_header.md`).
 
 Stay within each angle's scope; do not let `bugs` flag a design issue or vice versa.

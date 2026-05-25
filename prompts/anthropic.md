@@ -49,11 +49,10 @@ Read `/tmp/pr-review/angles.txt`. Launch **one Sonnet subagent per enabled angle
 
 - Loads its angle prompt: `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md`.
 - Reads `/tmp/pr-review/diff.txt`, `/tmp/pr-review/rules.md`, and the prompts/meta as required by the angle file.
-- For `design`: runs `npx -y impeccable@$IMPECCABLE_VERSION detect --json` over the changed design-relevant files, parses, then performs LLM critique per the design prompt.
 - For `react`: runs `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline`, parses output, then performs LLM review per the react prompt.
 - Returns its findings list AND writes them to `/tmp/pr-review/findings.<angle>.json`.
 
-If the Task tool caps practical parallelism below the angle count (≥5), spawn the angles in two waves: `[bugs, security, seo]` then `[design, react]`. Do not skip any enabled angle.
+If the Task tool caps practical parallelism below the angle count (≥5), spawn the angles in two waves: `[bugs, security, seo]` then `[design-audit, design-critique, react]`. Do not skip any enabled angle.
 
 ## Step 3 — Validation (Sonnet, only if any findings)
 
