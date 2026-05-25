@@ -94,9 +94,8 @@ on:
 
 jobs:
   review:
-    # Pre-release: pin to @main while no tagged release exists.
-    # Production: replace @main with a full commit SHA (see Security section).
-    uses: howarewoo/woo-review/.github/workflows/reusable-review.yml@main
+    # Pinned to the v0.1.0 tag. Production: replace with the full commit SHA (see Security section).
+    uses: howarewoo/woo-review/.github/workflows/reusable-review.yml@v0.1.0
     with:
       provider: anthropic
     secrets:

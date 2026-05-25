@@ -149,7 +149,7 @@ on:
 
 jobs:
   review:
-    uses: howarewoo/woo-review/.github/workflows/reusable-review.yml@main
+    uses: howarewoo/woo-review/.github/workflows/reusable-review.yml@v0.1.0
     with:
       provider: anthropic
     secrets:

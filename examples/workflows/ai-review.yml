@@ -45,8 +45,8 @@ jobs:
       # === Pick exactly one of the four provider blocks below ===
 
       # Anthropic (Claude)
-      # Production: replace @main with a full commit SHA (supply-chain hardening).
-      - uses: howarewoo/woo-review@main
+      # Production: replace @v0.1.0 with a full commit SHA (supply-chain hardening).
+      - uses: howarewoo/woo-review@v0.1.0
         with:
           provider: anthropic
           anthropic_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -54,21 +54,21 @@ jobs:
           constitution_path: constitution.md
 
       # OpenAI (Codex)
-      # - uses: howarewoo/woo-review@main
+      # - uses: howarewoo/woo-review@v0.1.0
       #   with:
       #     provider: openai
       #     openai_api_key: ${{ secrets.OPENAI_API_KEY }}
       #     model: gpt-5
 
       # Google (Gemini)
-      # - uses: howarewoo/woo-review@main
+      # - uses: howarewoo/woo-review@v0.1.0
       #   with:
       #     provider: google
       #     gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
       #     model: gemini-2.5-pro
 
       # OpenRouter (via opencode)
-      # - uses: howarewoo/woo-review@main
+      # - uses: howarewoo/woo-review@v0.1.0
       #   with:
       #     provider: openrouter
       #     openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
