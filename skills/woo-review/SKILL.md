@@ -23,7 +23,7 @@ This skill enforces the 3-stage parallel pipeline:
 As of May 2026, `woo-review` uses native GitHub Pull Request Reviews:
 - **Batching**: All inline comments are submitted in a single "Review" event to minimize noise.
 - **States**: The system automatically sets the review state to `APPROVE`, `REQUEST_CHANGES`, or `COMMENT` based on the finding severity and blocking status.
-- **Summary**: The Review Body contains the high-level summary and status line, while the PR description contains the full audit details.
+- **Scope**: The action is strictly focused on the **Review** event. It does **not** modify the PR title or description.
 
 ## Best Practices
 

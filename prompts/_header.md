@@ -103,10 +103,14 @@ print(json.dumps(payload))
 # 3. Submit the review
 gh api "repos/${GITHUB_REPOSITORY}/pulls/$PR_NUMBER/reviews" \
   --method POST --input /tmp/pr_review_payload.json
-
-# 4. Optional: Update PR Body with secondary details (Changes list, Files, Test Plan)
-gh pr edit "$PR_NUMBER" --body-file /tmp/pr_body_update.txt
 ```
+
+### Review Body Rules
+The `pr_review_body.txt` should contain:
+- A 1-2 sentence high-level summary of the findings.
+- The `${STATUS_LINE}`.
+- Credits line (*Audited by woo-review...*).
+- **DO NOT** update the main PR description or title.
 
 ## Findings Schema (`/tmp/pr-review/findings.json`)
 
