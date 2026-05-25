@@ -24,8 +24,8 @@ You are running as a parallel worker for a specific angle.
 You are running as the final aggregator.
 - Read all `/tmp/pr-review/findings.<angle>.json` files from the disk.
 - Perform the validation step (Step 3 below).
-- Perform the final output step (Step 4 below): submit one batched native PR Review and manage the label.
-- Do NOT modify the PR title or the PR description.
+- Perform the final output step (Step 4 below): submit one batched native PR Review. The review `event` (APPROVE / COMMENT / REQUEST_CHANGES) is the blocking gate.
+- Do NOT modify the PR title, PR description, or PR labels.
 - Exit.
 
 ### MODE: full (or detect)
@@ -66,11 +66,11 @@ Otherwise launch one Sonnet validator subagent with the full diff and the merged
 
 Write surviving findings to `/tmp/pr-review/findings.json` per the schema in `_header.md`.
 
-## Step 4 — Submit Native PR Review + Manage Label
+## Step 4 — Submit Native PR Review
 
-Follow `_header.md` exactly. Compute `BLOCKING_COUNT`, `NONBLOCKING_COUNT`, `HIGH_COUNT`, `MEDIUM_COUNT`, `LOW_COUNT`. Build `STATUS_LINE`. Submit a single batched `gh api repos/<repo>/pulls/<PR>/reviews` POST containing all inline comments + the summary + the `STATUS_LINE` in the review body. Then add or remove the `blocking-review` label.
+Follow `_header.md` exactly. Compute `BLOCKING_COUNT`, `NONBLOCKING_COUNT`, `HIGH_COUNT`, `MEDIUM_COUNT`, `LOW_COUNT`. Build `STATUS_LINE`. Submit a single batched `gh api repos/<repo>/pulls/<PR>/reviews` POST containing all inline comments + the summary + the `STATUS_LINE` in the review body. The review `event` is the native blocking gate: `REQUEST_CHANGES` when any finding is `blocking: true`, `COMMENT` when only non-blocking findings exist, `APPROVE` when none.
 
-Do NOT call `gh pr edit`. The PR title and the PR description must remain untouched.
+Do NOT call `gh pr edit`. Do NOT add, remove, or mutate PR labels. The PR title, PR description, and PR labels must remain untouched.
 
 ## Rules
 

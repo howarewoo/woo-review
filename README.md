@@ -45,7 +45,7 @@ flowchart TD
     E --> F[Skeptical Validator<br/>dedupe · defense-attorney · severity downgrade only]
     F --> G{PR# given?}
     G -->|no| H[Local report]
-    G -->|yes| I[Batched GitHub Review<br/>+ blocking-review label]
+    G -->|yes| I[Batched GitHub Review<br/>event=REQUEST_CHANGES when blocking]
 ```
 
 See [`skills/woo-review/SKILL.md`](./skills/woo-review/SKILL.md) for the full workflow contract.
@@ -122,7 +122,6 @@ The CI pipeline mirrors the skill's swarm 1:1 — detection job → matrix of an
 | `provider` | `""` | `anthropic`, `openai`, `google`, `openrouter`. Auto-detected from supplied secret. |
 | `mode` | `full` | `full`, `detect`, `review`, `validate`. Reusable workflow handles wiring. |
 | `disable_angles` | `""` | CSV of optional angles to skip. `bugs` and `security` are non-negotiable. |
-| `blocking_label` | `blocking-review` | Label applied when a blocking finding survives validation. |
 | `constitution_path` | `constitution.md` | Project rules concatenated with `CLAUDE.md` files in touched dirs. |
 | `max_turns` | `30` | Agent loop cap (Anthropic; other providers use their equivalent). |
 
@@ -134,9 +133,9 @@ Whether triggered locally or via CI:
 
 1. **Inline review comments** — one batched `gh api ... /pulls/<N>/reviews` POST with `suggestion` blocks where applicable.
 2. **Status line** in the review body: `**Status: APPROVED** / APPROVED WITH SUGGESTIONS / CHANGES REQUESTED — counts.`
-3. **`blocking-review` label** added when at least one validated blocking finding exists; removed otherwise. Wire it into branch protection to gate merges.
+3. **Native review event** — `REQUEST_CHANGES` when any validated finding is blocking, `COMMENT` when only non-blocking findings exist, `APPROVE` when none. Wire branch protection to "Require approval of the most recent reviewable push" or the `pull-request-review` required check to gate merges.
 
-The action never modifies the PR title or description.
+The action never modifies the PR title, description, or labels.
 
 ---
 

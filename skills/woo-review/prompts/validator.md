@@ -25,10 +25,9 @@ Launch one Haiku subagent. Task:
 
 Write the final validated JSON array to /tmp/pr-review/findings.json.
 
-### Step 3 — Post Native PR Review + Manage Label
+### Step 3 — Post Native PR Review
 Follow _header.md exactly. Compute BLOCKING_COUNT, NONBLOCKING_COUNT, HIGH_COUNT, MEDIUM_COUNT, LOW_COUNT. Build STATUS_LINE.
 - Use the findings from /tmp/pr-review/findings.json.
 - Submit a single native GitHub PR Review (Batch) including all inline comments and the summary/status line.
-- Determine review state: APPROVE (0 findings), REQUEST_CHANGES (blocking > 0), or COMMENT (non-blocking > 0).
-- Manage the "blocking-review" label for secondary visibility.
-- **DO NOT** update the PR description or title.
+- Determine review event: APPROVE (0 findings), REQUEST_CHANGES (blocking > 0), or COMMENT (non-blocking > 0). The REQUEST_CHANGES event is the only blocking signal — do not apply or remove labels.
+- **DO NOT** update the PR description, title, or labels.

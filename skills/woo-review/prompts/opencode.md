@@ -23,8 +23,8 @@ You are running as a parallel worker for a specific angle.
 You are running as the final aggregator.
 - Read all `/tmp/pr-review/findings.<angle>.json` files from the disk.
 - Perform Phase 3 (Self-Validation) below.
-- Perform Phase 4 (Submit Native PR Review + Manage Label) below.
-- Do NOT modify the PR title or the PR description.
+- Perform Phase 4 (Submit Native PR Review) below.
+- Do NOT modify the PR title, PR description, or PR labels.
 - Exit.
 
 ### MODE: full (or detect)
@@ -61,11 +61,11 @@ Sequential (do not parallelize validation). Merge all `findings.<angle>.json`. F
 
 Persist to `/tmp/pr-review/findings.json` per `_header.md`.
 
-## Phase 4 — Submit Native PR Review + Manage Label
+## Phase 4 — Submit Native PR Review
 
-Compute counts. Build `STATUS_LINE`. Follow `_header.md` exactly: submit one batched `gh api repos/<repo>/pulls/<PR>/reviews` POST whose `body` carries the summary + `STATUS_LINE` and whose `comments[]` carries every finding as an inline comment. Then add or remove the `blocking-review` label.
+Compute counts. Build `STATUS_LINE`. Follow `_header.md` exactly: submit one batched `gh api repos/<repo>/pulls/<PR>/reviews` POST whose `body` carries the summary + `STATUS_LINE` and whose `comments[]` carries every finding as an inline comment. The review `event` is the native blocking gate: `REQUEST_CHANGES` when any finding is `blocking: true`, `COMMENT` when only non-blocking findings exist, `APPROVE` when none.
 
-Do NOT call `gh pr edit`. The PR title and PR description stay untouched.
+Do NOT call `gh pr edit`. Do NOT add, remove, or mutate PR labels. The PR title, PR description, and PR labels stay untouched.
 
 ## Rules
 

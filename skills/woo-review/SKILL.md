@@ -19,7 +19,7 @@ This skill is **host-agnostic**: it works in any AI coding agent that supports s
 - `/woo-review` — Review the current local diff (no GitHub posting).
 - `/woo-review <PR#>` — Fetch the PR via `gh`, run the swarm, and post a native batched GitHub Review.
 - `woo-review install` — Verify local deps (`gh`, `jq`, `node`) and pre-fetch `impeccable` + `react-doctor`.
-- `woo-review status` — Show the current PR's review status and blocking labels.
+- `woo-review status` — Show the current PR's review status.
 
 ## Knowledge Aggregation
 
@@ -130,9 +130,8 @@ Now act as the **Skeptical Validator** by following `prompts/validator.md`:
 **If invoked with a PR number** — post a single native batched GitHub Review per the procedure in `prompts/_header.md`:
 
 - Build the STATUS_LINE (`APPROVED` / `APPROVED WITH SUGGESTIONS` / `CHANGES REQUESTED`).
-- Submit one `gh api repos/<repo>/pulls/<PR>/reviews` POST containing all inline comments + the summary + status line.
-- Add or remove the `blocking-review` label.
-- DO NOT modify the PR title or body.
+- Submit one `gh api repos/<repo>/pulls/<PR>/reviews` POST containing all inline comments + the summary + status line. The review `event` (`APPROVE` / `COMMENT` / `REQUEST_CHANGES`) is the native gate — any blocking finding triggers `REQUEST_CHANGES`.
+- DO NOT modify the PR title or body. DO NOT mutate PR labels.
 
 **If invoked locally (no PR#)** — print the validated findings to the terminal grouped by severity, then stop. Do not touch any remote.
 

@@ -63,10 +63,6 @@ inputs:
     description: 'Phrase that triggers a review when posted in a PR comment.'
     required: false
     default: '@review'
-  blocking_label:
-    description: 'Label applied to the PR when at least one blocking finding is detected. Workflow fails CI when this label is present.'
-    required: false
-    default: 'blocking-review'
   constitution_path:
     description: 'Path (relative to the consumer repo) to the rules file fed to the reviewer alongside CLAUDE.md files.'
     required: false
@@ -186,7 +182,6 @@ runs:
     - name: Run review (Anthropic)
       id: run-anthropic
       if: steps.detect.outputs.provider == 'anthropic' && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review' || inputs.mode == 'validate')
-      continue-on-error: true
       uses: anthropics/claude-code-action@537ffff2eff706bd7e3e1c3daf2d4b39067a9f85 # v1
       with:
         claude_code_oauth_token: ${{ inputs.anthropic_token }}
@@ -258,7 +253,6 @@ runs:
     - name: Run review (OpenAI Codex)
       id: run-openai
       if: steps.detect.outputs.provider == 'openai' && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review' || inputs.mode == 'validate')
-      continue-on-error: true
       uses: openai/codex-action@a26d2d4d8b78a694338b8e3715c3630254340b2c # v1
       with:
         openai-api-key: ${{ inputs.openai_api_key }}
@@ -277,7 +271,6 @@ runs:
     - name: Run review (Google Gemini)
       id: run-google
       if: steps.detect.outputs.provider == 'google' && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review' || inputs.mode == 'validate')
-      continue-on-error: true
       uses: google-github-actions/run-gemini-cli@f77273f4c914e4bf38440cf36a0369cb64a37489 # v0
       with:
         gemini_api_key: ${{ inputs.gemini_api_key }}
@@ -295,7 +288,6 @@ runs:
     - name: Run review (OpenRouter via opencode)
       id: run-opencode
       if: steps.detect.outputs.provider == 'openrouter' && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review' || inputs.mode == 'validate')
-      continue-on-error: true
       # TODO: pin to commit SHA once sst/opencode publishes a verifiable github-v1.15.10 ref.
       # The repo appears to have moved to anomalyco/opencode; verify upstream before pinning.
       uses: sst/opencode/github@v1.15.10
@@ -312,16 +304,3 @@ runs:
         IMPECCABLE_VERSION: ${{ inputs.impeccable_version }}
         REACT_DOCTOR_VERSION: ${{ inputs.react_doctor_version }}
 
-    - name: Check review results
-      id: post-check
-      if: always() && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'validate' || inputs.mode == 'review')
-      shell: bash
-      env:
-        GH_TOKEN: ${{ github.token }}
-        PR_NUMBER: ${{ steps.pr.outputs.number }}
-        INPUT_BLOCKING_LABEL: ${{ inputs.blocking_label }}
-        OUTCOME_ANTHROPIC: ${{ steps.run-anthropic.outcome }}
-        OUTCOME_OPENAI: ${{ steps.run-openai.outcome }}
-        OUTCOME_GOOGLE: ${{ steps.run-google.outcome }}
-        OUTCOME_OPENCODE: ${{ steps.run-opencode.outcome }}
-      run: bash "${{ github.action_path }}/skills/woo-review/scripts/post-check.sh"
