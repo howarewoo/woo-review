@@ -47,7 +47,7 @@ The Auditor agents are designed to be **thorough and optimistic**. Their goal is
 | **Bugs Auditor** | Functional Correctness | Compile errors, logic traps, resource leaks, race conditions. |
 | **Security Auditor** | Trust & Safety | OWASP Top 10, injection, bypasses, hardcoded secrets, data exposure. |
 | **React Auditor** | Component Lifecycle | Prop-types, hooks rules, unnecessary re-renders, state management. |
-| **Design Auditor** | Technical UI Quality | Token usage, WCAG contrast, spacing scales, impeccable anti-patterns. |
+| **Design Auditor** | Technical UI Quality | Token usage, WCAG contrast, spacing scales, [impeccable](https://github.com/pbakaus/impeccable) anti-patterns. |
 | **Design Critique** | UX & Heuristics | Nielsen's 10, cognitive load, layout hierarchy, interaction polish. |
 | **SEO Auditor** | Discoverability | [coreyhaines31/seo-audit](https://www.skills.sh/coreyhaines31/marketingskills/seo-audit) framework: Crawlability, Technical, On-Page, E-E-A-T. |
 
