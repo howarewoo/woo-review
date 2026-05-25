@@ -4,6 +4,16 @@ OpenCode runs an agentic shell. Use its subagent system if available (`@subagent
 
 The shared header above lists prefetched artifacts, findings schema, blocking criteria, and the do-NOT-flag list. **Apply them verbatim.** Per-angle prompt bodies live at `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md` in the bundled action repo.
 
+## Model selection
+
+OpenCode + OpenRouter can route per-subagent if the OpenCode runtime supports it. When spawning each angle / validator subagent, read its `tier:` frontmatter and resolve via the **Model Tiers** table in `_header.md`:
+
+- `fast` → `openrouter/deepseek/deepseek-v4-flash`
+- `standard` → `openrouter/deepseek/deepseek-v4`
+- `deep` → `openrouter/deepseek/deepseek-r1`
+
+If the OpenCode build cannot route per-subagent, fall back to a single model for the whole job and pin it to the `standard` tier (`openrouter/deepseek/deepseek-v4`). `inputs.model` (action.yml) always overrides tier resolution.
+
 ---
 
 ## IMPORTANT: MODE-BASED EXECUTION

@@ -1,3 +1,7 @@
+---
+tier: standard
+---
+
 # Angle: Security
 
 **Scope.** Find security vulnerabilities introduced by this PR's diff. Read `/tmp/pr-review/diff.txt` and `/tmp/pr-review/rules.md`.

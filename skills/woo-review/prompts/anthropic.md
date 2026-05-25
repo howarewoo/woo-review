@@ -33,9 +33,21 @@ Perform all steps (1 through 4) as the main orchestrator.
 
 ---
 
-## Step 1 — Context + Summary (single Haiku subagent; full mode only)
+## Model routing (token optimization)
 
-Launch one Haiku subagent. Task:
+Claude Code's `Task` tool supports per-subagent model routing. Read each angle prompt's `tier:` frontmatter and resolve via the **Model Tiers** table in `_header.md`:
+
+| Tier | Anthropic model | Used for |
+|---|---|---|
+| `fast` | `claude-haiku-4-5` | context+summary, `seo`, `aeo` |
+| `standard` | `claude-sonnet-4-6` | `bugs`, `security`, `design`, `react` |
+| `deep` | `claude-opus-4-7` | skeptical validator |
+
+Pass the resolved model explicitly when spawning each Task subagent (e.g. `model: "claude-haiku-4-5"` for a `tier: fast` angle). Do not default the validator to Sonnet — Opus's stricter false-positive filter pays for itself in review quality.
+
+## Step 1 — Context + Summary (single `fast`-tier subagent; full mode only)
+
+Launch one `claude-haiku-4-5` (fast tier) subagent. Task:
 
 - Read `/tmp/pr-review/diff.txt`, `/tmp/pr-review/meta.json`, and `/tmp/pr-review/angles.txt`.
 - Produce a 1–2 sentence summary, a bullet list of changes, and files grouped by category. These feed the **Review body** in Step 4 only — they are never written to the PR title or PR description.
@@ -46,20 +58,21 @@ Do NOT call `gh pr edit`. The PR title and description are immutable for this ac
 
 ## Step 2 — Parallel Angle Audits (one subagent per enabled angle)
 
-Read `/tmp/pr-review/angles.txt`. Launch **one Sonnet subagent per enabled angle in the same response** to maximize parallelism. Each subagent:
+Read `/tmp/pr-review/angles.txt`. Launch **one subagent per enabled angle in the same response** to maximize parallelism. Each subagent:
 
 - Loads its angle prompt: `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md`.
+- Runs on the Anthropic model resolved from that prompt's `tier:` frontmatter via the table above (Sonnet for `bugs`/`security`/`design`/`react`, Haiku for `seo`/`aeo`).
 - Reads `/tmp/pr-review/diff.txt`, `/tmp/pr-review/rules.md`, and the prompts/meta as required by the angle file.
 - For `react`: runs `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline`, parses output, then performs LLM review per the react prompt.
 - Returns its findings list AND writes them to `/tmp/pr-review/findings.<angle>.json`.
 
 If the Task tool caps practical parallelism below the angle count, spawn the angles in two waves: `[bugs, security, seo, aeo]` then `[design, react]`. Do not skip any enabled angle.
 
-## Step 3 — Validation (Sonnet, only if any findings)
+## Step 3 — Validation (Opus 4.7, only if any findings)
 
 Skip if every per-angle file is empty / missing; status is `APPROVED`.
 
-Otherwise launch one Sonnet validator subagent with the full diff and the merged findings (concat all `findings.<angle>.json` arrays). For each finding:
+Otherwise launch one `claude-opus-4-7` validator subagent with the full diff and the merged findings (concat all `findings.<angle>.json` arrays). For each finding:
 
 1. **Verdict**: YES (confirmed) or NO (false positive) with brief reasoning. Only YES survives.
 2. **Severity / blocking**: confirm or downgrade the `blocking` flag. May downgrade `true → false`. May NOT upgrade `false → true`.

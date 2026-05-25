@@ -1,3 +1,7 @@
+---
+tier: standard
+---
+
 # Angle: React
 
 **Scope.** Find React-specific defects introduced by this PR. Combine deterministic linting (React Doctor) with LLM review.

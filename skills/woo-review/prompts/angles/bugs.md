@@ -1,3 +1,7 @@
+---
+tier: standard
+---
+
 # Angle: Bugs
 
 **Scope.** Find correctness defects introduced by this PR's diff. Read `/tmp/pr-review/diff.txt` and `/tmp/pr-review/rules.md`. Focus only on changed lines and their immediate context.

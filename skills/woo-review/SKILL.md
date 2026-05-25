@@ -111,6 +111,29 @@ react-doctor). Write your findings as a JSON array to
 
 Sub-agents MUST NOT post comments, edit the PR, or touch other angles' files.
 
+**Model routing (token optimization, host-agnostic).** Each angle prompt and the validator declare a `tier:` in frontmatter — `fast`, `standard`, or `deep`. The host resolves the tier to a concrete model via the table in `prompts/_header.md`. Tier assignments:
+
+| Stage | Tier | Why |
+|---|---|---|
+| Context+summary subagent | `fast` | Mechanical summarization. |
+| `bugs`, `security` workers | `standard` | Reasoning-heavy: correctness + threat model. |
+| `design`, `react` workers | `standard` | Heuristic + Rules-of-Hooks judgment after deterministic tools. |
+| `seo`, `aeo` workers | `fast` | Rubric checklists; no novel reasoning. |
+| Skeptical Validator | `deep` | Highest-leverage step — strictest false-positive filter pays for itself. |
+
+Per-provider resolution (full table in `_header.md`):
+
+| Tier | Anthropic | OpenAI | Google | OpenRouter |
+|---|---|---|---|---|
+| `fast` | `claude-haiku-4-5` | `gpt-5-mini` | `gemini-3-5-flash` | `openrouter/deepseek/deepseek-v4-flash` |
+| `standard` | `claude-sonnet-4-6` | `gpt-5` | `gemini-3-5-pro` | `openrouter/deepseek/deepseek-v4` |
+| `deep` | `claude-opus-4-7` | `gpt-5-pro` | `gemini-3-5-pro-thinking` | `openrouter/deepseek/deepseek-r1` |
+
+**Host capability:**
+
+- **Per-call routing** (Claude Code `Task`, opencode `@subagent`): honor each prompt's `tier:` verbatim. Maximum savings.
+- **Single model per session** (Codex Action, Gemini CLI): pin the run to the `standard` tier — covers every angle safely. `tier:` becomes informational. Split into multiple jobs if you want fast-tier savings on rubric angles or deep-tier validation.
+
 ### Stage 4 — Merge + Skeptical Validation
 
 After every sub-agent has finished:
@@ -172,7 +195,7 @@ Zero local setup required in the consumer repo — the action ships its own prom
 
 - Always parallelize Stage 3 when the host supports it; the validator pass is calibrated for ~5 angles' worth of input.
 - Trust the Skeptical Validator. Disabling it produces noisy reviews.
-- Keep `action.yml` pinned to May 2026 flagships (Opus 4.7 validator, Sonnet 4.6 workers, Flash 3.5 for SEO).
+- Honor angle-prompt tiers (`fast`/`standard`/`deep`) when the host supports per-call model routing. Hosts that run one model per session should pin the `standard` tier model (table above) — this matches the May 2026 flagship recommendation.
 - Pass `disable_angles` to skip optional angles when scope is narrow (e.g. backend-only PR → `disable_angles: "seo,design,react"`).
 
 ## Troubleshooting

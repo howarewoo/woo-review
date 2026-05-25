@@ -1,3 +1,7 @@
+---
+tier: fast
+---
+
 # Angle: SEO Audit
 
 **Persona.** Act as an SEO expert using the [coreyhaines31/seo-audit](https://www.skills.sh/coreyhaines31/marketingskills/seo-audit) framework. Your goal is to identify search-engine discoverability, technical foundations, and on-page quality issues introduced by this PR.

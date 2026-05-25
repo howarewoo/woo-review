@@ -4,6 +4,10 @@ Codex Action does not expose a subagent primitive. Run the review as a single ag
 
 The shared header above lists prefetched artifacts, findings schema, blocking criteria, and the do-NOT-flag list. **Apply them verbatim.** Per-angle prompt bodies live at `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md` in the bundled action repo.
 
+## Model selection
+
+Codex Action runs one model for the full job (set via `inputs.model`, default `gpt-5`). Per-call routing is not possible, so the `tier:` frontmatter on each angle prompt is **informational only** under this provider. Default to the `standard`-tier model (`gpt-5`) — it covers every angle safely. To trade some quality on `bugs`/`security`/`design`/`react` for cost on `seo`/`aeo` runs, you can split the workflow into two jobs (e.g. one `gpt-5-mini` job that only runs `seo`/`aeo`, then one `gpt-5` job for the remaining angles + validator), but the default single-job flow stays on `standard`.
+
 ---
 
 ## IMPORTANT: MODE-BASED EXECUTION

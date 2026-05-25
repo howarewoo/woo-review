@@ -4,6 +4,10 @@ The Gemini CLI runs an agentic tool loop with access to `bash` and `gh`. Use the
 
 The shared header above lists prefetched artifacts, findings schema, blocking criteria, and the do-NOT-flag list. **Apply them verbatim.** Per-angle prompt bodies live at `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md` in the bundled action repo.
 
+## Model selection
+
+Gemini CLI runs one model per job (set via `inputs.model`, default `gemini-3-5-flash`). Per-call routing is not possible, so the `tier:` frontmatter is **informational only** under this provider. The default `gemini-3-5-flash` is appropriate when the run is dominated by rubric angles (`seo`, `aeo`) and context-summary work; for reasoning-heavy runs (lots of `bugs`/`security`/`design`/`react` activity) upgrade `inputs.model` to `gemini-3-5-pro` (standard tier) — or use a `gemini-3-5-pro-thinking` deep-tier model for the validator phase if you split the workflow into separate jobs.
+
 ---
 
 ## IMPORTANT: MODE-BASED EXECUTION

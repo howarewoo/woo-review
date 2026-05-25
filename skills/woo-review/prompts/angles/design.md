@@ -1,3 +1,7 @@
+---
+tier: standard
+---
+
 # Angle: Design
 
 **Scope.** Combined design review of UI changes. Runs the Impeccable detector once, emits a deterministic quantitative pass, then a focused qualitative critique scoped to files the detector flagged. Read `/tmp/pr-review/diff.txt` and the changed source files referenced in `/tmp/pr-review/meta.json`.

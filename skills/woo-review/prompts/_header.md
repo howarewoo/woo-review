@@ -16,6 +16,22 @@ PR_NUMBER="<from Review Context>"
 HEAD_SHA="$(jq -r '.headRefOid' /tmp/pr-review/meta.json)"
 ```
 
+## Model Tiers (host-agnostic)
+
+Each angle prompt and the validator declare a `tier:` in frontmatter — `fast`, `standard`, or `deep`. The host/runner resolves the tier to a concrete model from the table below. The context+summary subagent (defined in each provider prompt) is implicitly `fast`.
+
+| Tier | Use for | Anthropic | OpenAI (Codex) | Google (Gemini) | OpenRouter |
+|---|---|---|---|---|---|
+| `fast` | rubric checklists (`seo`, `aeo`), context summaries | `claude-haiku-4-5` | `gpt-5-mini` | `gemini-3-5-flash` | `openrouter/deepseek/deepseek-v4-flash` |
+| `standard` | reasoning workers (`bugs`, `security`, `design`, `react`) | `claude-sonnet-4-6` | `gpt-5` | `gemini-3-5-pro` | `openrouter/deepseek/deepseek-v4` |
+| `deep` | skeptical validator (highest-leverage filter) | `claude-opus-4-7` | `gpt-5-pro` | `gemini-3-5-pro-thinking` | `openrouter/deepseek/deepseek-r1` |
+
+**Routing rules by host capability:**
+
+- **Per-call routing supported** (Claude Code `Task`, opencode `@subagent`): honor each prompt's `tier:` verbatim — spawn fast workers on the fast model, deep validator on the deep model. Maximum savings.
+- **Single model per session** (Codex Action, Gemini CLI): pin the whole run to the `standard` tier model. You lose `fast`-tier savings on rubric angles, but `standard` is the safe default that handles every angle. If `inputs.model` is set explicitly, honor that and ignore tiers.
+- **Override**: `inputs.model` (action.yml) or a runner-specific override always wins over the tier resolution.
+
 ## Review Angles
 
 This action runs up to five distinct review angles, auto-selected from the changed files. The set of enabled angles is listed in `/tmp/pr-review/angles.txt`. The per-angle prompt bodies live at `${ACTION_PATH}/prompts/angles/<angle>.md` and are loaded by the orchestrator.
