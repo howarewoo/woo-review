@@ -1,6 +1,9 @@
 ---
 name: woo-review
 description: Managed agentic PR reviews with parallel matrix execution and skeptical validation.
+install: npx skills add howarewoo/woo-review
+requires:
+  bins: [gh, jq, node]
 ---
 
 # woo-review
@@ -14,6 +17,7 @@ Use this skill to manage, trigger, and debug `woo-review` operations. It underst
 ## Commands
 
 - `/woo-review` - Run the full agent swarm review locally on the current diff.
+- `woo-review install` - Ensure all local dependencies (gh, jq, impeccable, react-doctor) are installed and ready.
 - `woo-review status` - Check the current review status and blocking labels.
 - `woo-review config` - Configure review angles, models, and providers.
 
