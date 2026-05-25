@@ -41,6 +41,11 @@ The 2026 architecture depends on a strict 3-stage pipeline (Detect -> Matrix -> 
   - [react-doctor](https://github.com/millionco/react-doctor)
   - [seo-audit](https://www.skills.sh/coreyhaines31/marketingskills/seo-audit)
 
+### 6. Skills CLI Compatibility
+- Always maintain the `skills/` directory structure with `SKILL.md` files.
+- Ensure `skills.sh.json` at the root is updated when new skills are added or renamed.
+- Use YAML frontmatter in `SKILL.md` for consistent metadata on [skills.sh](https://skills.sh).
+
 ### 5. Architectural Guardrails
 - **The Skeptic (Opus 4.7)** is the final authority. Do not move critical logic out of the validation stage if it requires high-reasoning deduplication.
 - **The Auditors (Sonnet 4.6)** should remain focused and optimistic. Do not bloat their scopes.

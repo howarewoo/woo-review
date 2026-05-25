@@ -1,3 +1,8 @@
+---
+name: woo-review
+description: Managed agentic PR reviews with parallel matrix execution and skeptical validation.
+---
+
 # woo-review
 
 Managed agentic PR reviews with parallel matrix execution and skeptical validation.
