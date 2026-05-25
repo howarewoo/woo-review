@@ -1,5 +1,5 @@
-name: 'AI PR Review (multi-provider)'
-description: 'Agentic PR review that dispatches to the first-party action of the chosen provider (Anthropic, OpenAI, Google, OpenRouter via opencode).'
+name: 'woo-review (CI extension)'
+description: 'CI extension of the woo-review skill. Runs the same swarm — detect → parallel angle workers → skeptical validator → batched GitHub Review — dispatched to the first-party action of the chosen provider (Anthropic, OpenAI, Google, OpenRouter via opencode).'
 author: 'woo-review'
 
 branding:

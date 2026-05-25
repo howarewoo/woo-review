@@ -1,135 +1,70 @@
 # woo-review
 
-Reusable GitHub Action that runs an agentic AI pull request review and dispatches to the **first-party action of your chosen provider**. Optimized for the **May 2026** AI landscape, it uses a parallel matrix-based architecture with a "Skeptical Validator" to deliver maximum speed and accuracy.
+A portable AI **skill** that turns any coding agent into a parallel PR review swarm. One slash command spawns specialized sub-agents (bugs, security, SEO, design, React), runs a skeptical validator, and — if you point it at a GitHub PR — posts a single batched review.
 
-## Architecture: The Parallel Pipeline
+The companion GitHub Action is an **extension** of the skill: same prompts, same angles, same validator, just packaged for CI.
 
-Unlike traditional sequential reviewers, `woo-review` uses a three-stage parallel pipeline. For mandates on how AI agents should build and maintain this project, see [AGENTS.md](./AGENTS.md). For details on the internal review-swarm architecture, see the [Architecture Spec](./docs/superpowers/specs/2026-05-23-review-swarm-architecture.md).
+---
 
-1.  **Detect (Dispatcher)**: Analyzes the diff to identify relevant **Review Angles** (Bugs, Security, SEO, etc.).
-2.  **Review (Matrix)**: Dispatches $N$ specialized agents in parallel via GitHub Actions Matrix. Each agent focuses on a single "Optimistic Audit" of its assigned angle.
-3.  **Validate (Skeptical Auditor)**: A high-reasoning **Skeptical Validator** agent (Claude Opus 4.7) collects all findings, dedupes them, and performs a "defense attorney" audit to eliminate noise and false positives.
+## Install (skill)
 
-```mermaid
-graph TD
-    %% Stage 1: Detection
-    Trigger[PR Event / Comment] --> Prefetch[Prefetch: Diff, Rules, Meta]
-    Prefetch --> Detect[1. Detect: dispatcher job]
-    
-    Detect -- "angles_json" --> Matrix_Start{Matrix Fan-out}
-    Detect -- "Artifact: review-artifacts" --> Storage[(GHA Artifact Storage)]
-
-    %% Stage 2: Parallel Matrix
-    subgraph Parallel_Audits [2. Matrix: Parallel Angle Jobs]
-        direction TB
-        
-        subgraph Logic_Audits [Logic & Security]
-            direction LR
-            Bugs[bugs<br/>Sonnet 4.6]
-            Security[security<br/>Sonnet 4.6]
-        end
-        
-        subgraph UI_UX_Audits [Design & Frontend]
-            direction LR
-            D_Audit[design-audit<br/>Sonnet 4.6 + Impeccable]
-            D_Critique[design-critique<br/>Sonnet 4.6 + Heuristics]
-            React[react<br/>Sonnet 4.6 + React-Doctor]
-        end
-        
-        subgraph Speed_Audits [Metadata & SEO]
-            direction LR
-            SEO[seo<br/>Flash 3.5]
-        end
-    end
-
-    Matrix_Start --> Bugs
-    Matrix_Start --> Security
-    Matrix_Start --> D_Audit
-    Matrix_Start --> D_Critique
-    Matrix_Start --> React
-    Matrix_Start --> SEO
-    
-    Storage -.-> Bugs
-    Storage -.-> Security
-    Storage -.-> D_Audit
-    Storage -.-> D_Critique
-    Storage -.-> React
-    Storage -.-> SEO
-
-    %% Stage 3: Fan-in & Validation
-    Bugs --> Findings_Group
-    Security --> Findings_Group
-    D_Audit --> Findings_Group
-    D_Critique --> Findings_Group
-    React --> Findings_Group
-    SEO --> Findings_Group
-
-    Findings_Group{Matrix Fan-in} -- "Artifacts: findings-*" --> Merge[Merge: raw_findings.json]
-    
-    Merge --> Validate[3. Validate: Skeptical Validator<br/>Opus 4.7]
-    
-    subgraph Validator_Internal [Internal Logic]
-        direction TB
-        Dedupe[Deduplication] --> Skeptical[Skeptical Audit]
-        Skeptical --> Severity[Severity Verification]
-    end
-    
-    Validate --> Validator_Internal
-
-    %% Stage 4: Output
-    Validator_Internal -- "findings.json" --> Post[4. Post Results]
-    
-    subgraph Output_Actions [Final Actions]
-        direction LR
-        Comments[Inline Comments<br/>gh api]
-        Status[PR Body Summary<br/>STATUS_LINE]
-        Labels[blocking-review label<br/>gh pr edit]
-    end
-    
-    Post --> Output_Actions
-```
-
-## Features
-
--   **Maximum Speed**: Parallel execution via GHA Matrix reduces review time by up to 80% for complex PRs.
--   **High Accuracy**: Skeptical Validator pass eliminates "hallucinated" nits and pedantic suggestions.
--   **Model Optimization**: Automatically maps tasks to the best 2026 models (Opus 4.7 for reasoning, Flash 3.5 for speed).
--   **Multi-Provider**: Supports Anthropic, OpenAI, Google, and OpenRouter.
--   **Integrated Tooling**: Runs [react-doctor](https://github.com/millionco/react-doctor) and [impeccable](https://github.com/pbakaus/impeccable) (visual audit) natively within the agentic loop.
-
-## Prerequisites & Dependencies
-
-### GitHub Action (CI)
-**Zero Configuration Required.**
-The GitHub Action is completely self-contained. When triggered, it automatically:
-- Sets up Node.js 22+ (for `impeccable` and `react-doctor`).
-- Prefetches the latest audit tools via `npx`.
-- Loads the embedded SEO and Design frameworks from the `prompts/` directory.
-- **The user does NOT need to install any skills or tools manually in their repository.**
-
-### AI Skill (Local Development)
-To run reviews locally via `/woo-review`, the following are **recommended** for the best experience:
-- [GitHub CLI (gh)](https://cli.github.com/) & [jq](https://stedolan.github.io/jq/) (For local simulation)
-- [Node.js 22+](https://nodejs.org/)
-- **Optional Power-Up Skills**:
-  - `pbakaus/impeccable`: Enhances the agent's design vocabulary.
-  - `coreyhaines31/seo-audit`: Provides deeper SEO context.
-
-## Installation
-
-### 1. GitHub Action (Recommended)
-Add the Reusable Workflow to your repository. No other steps or dependencies are required. See [Quickstart](#quickstart-recommended-parallel-mode).
-
-### 2. Local AI Skill (Optional)
-If you want to run the swarm review locally before pushing, install the skill:
 ```bash
 npx skills add howarewoo/woo-review
 ```
-Add the Reusable Workflow to your repository as described in the [Quickstart](#quickstart-recommended-parallel-mode) section below.
 
-## Quickstart (Recommended: Parallel Mode)
+Requires `gh`, `jq`, `node` on PATH. Optional power-ups: `pbakaus/impeccable`, `coreyhaines31/seo-audit`.
 
-To get the full benefit of parallelism, use the provided **Reusable Workflow**:
+## Use (skill)
+
+```text
+/woo-review            # Review the local diff against origin/main
+/woo-review 123        # Fetch PR #123, run the swarm, post a native GitHub Review
+woo-review install     # Verify deps + warm npx caches
+woo-review status      # Show current PR review state
+```
+
+When you invoke `/woo-review` the host agent:
+
+1. **Prefetches** diff + metadata + rules into `/tmp/pr-review/`.
+2. **Detects** which angles apply (always-on: `bugs`, `security`; conditional: `seo`, `design-audit`, `design-critique`, `react`).
+3. **Spawns one sub-agent per angle in parallel** (Claude Code Task, Cursor subagents, Gemini CLI sequential loop fallback — host-agnostic).
+4. **Validates** all findings through a Skeptical Validator pass (dedupe, defense-attorney audit, severity downgrade only).
+5. **Reports** locally OR posts one batched GitHub Review when a PR# was given.
+
+See [`skills/woo-review/SKILL.md`](./skills/woo-review/SKILL.md) for the full workflow contract.
+
+---
+
+## Knowledge aggregation
+
+The skill calls into established domain tools instead of re-implementing them:
+
+| Source | Used by angle | Mechanism |
+|---|---|---|
+| [pbakaus/impeccable](https://github.com/pbakaus/impeccable) | `design-audit`, `design-critique` | `npx -y impeccable detect --json` |
+| [millionco/react-doctor](https://github.com/millionco/react-doctor) | `react` | `npx -y react-doctor --diff <base> --offline` |
+| [coreyhaines31/seo-audit](https://www.skills.sh/coreyhaines31/marketingskills/seo-audit) framework | `seo` | Embedded as the rubric in `prompts/angles/seo.md` |
+
+The audit rubrics live in `prompts/` so the skill is self-sufficient — recommended skills only enrich the host agent's general vocabulary.
+
+---
+
+## Angles
+
+| Angle | Always-on | Detection trigger | Tooling |
+|---|---|---|---|
+| `bugs` | yes | — | LLM only |
+| `security` | yes | — | LLM only |
+| `seo` | no | `*.html`, `head.{ts,tsx}`, `layout.{ts,tsx}`, `robots.txt`, `sitemap.{xml,ts}`, `next.config.*`, `app/manifest.*`, or `<meta>`/`og:`/`canonical` tokens in diff | LLM only |
+| `design-audit` | no | `*.{tsx,jsx,vue,svelte,html,css,scss,sass,less,styl,astro}` | LLM + `impeccable detect` (quantitative) |
+| `design-critique` | no | same as `design-audit` | LLM + `impeccable detect` (qualitative) |
+| `react` | no | `*.{tsx,jsx}` AND `react` in `package.json` | `react-doctor` + LLM |
+
+---
+
+## CI extension: the GitHub Action
+
+The same skill, packaged as a GHA reusable workflow for repos that want reviews on every PR without anyone running a slash command.
 
 ```yaml
 # .github/workflows/ai-review.yml
@@ -146,54 +81,56 @@ jobs:
     with:
       provider: anthropic
     secrets:
-      # Map your preferred provider secret
       anthropic_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 ```
 
-## Angles
+Zero local setup in the consumer repo — the action ships its own Node tools and prompts. Full template at [`examples/workflows/ai-review.yml`](./examples/workflows/ai-review.yml).
 
-| Angle | Always-on | Detection trigger | Tooling |
-|---|---|---|---|
-| `bugs` | yes | — | LLM only |
-| `security` | yes | — | LLM only |
-| `seo` | no | `*.html`, `head.{ts,tsx}`, `layout.{ts,tsx}`, `robots.txt`, `sitemap.{xml,ts}`, `next.config.*`, `app/manifest.*`, OR diff tokens | LLM only |
-| `design` | no | `*.{tsx,jsx,vue,svelte,html,css,scss,sass,less,styl,astro}` | LLM + `impeccable detect` |
-| `react` | no | `*.{tsx,jsx}` AND `react` dep in `package.json` | `react-doctor` + LLM |
+The CI pipeline mirrors the skill's swarm 1:1 — detection job → matrix of angle workers → validator → batched review. See [`docs/superpowers/specs/2026-05-23-review-swarm-architecture.md`](./docs/superpowers/specs/2026-05-23-review-swarm-architecture.md) for the full design.
 
-## Provider Support (May 2026 Flagships)
+### Provider matrix (May 2026 defaults)
 
-`woo-review` defaults to the latest state-of-the-art models for maximum reliability.
-
-| Provider | Default Worker Model | Default Validator Model | Key inputs |
+| Provider | Worker model | Validator model | Secret |
 |---|---|---|---|
 | `anthropic` | `claude-sonnet-4-6` | `claude-opus-4-7` | `anthropic_token` |
 | `openai` | `gpt-5-5-instant` | `gpt-5-5` | `openai_api_key` |
 | `google` | `gemini-3-5-flash` | `gemini-3-1-pro` | `google_api_key` |
 | `openrouter` | `sonnet-4-6` | `opus-4-7` | `openrouter_api_key` |
 
-## Inputs & Configuration
+### Inputs
 
 | Name | Default | Notes |
 |---|---|---|
-| `mode` | `full` | `full` (sequential), `detect`, `review`, or `validate`. Reusable workflow handles this automatically. |
-| `provider` | `""` | `anthropic`, `openai`, `google`, `openrouter`. |
-| `blocking_label` | `blocking-review` | Label applied when a blocking finding is detected. |
-| `disable_angles` | `""` | Comma-separated list of optional angles to skip (`seo`, `design`, `react`). |
-| `max_turns` | `30` | Turn cap for agentic loops. |
+| `provider` | `""` | `anthropic`, `openai`, `google`, `openrouter`. Auto-detected from supplied secret. |
+| `mode` | `full` | `full`, `detect`, `review`, `validate`. Reusable workflow handles wiring. |
+| `disable_angles` | `""` | CSV of optional angles to skip. `bugs` and `security` are non-negotiable. |
+| `blocking_label` | `blocking-review` | Label applied when a blocking finding survives validation. |
+| `constitution_path` | `constitution.md` | Project rules concatenated with `CLAUDE.md` files in touched dirs. |
+| `max_turns` | `30` | Agent loop cap (Anthropic; other providers use their equivalent). |
 
-## Rules and Style Guides
-
-The action reads `constitution.md` from your repo root plus every `CLAUDE.md` file in the directories touched by the PR. They are concatenated and fed to the reviewer as the primary source of truth for "Project Norms."
+---
 
 ## Output
 
-1.  **Inline Comments**: Posted via `gh api` with optional `suggestion` blocks.
-2.  **Status Line**: A bold summary in the PR body (e.g., `**Status: CHANGES REQUESTED** — 2 blocking findings`).
-3.  **Blocking Label**: Adds `blocking-review` to the PR if critical issues are found, allowing you to gate merges via branch protection rules.
+Whether triggered locally or via CI:
+
+1. **Inline review comments** — one batched `gh api ... /pulls/<N>/reviews` POST with `suggestion` blocks where applicable.
+2. **Status line** in the review body: `**Status: APPROVED** / APPROVED WITH SUGGESTIONS / CHANGES REQUESTED — counts.`
+3. **`blocking-review` label** added when at least one validated blocking finding exists; removed otherwise. Wire it into branch protection to gate merges.
+
+The action never modifies the PR title or description.
+
+---
 
 ## Security
 
-When using `pull_request_target` (write-scope event), always pin the action to a full commit SHA to prevent supply-chain attacks.
+When wiring the action behind `pull_request_target` (write-scope), always pin to a full commit SHA to defend against supply-chain attacks. See [GitHub's hardening guide](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions).
+
+## Project docs
+
+- Skill contract: [`skills/woo-review/SKILL.md`](./skills/woo-review/SKILL.md)
+- Architecture spec: [`docs/superpowers/specs/2026-05-23-review-swarm-architecture.md`](./docs/superpowers/specs/2026-05-23-review-swarm-architecture.md)
+- Agent mandates: [`AGENTS.md`](./AGENTS.md)
 
 ## License
 

@@ -3,21 +3,25 @@
 This document defines the rules and workflows for AI agents (Gemini CLI, Claude Code, etc.) contributing to the `woo-review` project.
 
 ## Project Context
-`woo-review` is a high-speed, parallelized GitHub Action for agentic PR reviews. It uses GHA Matrix to run multiple specialized auditors (Optimists) and a final Skeptical Validator pass.
+`woo-review` is primarily an **AI coding-agent skill** (`skills/woo-review/SKILL.md`) that any host (Claude Code, Cursor, Gemini CLI, opencode, …) can invoke via `/woo-review`. The skill spawns one sub-agent per detected review angle, runs a Skeptical Validator, and optionally posts a batched GitHub Review.
+
+The companion GitHub Action (`action.yml` + `.github/workflows/reusable-review.yml`) is an **extension** of the skill — same prompts, same angles, same validator, packaged for CI. When you change one, mirror the change in the other.
 
 ## Tech Stack
-- **Orchestration**: GitHub Actions (YAML), Bash (`scripts/`).
-- **Prompt Engineering**: Markdown (`prompts/`).
+- **Skill contract**: Markdown (`skills/woo-review/SKILL.md`, the source of truth).
+- **Shared prompts**: Markdown (`prompts/_header.md`, `prompts/angles/*.md`, `prompts/validator.md`) — consumed by both the skill and the action.
+- **CI orchestration**: GitHub Actions (YAML), Bash (`scripts/`).
 - **Audit Tools**: Node.js/npx (`react-doctor`, `impeccable`).
-- **Testing**: Bats-style Bash tests (`tests/`), GHA Self-tests.
+- **Testing**: Bash tests (`tests/`), GHA self-tests.
 
 ## Agent Mandates
 
 ### 1. Maintain the Parallel Contract
-The 2026 architecture depends on a strict 3-stage pipeline (Detect -> Matrix -> Validate).
-- **NEVER** introduce sequential dependencies between matrix jobs.
+The 2026 architecture depends on a strict 3-stage pipeline (Detect -> Fan-out -> Validate). The skill spawns sub-agents in parallel; the action runs them as GHA matrix jobs. Both share the same artifact tree under `/tmp/pr-review/`.
+- **NEVER** introduce sequential dependencies between angle workers.
 - **ALWAYS** communicate via artifacts in `/tmp/pr-review/`.
 - **ALWAYS** follow the JSON schema in `prompts/_header.md` for findings.
+- **ALWAYS** keep the skill (`skills/woo-review/SKILL.md`) and the action in sync — the skill is the source of truth; the action is its CI extension.
 
 ### 2. Prompt Synchronization
 `woo-review` supports multiple providers (Anthropic, OpenAI, Google, OpenRouter).
