@@ -23,6 +23,10 @@ inputs:
     description: 'Model identifier passed to the chosen runner. For openrouter, use the openrouter/<model> form.'
     required: false
     default: ''
+  openai_effort:
+    description: 'OpenAI Codex reasoning_effort passthrough (minimal | low | medium | high). Maps to the deep-tier validator role; leave empty for Codex default.'
+    required: false
+    default: ''
   mode:
     description: 'Execution mode: full (sequential) | detect | review | validate'
     required: false
@@ -253,10 +257,11 @@ runs:
     - name: Run review (OpenAI Codex)
       id: run-openai
       if: steps.detect.outputs.provider == 'openai' && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review' || inputs.mode == 'validate')
-      uses: openai/codex-action@a26d2d4d8b78a694338b8e3715c3630254340b2c # v1
+      uses: openai/codex-action@a26d2d4d8b78a694338b8e3715c3630254340b2c # v1 (== v1.8 as of 2026-04-29)
       with:
         openai-api-key: ${{ inputs.openai_api_key }}
         model: ${{ inputs.model || 'gpt-5' }}
+        effort: ${{ inputs.openai_effort }}
         prompt: ${{ steps.load-prompt.outputs.prompt }}
         sandbox: workspace-write
         safety-strategy: drop-sudo
