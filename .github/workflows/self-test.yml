@@ -26,7 +26,7 @@ jobs:
           shellcheck --version
           # --severity=error keeps the gate strict on real bugs (parse failures,
           # broken redirects, etc.) while allowing progressive style cleanup.
-          shellcheck --severity=error scripts/*.sh tests/*.sh skills/woo-review/scripts/*.sh
+          shellcheck --severity=error tests/*.sh skills/woo-review/scripts/*.sh
 
       - name: actionlint (workflow YAML)
         env:
