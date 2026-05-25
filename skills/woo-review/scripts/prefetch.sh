@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # Prefetches PR diff, metadata, and rules for the agentic review.
-# Ported from TrioSens .github/workflows/pr-review.yml.
 # Inputs (env): GH_TOKEN, GITHUB_REPOSITORY, INPUT_CONSTITUTION_PATH, INPUT_SKIP_LABELS,
 #               PR_NUMBER, EVENT_NAME, EVENT_ACTION.
 # Outputs: skip=true|false to $GITHUB_OUTPUT.
