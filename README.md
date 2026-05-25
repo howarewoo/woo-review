@@ -95,7 +95,7 @@ graph TD
 -   **High Accuracy**: Skeptical Validator pass eliminates "hallucinated" nits and pedantic suggestions.
 -   **Model Optimization**: Automatically maps tasks to the best 2026 models (Opus 4.7 for reasoning, Flash 3.5 for speed).
 -   **Multi-Provider**: Supports Anthropic, OpenAI, Google, and OpenRouter.
--   **Integrated Tooling**: Runs `react-doctor` and [impeccable](https://github.com/pbakaus/impeccable) (visual audit) natively within the agentic loop.
+-   **Integrated Tooling**: Runs [react-doctor](https://github.com/millionco/react-doctor) and [impeccable](https://github.com/pbakaus/impeccable) (visual audit) natively within the agentic loop.
 
 ## Prerequisites & Dependencies
 
@@ -105,7 +105,7 @@ To ensure maximum speed and accuracy, `woo-review` relies on the following envir
 - **Runner**: `ubuntu-latest` is recommended (includes `gh` and `jq`).
 - **GitHub CLI (`gh`)**: Required for posting inline comments and managing PR labels.
 - **`jq`**: Required for JSON-based finding aggregation.
-- **Node.js 22+**: Automatically installed when `design-audit`, `design-critique`, or `react` angles are active to support [impeccable](https://github.com/pbakaus/impeccable) and `react-doctor`.
+- **Node.js 22+**: Automatically installed when `design-audit`, `design-critique`, or `react` angles are active to support [impeccable](https://github.com/pbakaus/impeccable) and [react-doctor](https://github.com/millionco/react-doctor).
 - **2026 Flagship Models**: Access to **Claude 4.7+**, **GPT-5.5+**, or **Gemini 3.5+** is required for the Skeptical Validator and specialized audit agents.
 
 ### AI Skill Dependencies
