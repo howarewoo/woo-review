@@ -8,11 +8,11 @@ The shared header above lists prefetched artifacts, findings schema, blocking cr
 
 OpenCode + OpenRouter can route per-subagent if the OpenCode runtime supports it. When spawning each angle / validator subagent, read its `tier:` frontmatter and resolve via the **Model Tiers** table in `_header.md`:
 
-- `fast` → `openrouter/deepseek/deepseek-v4-flash`
-- `standard` → `openrouter/deepseek/deepseek-v4`
-- `deep` → `openrouter/deepseek/deepseek-r1`
+- `fast` → `openrouter/deepseek/deepseek-v4-flash` (non-reasoning)
+- `standard` → `openrouter/deepseek/deepseek-v4-pro` (non-reasoning)
+- `deep` → `openrouter/deepseek/deepseek-v4-pro-max` (reasoning / extended-thinking; use `v4-pro-high` for a lower-effort reasoning option)
 
-If the OpenCode build cannot route per-subagent, fall back to a single model for the whole job and pin it to the `standard` tier (`openrouter/deepseek/deepseek-v4`). `inputs.model` (action.yml) always overrides tier resolution.
+DeepSeek V4 supersedes R1 — do not route to `deepseek-r1`. If the OpenCode build cannot route per-subagent, fall back to a single model for the whole job and pin it to `openrouter/deepseek/deepseek-v4-pro`. `inputs.model` (action.yml) always overrides tier resolution.
 
 ---
 

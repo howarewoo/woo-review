@@ -126,8 +126,10 @@ Per-provider resolution (full table in `_header.md`):
 | Tier | Anthropic | OpenAI | Google | OpenRouter |
 |---|---|---|---|---|
 | `fast` | `claude-haiku-4-5` | `gpt-5-mini` | `gemini-3-5-flash` | `openrouter/deepseek/deepseek-v4-flash` |
-| `standard` | `claude-sonnet-4-6` | `gpt-5` | `gemini-3-5-pro` | `openrouter/deepseek/deepseek-v4` |
-| `deep` | `claude-opus-4-7` | `gpt-5-pro` | `gemini-3-5-pro-thinking` | `openrouter/deepseek/deepseek-r1` |
+| `standard` | `claude-sonnet-4-6` | `gpt-5` | `gemini-3-5-flash` | `openrouter/deepseek/deepseek-v4-pro` |
+| `deep` | `claude-opus-4-7` | `gpt-5-pro` | `gemini-3-5-flash` | `openrouter/deepseek/deepseek-v4-pro-max` |
+
+Google currently ships only `gemini-3-5-flash` (no Pro/Ultra/Thinking variant exists yet), so tiering collapses on Gemini. OpenRouter uses the DeepSeek V4 family: `v4-flash` (fast), `v4-pro` (standard, non-reasoning), `v4-pro-max` (deep, reasoning / extended-thinking). Do not route to `deepseek-r1` — V4 supersedes it.
 
 **Host capability:**
 

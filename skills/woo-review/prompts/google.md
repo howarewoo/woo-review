@@ -6,7 +6,7 @@ The shared header above lists prefetched artifacts, findings schema, blocking cr
 
 ## Model selection
 
-Gemini CLI runs one model per job (set via `inputs.model`, default `gemini-3-5-flash`). Per-call routing is not possible, so the `tier:` frontmatter is **informational only** under this provider. The default `gemini-3-5-flash` is appropriate when the run is dominated by rubric angles (`seo`, `aeo`) and context-summary work; for reasoning-heavy runs (lots of `bugs`/`security`/`design`/`react` activity) upgrade `inputs.model` to `gemini-3-5-pro` (standard tier) — or use a `gemini-3-5-pro-thinking` deep-tier model for the validator phase if you split the workflow into separate jobs.
+Gemini CLI runs one model per job (set via `inputs.model`, default `gemini-3-5-flash`). Per-call routing is not possible, so the `tier:` frontmatter is **informational only** under this provider. Google's 3.5 line currently exposes only `gemini-3-5-flash` — no Pro/Ultra/Thinking variant exists yet — so tier routing is a no-op on Gemini today. Use `gemini-3-5-flash` for all runs until Google releases a larger 3.5-line model; revisit this prompt when one ships.
 
 ---
 
