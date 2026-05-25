@@ -31,6 +31,23 @@ When you invoke `/woo-review` the host agent:
 4. **Validates** all findings through a Skeptical Validator pass (dedupe, defense-attorney audit, severity downgrade only).
 5. **Reports** locally OR posts one batched GitHub Review when a PR# was given.
 
+```mermaid
+flowchart TD
+    A["/woo-review [PR#?]"] --> B[Prefetch<br/>diff + metadata + rules<br/>→ /tmp/pr-review/]
+    B --> C{Detect angles}
+    C -->|always-on| D1[bugs]
+    C -->|always-on| D2[security]
+    C -->|*.html, meta, og:, sitemap| D3[seo]
+    C -->|*.tsx/css/vue/svelte| D4[design-audit]
+    C -->|*.tsx/css/vue/svelte| D5[design-critique]
+    C -->|*.tsx/jsx + react dep| D6[react]
+    D1 & D2 & D3 & D4 & D5 & D6 --> E[Parallel sub-agents<br/>one per angle]
+    E --> F[Skeptical Validator<br/>dedupe · defense-attorney · severity downgrade only]
+    F --> G{PR# given?}
+    G -->|no| H[Local report]
+    G -->|yes| I[Batched GitHub Review<br/>+ blocking-review label]
+```
+
 See [`skills/woo-review/SKILL.md`](./skills/woo-review/SKILL.md) for the full workflow contract.
 
 ---
