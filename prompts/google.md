@@ -23,18 +23,18 @@ You are running as a parallel worker for a specific angle.
 You are running as the final aggregator.
 - Read all `/tmp/pr-review/findings.<angle>.json` files from the disk.
 - Perform Phase 3 (Self-Validation) below.
-- Perform Phase 4 (Post Inline Comments) below.
-- Perform Phase 5 (Update PR Body + Manage Label) below.
+- Perform Phase 4 (Submit Native PR Review + Manage Label) below.
+- Do NOT modify the PR title or the PR description.
 - Exit.
 
 ### MODE: full (or detect)
-Perform all phases (1 through 5) sequentially.
+Perform all phases (1 through 4) sequentially.
 
 ---
 
 ## Phase 1 — Read artifacts + draft summary
 
-Read `/tmp/pr-review/diff.txt`, `/tmp/pr-review/meta.json`, `/tmp/pr-review/rules.md`, `/tmp/pr-review/angles.txt`. Generate a Conventional Commit title; update via `gh pr edit "$PR_NUMBER" --title "<title>"`. Draft 1–2 sentence summary, change bullets, files-by-category, optional manual test plan.
+Read `/tmp/pr-review/diff.txt`, `/tmp/pr-review/meta.json`, `/tmp/pr-review/rules.md`, `/tmp/pr-review/angles.txt`. Draft a 1–2 sentence summary, change bullets, files-by-category, optional manual test plan — all destined for the **Review body** in Phase 4. Do NOT call `gh pr edit`; the PR title and description must remain untouched.
 
 ## Phase 2 — Per-Angle Audit (sequential loop)
 
@@ -56,13 +56,11 @@ Merge all `findings.<angle>.json`. For each finding:
 
 Persist to `/tmp/pr-review/findings.json` per `_header.md` schema.
 
-## Phase 4 — Post Inline Comments
+## Phase 4 — Submit Native PR Review + Manage Label
 
-For each finding in `findings.json`, follow `_header.md`'s inline-comment procedure. Use the `gh` tool the Gemini runtime provides.
+Compute counts. Build `STATUS_LINE`. Follow `_header.md` exactly: submit one batched `gh api repos/<repo>/pulls/<PR>/reviews` POST whose `body` carries the summary + `STATUS_LINE` and whose `comments[]` carries every finding as an inline comment. Use the `gh` tool the Gemini runtime provides. Then add or remove the `blocking-review` label.
 
-## Phase 5 — Update PR Body + Manage Label
-
-Compute counts. Build `STATUS_LINE`. Update PR body. Add or remove `blocking-review` label per `_header.md`.
+Do NOT call `gh pr edit`. The PR title and PR description stay untouched.
 
 ## Rules
 

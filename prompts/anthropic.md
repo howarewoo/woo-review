@@ -24,7 +24,8 @@ You are running as a parallel worker for a specific angle.
 You are running as the final aggregator.
 - Read all `/tmp/pr-review/findings.<angle>.json` files from the disk.
 - Perform the validation step (Step 3 below).
-- Perform the final output step (Step 4 below): post inline comments, update PR body, manage label.
+- Perform the final output step (Step 4 below): submit one batched native PR Review and manage the label.
+- Do NOT modify the PR title or the PR description.
 - Exit.
 
 ### MODE: full (or detect)
@@ -32,16 +33,16 @@ Perform all steps (1 through 4) as the main orchestrator.
 
 ---
 
-## Step 1 — Context + Title + Summary (single Haiku subagent)
+## Step 1 — Context + Summary (single Haiku subagent; full mode only)
 
 Launch one Haiku subagent. Task:
 
 - Read `/tmp/pr-review/diff.txt`, `/tmp/pr-review/meta.json`, and `/tmp/pr-review/angles.txt`.
-- Generate a Conventional Commit title (`type(scope): description`; types: `feat, fix, chore, docs, refactor, test, ci, perf, style, build`).
-- Update title: `gh pr edit "$PR_NUMBER" --title "<title>"`.
-- Produce a 1–2 sentence summary, a bullet list of changes, and files grouped by category.
-- If the diff has functional changes (business logic, UI, API, data mutations), produce a manual test plan as a Markdown checklist.
-- Return: title, summary, bullets, files-by-category, test plan, **enabled angles list**.
+- Produce a 1–2 sentence summary, a bullet list of changes, and files grouped by category. These feed the **Review body** in Step 4 only — they are never written to the PR title or PR description.
+- If the diff has functional changes (business logic, UI, API, data mutations), produce a manual test plan as a Markdown checklist for inclusion in the Review body.
+- Return: summary, bullets, files-by-category, test plan, **enabled angles list**.
+
+Do NOT call `gh pr edit`. The PR title and description are immutable for this action.
 
 ## Step 2 — Parallel Angle Audits (one subagent per enabled angle)
 
@@ -65,9 +66,11 @@ Otherwise launch one Sonnet validator subagent with the full diff and the merged
 
 Write surviving findings to `/tmp/pr-review/findings.json` per the schema in `_header.md`.
 
-## Step 4 — Post Inline Comments + Update PR Body + Manage Label
+## Step 4 — Submit Native PR Review + Manage Label
 
-Follow `_header.md` exactly. Compute `BLOCKING_COUNT`, `NONBLOCKING_COUNT`, `HIGH_COUNT`, `MEDIUM_COUNT`, `LOW_COUNT`. Build `STATUS_LINE`.
+Follow `_header.md` exactly. Compute `BLOCKING_COUNT`, `NONBLOCKING_COUNT`, `HIGH_COUNT`, `MEDIUM_COUNT`, `LOW_COUNT`. Build `STATUS_LINE`. Submit a single batched `gh api repos/<repo>/pulls/<PR>/reviews` POST containing all inline comments + the summary + the `STATUS_LINE` in the review body. Then add or remove the `blocking-review` label.
+
+Do NOT call `gh pr edit`. The PR title and the PR description must remain untouched.
 
 ## Rules
 

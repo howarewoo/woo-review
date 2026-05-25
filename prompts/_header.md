@@ -33,7 +33,9 @@ Each angle writes its findings to `/tmp/pr-review/findings.<angle>.json`. The or
 
 ## Output Contract
 
-Every run MUST end with **(a)** zero-or-more inline review comments posted via `gh api`, **(b)** the PR body updated with a `STATUS_LINE`, and **(c)** the `blocking-review` label added or removed.
+Every run MUST end with **(a)** one batched GitHub Review submitted via `gh api repos/<repo>/pulls/<PR>/reviews` containing all inline comments, the summary, and the `STATUS_LINE` in the **review body**, and **(b)** the `blocking-review` label added or removed.
+
+The PR title and the PR description (issue body) MUST NOT be modified. The `STATUS_LINE` lives inside the Review body — never in the PR body.
 
 ### STATUS_LINE (exact format)
 

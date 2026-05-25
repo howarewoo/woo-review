@@ -23,18 +23,18 @@ You are running as a parallel worker for a specific angle.
 You are running as the final aggregator.
 - Read all `/tmp/pr-review/findings.<angle>.json` files from the disk.
 - Perform Phase 3 (Self-Validation) below.
-- Perform Phase 4 (Post Inline Comments) below.
-- Perform Phase 5 (Update PR Body + Manage Label) below.
+- Perform Phase 4 (Submit Native PR Review + Manage Label) below.
+- Do NOT modify the PR title or the PR description.
 - Exit.
 
 ### MODE: full (or detect)
-Perform all phases (1 through 5) sequentially.
+Perform all phases (1 through 4) sequentially.
 
 ---
 
 ## Phase 1 — Read artifacts + draft summary
 
-Read `/tmp/pr-review/diff.txt`, `/tmp/pr-review/meta.json`, `/tmp/pr-review/rules.md`, `/tmp/pr-review/angles.txt`. Generate a Conventional Commit title; update via `gh pr edit "$PR_NUMBER" --title "<title>"`. Draft 1–2 sentence summary, change bullets, files-by-category, optional manual test plan.
+Read `/tmp/pr-review/diff.txt`, `/tmp/pr-review/meta.json`, `/tmp/pr-review/rules.md`, `/tmp/pr-review/angles.txt`. Draft a 1–2 sentence summary, change bullets, files-by-category, optional manual test plan — all destined for the **Review body** in Phase 4. Do NOT call `gh pr edit`; the PR title and description must remain untouched.
 
 ## Phase 2 — Per-Angle Audit (sequential loop)
 
@@ -56,17 +56,15 @@ Merge all `findings.<angle>.json` arrays. For each finding:
 
 Persist surviving findings to `/tmp/pr-review/findings.json` per the schema in `_header.md`.
 
-## Phase 4 — Post Inline Comments
+## Phase 4 — Submit Native PR Review + Manage Label
 
-Loop over `findings.json`. Follow the inline-comment-posting procedure in `_header.md` exactly (heredoc → Python JSON → `gh api ... --input`).
+Compute `BLOCKING_COUNT`, `NONBLOCKING_COUNT`, `HIGH_COUNT`, `MEDIUM_COUNT`, `LOW_COUNT`. Build `STATUS_LINE`. Follow `_header.md` exactly: submit one batched `gh api repos/<repo>/pulls/<PR>/reviews` POST whose `body` carries the summary + `STATUS_LINE` and whose `comments[]` carries every finding as an inline comment. Then add or remove the `blocking-review` label.
 
-## Phase 5 — Update PR Body + Manage Label
-
-Compute `BLOCKING_COUNT`, `NONBLOCKING_COUNT`, `HIGH_COUNT`, `MEDIUM_COUNT`, `LOW_COUNT`. Build `STATUS_LINE`. Update PR body. Add or remove `blocking-review` label.
+Do NOT call `gh pr edit`. The PR title and PR description stay untouched.
 
 ## Rules
 
 - Execute every phase autonomously — never request confirmation.
 - Trust prefetched artifacts.
 - Do not interleave audit phases with posting phases.
-- `findings.json` is the single source of truth for Phases 4 + 5.
+- `findings.json` is the single source of truth for Phase 4.
