@@ -223,3 +223,31 @@ jobs:
 git add .github/workflows/reusable-review.yml
 git commit -m "feat(ci): add reusable workflow for parallel matrix reviews"
 ```
+
+---
+
+### Task 6: Split Design into Audit and Critique Agents
+
+**Files:**
+- Create: `prompts/angles/design-audit.md`
+- Create: `prompts/angles/design-critique.md`
+- Modify: `scripts/detect-angles.sh`
+- Modify: `action.yml`
+
+- [ ] **Step 1: Create `prompts/angles/design-audit.md`**
+Define the structured, severity-based audit prompt.
+
+- [ ] **Step 2: Create `prompts/angles/design-critique.md`**
+Define the qualitative heuristic-based critique prompt.
+
+- [ ] **Step 3: Update `scripts/detect-angles.sh`**
+Replace `design` with `design-audit` and `design-critique`.
+
+- [ ] **Step 4: Update `action.yml`**
+Ensure Node.js setup and tool mapping handle the new angles.
+
+- [ ] **Step 5: Commit**
+```bash
+git add prompts/angles/design-audit.md prompts/angles/design-critique.md scripts/detect-angles.sh action.yml
+git commit -m "feat(design): split design angle into audit and critique agents"
+```
