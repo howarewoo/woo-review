@@ -2,9 +2,9 @@
 
 **Scope.** Perform a qualitative critique of UI changes based on design heuristics and cognitive load. Read `/tmp/pr-review/diff.txt` and the changed source files referenced in `/tmp/pr-review/meta.json`.
 
-## Step 1 — Run Impeccable critique (Experimental)
+## Step 1 — Run Impeccable detect
 
-Try running the Impeccable critique tool:
+Try running the Impeccable detection tool:
 
 ```bash
 IMPECCABLE_VERSION="${IMPECCABLE_VERSION:-latest}"
@@ -15,13 +15,13 @@ jq -r '.files[].path' /tmp/pr-review/meta.json \
 
 if [ -s /tmp/pr-review/design-critique-files.txt ]; then
   xargs -a /tmp/pr-review/design-critique-files.txt -r \
-    npx -y "impeccable@${IMPECCABLE_VERSION}" critique --json \
-    > /tmp/pr-review/impeccable-critique.json 2>/tmp/pr-review/impeccable-critique.err || \
-    echo "impeccable critique exited non-zero — falling back to LLM-only critique"
+    npx -y "impeccable@${IMPECCABLE_VERSION}" detect --json \
+    > /tmp/pr-review/impeccable-detect.json 2>/tmp/pr-review/impeccable-detect.err || \
+    echo "impeccable detect exited non-zero — falling back to LLM-only critique"
 fi
 ```
 
-If `impeccable critique` fails or returns no data, proceed with LLM-only critique.
+If `impeccable detect` fails or returns no data, proceed with LLM-only critique.
 
 ## Step 2 — LLM critique
 

@@ -2,9 +2,9 @@
 
 **Scope.** Perform a structured, quantitative audit of UI changes using the Impeccable tool. Read `/tmp/pr-review/diff.txt` and the changed source files referenced in `/tmp/pr-review/meta.json`.
 
-## Step 1 — Run Impeccable audit
+## Step 1 — Run Impeccable detect
 
-Run the [pbakaus/impeccable](https://github.com/pbakaus/impeccable) audit tool via npx:
+Run the [pbakaus/impeccable](https://github.com/pbakaus/impeccable) detection tool via npx:
 
 ```bash
 IMPECCABLE_VERSION="${IMPECCABLE_VERSION:-latest}"
@@ -15,15 +15,15 @@ jq -r '.files[].path' /tmp/pr-review/meta.json \
   > /tmp/pr-review/design-audit-files.txt || true
 
 if [ -s /tmp/pr-review/design-audit-files.txt ]; then
-  # Pass changed files to impeccable audit; --json output for parsing.
+  # Pass changed files to impeccable detect; --json output for parsing.
   xargs -a /tmp/pr-review/design-audit-files.txt -r \
-    npx -y "impeccable@${IMPECCABLE_VERSION}" audit --json \
-    > /tmp/pr-review/impeccable-audit.json 2>/tmp/pr-review/impeccable-audit.err || \
-    echo "impeccable audit exited non-zero — continuing with empty findings"
+    npx -y "impeccable@${IMPECCABLE_VERSION}" detect --json \
+    > /tmp/pr-review/impeccable-detect.json 2>/tmp/pr-review/impeccable-detect.err || \
+    echo "impeccable detect exited non-zero — continuing with empty findings"
 fi
 ```
 
-Parse `/tmp/pr-review/impeccable-audit.json`. Focus on structured scoring across 5 dimensions:
+Parse `/tmp/pr-review/impeccable-detect.json`. Focus on structured scoring across 5 dimensions:
 1. Performance
 2. Accessibility
 3. Best Practices
