@@ -115,7 +115,7 @@ The CI pipeline mirrors the skill's swarm 1:1 — detection job → matrix of an
 | `anthropic` | `claude-sonnet-4-6` | `claude-opus-4-7` | `anthropic_token` |
 | `openai` | `gpt-5-5-instant` | `gpt-5-5` | `openai_api_key` |
 | `google` | `gemini-3-5-flash` | `gemini-3-1-pro` | `google_api_key` |
-| `openrouter` | `sonnet-4-6` | `opus-4-7` | `openrouter_api_key` |
+| `openrouter` | `deepseek/deepseek-v4-flash` | `deepseek/deepseek-v4-pro` | `openrouter_api_key` |
 
 ### Inputs
 

@@ -292,7 +292,7 @@ runs:
       # The repo appears to have moved to anomalyco/opencode; verify upstream before pinning.
       uses: sst/opencode/github@v1.15.10
       with:
-        model: ${{ inputs.model || 'openrouter/anthropic/claude-sonnet-4' }}
+        model: ${{ inputs.model || 'openrouter/deepseek/deepseek-v4-flash' }}
         prompt: ${{ steps.load-prompt.outputs.prompt }}
         share: 'false'
       env:
