@@ -127,9 +127,11 @@ Per-provider resolution (full table in `_header.md`):
 |---|---|---|---|---|
 | `fast` | `claude-haiku-4-5` | `gpt-5-mini` | `gemini-3-5-flash` | `openrouter/deepseek/deepseek-v4-flash` |
 | `standard` | `claude-sonnet-4-6` | `gpt-5` | `gemini-3-5-flash` | `openrouter/deepseek/deepseek-v4-pro` |
-| `deep` | `claude-opus-4-7` | `gpt-5-pro` | `gemini-3-5-flash` | `openrouter/deepseek/deepseek-v4-pro` + `reasoning_effort: xhigh` |
+| `deep` | `claude-opus-4-7` | `gpt-5` + `reasoning_effort: high` | `gemini-3-5-flash` | `openrouter/deepseek/deepseek-v4-pro` + `reasoning_effort: xhigh` |
 
-Google currently ships only `gemini-3-5-flash` (no Pro/Ultra/Thinking variant exists yet), so tiering collapses on Gemini. OpenRouter exposes only two DeepSeek slugs: `v4-flash` and `v4-pro`. Reasoning is a `reasoning_effort` parameter (`high` / `xhigh`), not a slug suffix — pass `xhigh` when invoking the deep-tier validator on `v4-pro`. Do not route to `deepseek-r1` — V4 supersedes it.
+- **Google** currently exposes only `gemini-3-5-flash` — tier routing is a no-op on Gemini until a larger 3.5 model ships.
+- **OpenAI** GPT-5 reasoning is a `reasoning_effort` parameter (`minimal`/`low`/`medium`/`high`), not a slug suffix. There is no `gpt-5-pro`. Newer `gpt-5.5` family exists; upgrade once the Codex Action supports it.
+- **OpenRouter** exposes only `deepseek/deepseek-v4-flash` and `deepseek/deepseek-v4-pro`; reasoning is the `reasoning_effort` parameter (`high`/`xhigh`). Do not route to `deepseek-r1` — V4 supersedes it.
 
 **Host capability:**
 

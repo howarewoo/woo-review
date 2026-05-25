@@ -6,7 +6,7 @@ The shared header above lists prefetched artifacts, findings schema, blocking cr
 
 ## Model selection
 
-Codex Action runs one model for the full job (set via `inputs.model`, default `gpt-5`). Per-call routing is not possible, so the `tier:` frontmatter on each angle prompt is **informational only** under this provider. Default to the `standard`-tier model (`gpt-5`) — it covers every angle safely. To trade some quality on `bugs`/`security`/`design`/`react` for cost on `seo`/`aeo` runs, you can split the workflow into two jobs (e.g. one `gpt-5-mini` job that only runs `seo`/`aeo`, then one `gpt-5` job for the remaining angles + validator), but the default single-job flow stays on `standard`.
+Codex Action runs one model for the full job (set via `inputs.model`, default `gpt-5`). Per-call routing is not possible, so the `tier:` frontmatter on each angle prompt is **informational only** under this provider. Default to the `standard`-tier model (`gpt-5`) — it covers every angle safely. GPT-5 reasoning is a `reasoning_effort` parameter (`minimal`/`low`/`medium`/`high`), not a slug suffix; there is no `gpt-5-pro`. To trade some quality on `bugs`/`security`/`design`/`react` for cost on `seo`/`aeo` runs, split the workflow into two jobs (e.g. one `gpt-5-mini` job for `seo`/`aeo`, then one `gpt-5` job with `reasoning_effort: high` for the remaining angles + validator). A newer `gpt-5.5` family exists upstream; switch `inputs.model` to `gpt-5.5` once the Codex Action supports it.
 
 ---
 

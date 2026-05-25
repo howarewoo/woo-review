@@ -24,9 +24,12 @@ Each angle prompt and the validator declare a `tier:` in frontmatter — `fast`,
 |---|---|---|---|---|---|
 | `fast` | rubric checklists (`seo`, `aeo`), context summaries | `claude-haiku-4-5` | `gpt-5-mini` | `gemini-3-5-flash` | `openrouter/deepseek/deepseek-v4-flash` |
 | `standard` | reasoning workers (`bugs`, `security`, `design`, `react`) | `claude-sonnet-4-6` | `gpt-5` | `gemini-3-5-flash` | `openrouter/deepseek/deepseek-v4-pro` |
-| `deep` | skeptical validator (highest-leverage filter) | `claude-opus-4-7` | `gpt-5-pro` | `gemini-3-5-flash` | `openrouter/deepseek/deepseek-v4-pro` + `reasoning_effort: xhigh` |
+| `deep` | skeptical validator (highest-leverage filter) | `claude-opus-4-7` | `gpt-5` + `reasoning_effort: high` | `gemini-3-5-flash` | `openrouter/deepseek/deepseek-v4-pro` + `reasoning_effort: xhigh` |
 
-> **Provider notes:** Google currently ships only `gemini-3-5-flash` in the 3.5 line; no Pro/Ultra/Thinking variant exists yet, so all tiers collapse onto flash (tier routing is effectively a no-op until Google releases a larger model). OpenRouter's DeepSeek lineup exposes exactly two slugs — `deepseek/deepseek-v4-flash` and `deepseek/deepseek-v4-pro`. Reasoning is **not** a separate model ID; it is controlled by the `reasoning_effort` parameter (`high` / `xhigh`, where `xhigh` maps to max reasoning). Use plain `v4-pro` for the standard tier and `v4-pro` with `reasoning_effort: xhigh` for the deep tier. Do not route to `deepseek-r1` — V4 supersedes it.
+> **Provider notes:**
+> - **Google** currently ships only `gemini-3-5-flash` in the 3.5 line; no Pro/Ultra/Thinking variant exists yet, so all tiers collapse onto flash (tier routing is effectively a no-op until Google releases a larger model).
+> - **OpenAI** GPT-5 reasoning is a parameter on the same slug, not a slug suffix. The valid `reasoning_effort` values are `minimal` / `low` / `medium` / `high` (`high` is max for `gpt-5`). There is no `gpt-5-pro`. A newer flagship family (`gpt-5.5`) exists and accepts `xhigh`; upgrade `inputs.model` to `gpt-5.5` when the Codex Action supports it.
+> - **OpenRouter** DeepSeek exposes exactly two slugs — `deepseek/deepseek-v4-flash` and `deepseek/deepseek-v4-pro`. Reasoning is a `reasoning_effort` parameter (`high` / `xhigh`, where `xhigh` maps to max). Use plain `v4-pro` for standard and `v4-pro` with `reasoning_effort: xhigh` for deep. Do not route to `deepseek-r1` — V4 supersedes it.
 
 **Routing rules by host capability:**
 
