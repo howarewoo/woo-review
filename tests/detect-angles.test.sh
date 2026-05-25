@@ -95,7 +95,7 @@ diff --git a/app/layout.tsx b/app/layout.tsx
 +  openGraph: { 'og:title': 'Product' }
 +};
 DIFF
-run_case "react+seo+design" "bugs,security,seo,design,react"
+run_case "react+seo+design" "bugs,security,seo,design-audit,design-critique,react"
 
 # --- Case 3: pure CSS change -> bugs,security,design
 rm -f "$GITHUB_WORKSPACE/package.json"
@@ -114,14 +114,14 @@ cat > "$PREFETCH/diff.txt" <<'DIFF'
 diff --git a/src/styles/main.css b/src/styles/main.css
 +.card { padding: 12px; }
 DIFF
-run_case "design-only" "bugs,security,design"
+run_case "design-only" "bugs,security,design-audit,design-critique"
 
-# --- Case 4: disable_angles=design,react drops design from CSS PR -> bugs,security
-INPUT_DISABLE_ANGLES="design,react" \
+# --- Case 4: disable_angles=design-audit,design-critique,react drops design from CSS PR -> bugs,security
+INPUT_DISABLE_ANGLES="design-audit,design-critique,react" \
   bash "$SCRIPT" > /dev/null
 actual=$(grep '^angles=' "$OUTPUT_FILE" | tail -n1 | cut -d= -f2-)
 if [ "$actual" = "bugs,security" ]; then
-  echo "ok   disable_angles=design,react -> $actual"
+  echo "ok   disable_angles=design-audit,design-critique,react -> $actual"
 else
   echo "FAIL disable_angles: expected 'bugs,security', got '$actual'"
   fail=1
@@ -129,7 +129,7 @@ fi
 
 # --- Case 5: disable_angles cannot drop bugs/security
 : > "$OUTPUT_FILE"
-INPUT_DISABLE_ANGLES="bugs,security,design" \
+INPUT_DISABLE_ANGLES="bugs,security,design-audit,design-critique" \
   bash "$SCRIPT" > /dev/null
 actual=$(grep '^angles=' "$OUTPUT_FILE" | tail -n1 | cut -d= -f2-)
 if [ "$actual" = "bugs,security" ]; then
