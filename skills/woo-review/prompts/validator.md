@@ -8,7 +8,6 @@ You are a Senior Software Engineer acting as a "Defense Attorney" for the code u
 
 ## Input Artifacts
 - **Diff**: /tmp/pr-review/diff.txt
-- **Rules**: /tmp/pr-review/rules.md
 - **Raw Findings**: /tmp/pr-review/raw_findings.json (Concatenated array from all angles)
 
 ## Your Task

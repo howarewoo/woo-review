@@ -6,7 +6,6 @@ This contract is identical across every provider runner. The orchestration secti
 
 - **Diff**: `/tmp/pr-review/diff.txt`
 - **PR metadata** (title, body, headRefOid, baseRefName, files): `/tmp/pr-review/meta.json`
-- **Combined rules** (applicable CLAUDE.md files): `/tmp/pr-review/rules.md`
 - **Enabled angles** (one per line): `/tmp/pr-review/angles.txt`
 
 Set `PR_NUMBER` and `HEAD_SHA` as shell variables before posting anything:
@@ -206,6 +205,6 @@ Otherwise `blocking: false`:
 - Input-dependent maybe-issues with no concrete failure case.
 - Pedantic nitpicks (whitespace, naming taste without rule backing).
 - Pre-existing issues not introduced by this PR.
-- Generic security concerns unless `rules.md` explicitly requires.
+- Generic security concerns without concrete exploit path in this PR.
 
 ---

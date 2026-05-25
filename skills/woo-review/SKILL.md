@@ -86,8 +86,6 @@ git diff --name-only "$BASE"...HEAD \
     }' > /tmp/pr-review/meta.json
 ```
 
-Compose rules: copy every `CLAUDE.md` reachable from changed files into `/tmp/pr-review/rules.md`.
-
 ### Stage 2 — Detect Angles
 
 ```bash
@@ -110,7 +108,7 @@ Each sub-agent receives the same brief:
 You are the <angle> reviewer for this PR. Read:
 - $WOO_REVIEW_ACTION_PATH/prompts/_header.md   (shared contract)
 - $WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md   (your scope)
-- /tmp/pr-review/diff.txt, /tmp/pr-review/rules.md, /tmp/pr-review/meta.json
+- /tmp/pr-review/diff.txt, /tmp/pr-review/meta.json
 
 Execute any shell commands the angle prompt specifies (e.g. impeccable detect,
 react-doctor). Write your findings as a JSON array to

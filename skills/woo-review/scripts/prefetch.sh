@@ -3,7 +3,7 @@
 # Inputs (env): GH_TOKEN, GITHUB_REPOSITORY, INPUT_SKIP_LABELS,
 #               PR_NUMBER, EVENT_NAME, EVENT_ACTION.
 # Outputs: skip=true|false to $GITHUB_OUTPUT.
-# Side effects: writes /tmp/pr-review/{diff.txt,meta.json,rules.md}.
+# Side effects: writes /tmp/pr-review/{diff.txt,meta.json}.
 
 set -euo pipefail
 
@@ -89,27 +89,6 @@ if [ "$DIFF_BYTES" -gt 300000 ]; then
   } > "$OUTDIR/diff.txt.capped"
   mv "$OUTDIR/diff.txt.capped" "$OUTDIR/diff.txt"
 fi
-
-# Compose rules: all CLAUDE.md files in touched dirs and parents.
-: > "$OUTDIR/rules.md"
-if [ -f .claude/CLAUDE.md ]; then
-  echo "## .claude/CLAUDE.md" >> "$OUTDIR/rules.md"
-  cat .claude/CLAUDE.md >> "$OUTDIR/rules.md"
-fi
-
-jq -r '.files[].path' "$OUTDIR/meta.json" | while read -r f; do
-  dir=$(dirname "$f")
-  while [ "$dir" != "." ] && [ "$dir" != "/" ]; do
-    if [ -f "$dir/CLAUDE.md" ]; then
-      echo "$dir/CLAUDE.md"
-    fi
-    dir=$(dirname "$dir")
-  done
-done | sort -u | while read -r claude_file; do
-  echo "" >> "$OUTDIR/rules.md"
-  echo "## $claude_file" >> "$OUTDIR/rules.md"
-  cat "$claude_file" >> "$OUTDIR/rules.md"
-done
 
 echo "skip=false" >> "$GITHUB_OUTPUT"
 echo "Prefetch complete: $OUTDIR/"

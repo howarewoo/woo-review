@@ -4,7 +4,7 @@ tier: standard
 
 # Angle: Security
 
-**Scope.** Find security vulnerabilities introduced by this PR's diff. Read `/tmp/pr-review/diff.txt` and `/tmp/pr-review/rules.md`.
+**Scope.** Find security vulnerabilities introduced by this PR's diff. Read `/tmp/pr-review/diff.txt`.
 
 **Reference rubric.** Use OpenAI's `security-best-practices` skill as the language/framework-specific rubric.
 
@@ -38,7 +38,7 @@ Filename pattern: `<language>-<framework>-<stack>-security.md`, with `<language>
 
 - Generic "could this ever be a problem" speculation without a concrete exploit path.
 - Pre-existing issues not introduced by this PR.
-- Defense-in-depth nice-to-haves unless `rules.md` explicitly requires.
+- Defense-in-depth nice-to-haves without concrete exploit path.
 - Theoretical timing attacks unless the diff actually adds a verifying compare.
 
 **Severity rubric:**

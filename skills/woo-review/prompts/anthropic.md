@@ -80,7 +80,7 @@ Read `/tmp/pr-review/angles.txt`. Launch **one subagent per enabled angle in the
 
 - Loads its angle prompt: `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md`.
 - Runs on the Anthropic model resolved from that prompt's `tier:` frontmatter via the table above (Sonnet for `bugs`/`security`/`design`/`react`, Haiku for `seo`/`aeo`). The spawning Task call MUST pass `model:` explicitly — see Model Routing section above.
-- Reads `/tmp/pr-review/diff.txt`, `/tmp/pr-review/rules.md`, and the prompts/meta as required by the angle file.
+- Reads `/tmp/pr-review/diff.txt` and the prompts/meta as required by the angle file.
 - For `react`: runs `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline`, parses output, then performs LLM review per the react prompt.
 - Returns its findings list AND writes them to `/tmp/pr-review/findings.<angle>.json`.
 
@@ -106,7 +106,7 @@ Do NOT call `gh pr edit`. Do NOT add, remove, or mutate PR labels. The PR title,
 ## Rules
 
 - Execute every step autonomously — no confirmation prompts.
-- Trust prefetched artifacts. Do NOT re-run `gh pr diff` or re-read CLAUDE.md files.
+- Trust prefetched artifacts. Do NOT re-run `gh pr diff`.
 - Parallel angle subagents in Step 2 must complete before Step 3.
 - Each subagent stays within its angle scope; do not duplicate findings across angles (validator dedupes).
 - `findings.json` is the single source of truth for Step 4.
