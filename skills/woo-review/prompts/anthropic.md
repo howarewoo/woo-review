@@ -40,7 +40,7 @@ Claude Code's `Task` tool supports per-subagent model routing. Read each angle p
 | Tier | Anthropic model | Used for |
 |---|---|---|
 | `fast` | `claude-haiku-4-5` | context+summary, `seo`, `aeo` |
-| `standard` | `claude-sonnet-4-6` | `bugs`, `security`, `design`, `react` |
+| `standard` | `claude-sonnet-4-6` | `bugs`, `security`, `design`, `react`, `database` |
 | `deep` | `claude-opus-4-7` | skeptical validator |
 
 **Every Task/Agent spawn MUST pass `model:` explicitly.** Omitting it makes the subagent inherit the parent session's model — typically Opus — which silently defeats tier routing and burns ~5x the tokens on rubric angles. The `tier:` frontmatter is informational unless the spawning call passes the resolved slug.
@@ -79,12 +79,12 @@ Do NOT call `gh pr edit`. The PR title and description are immutable for this ac
 Read `/tmp/pr-review/angles.txt`. Launch **one subagent per enabled angle in the same response** to maximize parallelism. Each subagent:
 
 - Loads its angle prompt: `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md`.
-- Runs on the Anthropic model resolved from that prompt's `tier:` frontmatter via the table above (Sonnet for `bugs`/`security`/`design`/`react`, Haiku for `seo`/`aeo`). The spawning Task call MUST pass `model:` explicitly — see Model Routing section above.
+- Runs on the Anthropic model resolved from that prompt's `tier:` frontmatter via the table above (Sonnet for `bugs`/`security`/`design`/`react`/`database`, Haiku for `seo`/`aeo`). The spawning Task call MUST pass `model:` explicitly — see Model Routing section above.
 - Reads `/tmp/pr-review/diff.txt` and the prompts/meta as required by the angle file.
 - For `react`: runs `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline`, parses output, then performs LLM review per the react prompt.
 - Returns its findings list AND writes them to `/tmp/pr-review/findings.<angle>.json`.
 
-If the Task tool caps practical parallelism below the angle count, spawn the angles in two waves: `[bugs, security, seo, aeo]` then `[design, react]`. Do not skip any enabled angle.
+If the Task tool caps practical parallelism below the angle count, spawn the angles in two waves: `[bugs, security, seo, aeo]` then `[design, react, database]`. Do not skip any enabled angle.
 
 ## Step 3 — Validation (Opus 4.7, only if any findings)
 

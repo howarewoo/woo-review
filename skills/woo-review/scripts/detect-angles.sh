@@ -16,6 +16,13 @@
 #               types (FAQPage / HowTo / Article / Product / ItemList)
 #   design    — *.{tsx,jsx,vue,svelte,html,css,scss,sass,less,styl,astro}
 #   react     — *.{tsx,jsx} AND consumer repo's package.json declares react dep
+#   database  — *.sql, migrations/ trees (db/supabase/prisma), prisma/schema.prisma,
+#               drizzle.config.{ts,js,mjs}, drizzle/, knexfile.{ts,js},
+#               supabase/(config.toml|seed.sql), OR diff body contains SQL DDL
+#               (CREATE/ALTER/DROP TABLE|INDEX|POLICY|FUNCTION|TRIGGER|SCHEMA|TYPE),
+#               RLS tokens (CREATE POLICY, ENABLE ROW LEVEL SECURITY, SECURITY
+#               DEFINER, auth.uid()/auth.jwt()), Supabase client construction, or
+#               ORM raw-SQL call sites (.raw(, sql`, db.query(, pool.query()
 
 set -euo pipefail
 
@@ -67,6 +74,23 @@ has_react_signal() {
   jq -e '(.dependencies // {}) + (.devDependencies // {}) | has("react")' "$pkg" >/dev/null 2>&1
 }
 
+has_database_file() {
+  echo "$CHANGED_PATHS" | grep -qE '\.sql$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)(db/migrations|supabase/migrations|prisma/migrations|migrations)/' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)supabase/(config\.toml|seed\.sql)$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)prisma/schema\.prisma$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)drizzle\.config\.(ts|js|mjs)$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)drizzle/' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)knexfile\.(ts|js)$' && return 0
+  return 1
+}
+
+has_database_diff_token() {
+  # SQL DDL, RLS tokens, Supabase client, and ORM raw-SQL call sites.
+  # Anchored to reduce false-fires on plain English ("create a table") in docs.
+  grep -qE "\b(CREATE|ALTER|DROP)[[:space:]]+(TABLE|INDEX|POLICY|FUNCTION|TRIGGER|SCHEMA|TYPE|VIEW|MATERIALIZED)\b|\bENABLE[[:space:]]+ROW[[:space:]]+LEVEL[[:space:]]+SECURITY\b|\bSECURITY[[:space:]]+DEFINER\b|\bauth\.(uid|jwt|role)\(\)|createClient\([^)]*supabase|\.raw\(|\bsql\`|\bdb\.query\(|\bpool\.query\(" "$DIFF"
+}
+
 ANGLES=("bugs" "security")
 
 if has_seo_file || has_seo_diff_token; then
@@ -83,6 +107,10 @@ fi
 
 if has_react_signal; then
   ANGLES+=("react")
+fi
+
+if has_database_file || has_database_diff_token; then
+  ANGLES+=("database")
 fi
 
 # Apply disable list. bugs + security cannot be disabled.

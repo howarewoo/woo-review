@@ -1,6 +1,6 @@
 # woo-review
 
-A portable AI **skill** that turns any coding agent into a parallel PR review swarm. One slash command spawns specialized sub-agents (bugs, security, SEO, design, React), runs a skeptical validator, and — if you point it at a GitHub PR — posts a single batched review.
+A portable AI **skill** that turns any coding agent into a parallel PR review swarm. One slash command spawns specialized sub-agents (bugs, security, SEO, design, React, database), runs a skeptical validator, and — if you point it at a GitHub PR — posts a single batched review.
 
 The companion GitHub Action is an **extension** of the skill: same prompts, same angles, same validator, just packaged for CI.
 
@@ -26,7 +26,7 @@ woo-review status      # Show current PR review state
 When you invoke `/woo-review` the host agent:
 
 1. **Prefetches** diff + metadata + rules into `/tmp/pr-review/`.
-2. **Detects** which angles apply (always-on: `bugs`, `security`; conditional: `seo`, `aeo`, `design`, `react`).
+2. **Detects** which angles apply (always-on: `bugs`, `security`; conditional: `seo`, `aeo`, `design`, `react`, `database`).
 3. **Spawns one sub-agent per angle in parallel** (Claude Code Task, Cursor subagents, Gemini CLI sequential loop fallback — host-agnostic).
 4. **Validates** all findings through a Skeptical Validator pass (dedupe, defense-attorney audit, severity downgrade only).
 5. **Reports** locally OR posts one batched GitHub Review when a PR# was given.
@@ -41,7 +41,8 @@ flowchart TD
     C -->|llms.txt, pricing.md, AI crawler tokens, JSON-LD| D3a[aeo]
     C -->|*.tsx/css/vue/svelte| D4[design]
     C -->|*.tsx/jsx + react dep| D6[react]
-    D1 & D2 & D3 & D3a & D4 & D6 --> E[Parallel sub-agents<br/>one per angle]
+    C -->|*.sql, migrations/, SQL DDL/RLS tokens| D7[database]
+    D1 & D2 & D3 & D3a & D4 & D6 & D7 --> E[Parallel sub-agents<br/>one per angle]
     E --> F[Skeptical Validator<br/>dedupe · defense-attorney · severity downgrade only]
     F --> G{PR# given?}
     G -->|no| H[Local report]
@@ -63,6 +64,7 @@ The skill calls into established domain tools instead of re-implementing them:
 | [millionco/react-doctor](https://github.com/millionco/react-doctor) | `react` | `npx -y react-doctor --diff <base> --offline` |
 | [openai/security-best-practices](https://www.skills.sh/openai/skills/security-best-practices) | `security` | Language/framework-specific rubric loaded from `openai/skills` `references/`; fetched on demand via `gh api` if not installed locally |
 | [pbakaus/impeccable](https://github.com/pbakaus/impeccable) | `design` | `npx -y impeccable detect --json` (one run, drives quant + qual passes) |
+| [supabase/supabase-postgres-best-practices](https://www.skills.sh/supabase/agent-skills/supabase-postgres-best-practices) | `database` | Referenced from `skills/woo-review/prompts/angles/database.md`; rule families (`security-*`, `query-*`, `schema-*`, `conn-*`, `lock-*`, `data-*`) fetched on demand via `gh api` |
 
 The audit rubrics live in `skills/woo-review/prompts/` so the skill is self-sufficient — recommended skills only enrich the host agent's general vocabulary.
 
@@ -78,6 +80,7 @@ The audit rubrics live in `skills/woo-review/prompts/` so the skill is self-suff
 | `aeo` | no | `robots.txt`, `llms.txt`, `pricing.{md,txt}`, `*.{md,mdx,html}`, or diff body contains AI-crawler tokens (`GPTBot`, `PerplexityBot`, `ClaudeBot`, `Google-Extended`, `anthropic-ai`) or JSON-LD `FAQPage`/`HowTo`/`Article`/`Product`/`ItemList`/`Review` types | LLM + `coreyhaines31/ai-seo` rubric (embedded in `skills/woo-review/prompts/angles/aeo.md`) |
 | `design` | no | `*.{tsx,jsx,vue,svelte,html,css,scss,sass,less,styl,astro}` | LLM + `impeccable detect` (one run; quantitative pass from JSON, qualitative critique scoped to flagged files) |
 | `react` | no | `*.{tsx,jsx}` AND `react` in `package.json` | `react-doctor` + LLM |
+| `database` | no | `*.sql`, `(db\|supabase\|prisma)/migrations/`, `prisma/schema.prisma`, `drizzle.config.*`, `drizzle/`, `knexfile.*`, `supabase/(config.toml\|seed.sql)`, OR SQL DDL / RLS tokens / Supabase client / ORM raw-SQL call sites in diff | LLM + `supabase/supabase-postgres-best-practices` rubric (fetched via `gh api`) |
 
 ---
 
@@ -123,7 +126,7 @@ The CI pipeline mirrors the skill's swarm 1:1 — detection job → matrix of an
 |---|---|---|
 | `provider` | `""` | `anthropic`, `openai`, `google`, `openrouter`. Auto-detected from supplied secret. |
 | `mode` | `full` | `full`, `detect`, `review`, `validate`. Reusable workflow handles wiring. |
-| `disable_angles` | `""` | CSV of optional angles to skip. `bugs` and `security` are non-negotiable. |
+| `disable_angles` | `""` | CSV of optional angles to skip (e.g. `seo,aeo,design,react,database`). `bugs` and `security` are non-negotiable. |
 | `max_turns` | `30` | Agent loop cap (Anthropic; other providers use their equivalent). |
 
 ---

@@ -245,6 +245,90 @@ DIFF
 : > "$OUTPUT_FILE"
 run_case "faq-schema-mdx-triggers-aeo" "bugs,security,aeo"
 
+# --- Case 11: Supabase migration *.sql triggers database (and aeo via .mdx fileset is unrelated).
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "5060da7a",
+  "baseRefName": "main",
+  "title": "feat(db): add posts table with RLS",
+  "body": "",
+  "files": [
+    {"path": "supabase/migrations/20260520_posts.sql", "additions": 30, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/supabase/migrations/20260520_posts.sql b/supabase/migrations/20260520_posts.sql
++CREATE TABLE posts (id uuid primary key, author_id uuid references users(id));
++ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
++CREATE POLICY "own posts" ON posts USING (author_id = auth.uid());
+DIFF
+: > "$OUTPUT_FILE"
+run_case "supabase-migration-triggers-database" "bugs,security,database"
+
+# --- Case 12: prisma/schema.prisma change triggers database (no SQL body needed — path alone).
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "9123aabb",
+  "baseRefName": "main",
+  "title": "feat(prisma): add Order model",
+  "body": "",
+  "files": [
+    {"path": "prisma/schema.prisma", "additions": 12, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/prisma/schema.prisma b/prisma/schema.prisma
++model Order {
++  id     String @id @default(uuid())
++  userId String
++}
+DIFF
+: > "$OUTPUT_FILE"
+run_case "prisma-schema-triggers-database" "bugs,security,database"
+
+# --- Case 13: TS file with db.query template literal triggers database (ORM call site).
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "abc01234",
+  "baseRefName": "main",
+  "title": "feat(api): add lookup query",
+  "body": "",
+  "files": [
+    {"path": "src/server/lookup.ts", "additions": 8, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/src/server/lookup.ts b/src/server/lookup.ts
++export async function lookup(id: string) {
++  return db.query("SELECT id, name FROM users WHERE id = $1", [id]);
++}
+DIFF
+: > "$OUTPUT_FILE"
+run_case "db-query-token-triggers-database" "bugs,security,database"
+
+# --- Case 14: docs prose mentioning "table" / "index" must NOT trigger database (regression guard).
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "deadc0de",
+  "baseRefName": "main",
+  "title": "docs: update README",
+  "body": "",
+  "files": [
+    {"path": "docs/intro.md", "additions": 4, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/docs/intro.md b/docs/intro.md
++You can see the table of contents below.
++The index lists every page in alphabetical order.
+DIFF
+: > "$OUTPUT_FILE"
+run_case "docs-prose-no-database-trigger" "bugs,security,aeo"
+
 if [ $fail -ne 0 ]; then
   echo "TESTS FAILED"
   exit 1
