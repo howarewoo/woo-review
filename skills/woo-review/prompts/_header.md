@@ -166,11 +166,14 @@ else:
 comments = []
 for f in findings:
     # Inline comment format: bold title, issue description, recommended fix,
-    # trailing attribution footer naming the angle agent that flagged it.
+    # trailing attribution footer naming the severity + angle agent that
+    # flagged the finding (plus a "blocking" tag when blocking == true).
     title = f["title"].strip()
     description = f["description"].strip()
     fix = (f.get("fix") or "").strip()
     angle = (f.get("angle") or "").strip()
+    severity = (f.get("severity") or "").strip().upper()
+    blocking = bool(f.get("blocking", False))
 
     body = f"**{title}**\n\n{description}"
     if fix:
@@ -191,11 +194,17 @@ for f in findings:
         safe = "\n".join(safe_lines)
         body += f"\n\n```suggestion\n{safe}\n```"
 
-    # Attribution footer: which angle agent found this. Whitelist against the
-    # known angle set so a malformed/garbage `angle` value cannot inject text
-    # into the rendered comment.
+    # Attribution footer: severity + which angle agent found this. Both values
+    # are whitelisted against their known sets so malformed/garbage input
+    # cannot inject text into the rendered comment.
+    footer_parts = []
+    if severity in {"HIGH", "MEDIUM", "LOW"}:
+        sev_tag = f"{severity} · BLOCKING" if blocking else severity
+        footer_parts.append(f"<strong>{sev_tag}</strong>")
     if angle in {"bugs","security","conventions","seo","aeo","design","react","database"}:
-        body += f"\n\n<sub>— flagged by the <code>{angle}</code> agent</sub>"
+        footer_parts.append(f"flagged by the <code>{angle}</code> agent")
+    if footer_parts:
+        body += "\n\n<sub>— " + " · ".join(footer_parts) + "</sub>"
 
     comments.append({
         "path": f["file"],
@@ -274,15 +283,15 @@ Every inline comment posted to GitHub MUST follow this four-part structure, asse
 
 Fix: <fix>
 
-<sub>— flagged by the <code><angle></code> agent</sub>
+<sub>— <strong><severity> · BLOCKING</strong> · flagged by the <code><angle></code> agent</sub>
 ```
 
 - **Title** — bold one-liner, ≤60 characters, no trailing punctuation. Names the problem.
 - **Description** — the issue itself: what is broken, why it matters, with diff-anchored evidence. Do NOT prescribe the fix here.
 - **Fix** — recommended change, prefixed literally with `Fix: `. Required for every finding. The body builder appends a GitHub ```suggestion``` block after the `Fix:` line if and only if `fix_type == "suggestion"` AND `suggestion` is a non-empty string; `fix_type == "prose"` renders the recommendation in prose only.
-- **Attribution footer** — small-print line naming the angle agent that flagged the issue (e.g. `<sub>— flagged by the <code>bugs</code> agent</sub>`). The body builder appends this automatically from the finding's `angle` field, which is whitelisted against the known angle set; findings with an unknown/missing angle render without the footer rather than injecting raw text.
+- **Attribution footer** — small-print line carrying the finding's `severity` (HIGH / MEDIUM / LOW; suffixed with `· BLOCKING` when `blocking == true`) and the angle agent that flagged it (e.g. `<sub>— <strong>HIGH · BLOCKING</strong> · flagged by the <code>bugs</code> agent</sub>`). The body builder appends this automatically from the finding's `severity` / `blocking` / `angle` fields. Both `severity` and `angle` are whitelisted against their known sets; unknown/missing values are dropped from the footer rather than injecting raw text. If both are missing, the footer is omitted entirely.
 
-The body builder in the posting step (see python snippet above) renders this format automatically from `title` / `description` / `fix` / `fix_type` / `suggestion` / `angle`. Angle agents and the validator MUST populate `title`, `description`, `fix`, `fix_type`, and `angle` for every finding.
+The body builder in the posting step (see python snippet above) renders this format automatically from `title` / `description` / `fix` / `fix_type` / `suggestion` / `angle` / `severity` / `blocking`. Angle agents and the validator MUST populate `title`, `description`, `fix`, `fix_type`, `angle`, `severity`, and `blocking` for every finding.
 
 ## Blocking Criteria
 
