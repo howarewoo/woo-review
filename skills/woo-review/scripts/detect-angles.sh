@@ -182,3 +182,15 @@ printf '%s\n' "${ANGLES[@]}" > "$OUTDIR/angles.txt"
 echo "angles=$CSV" >> "$GITHUB_OUTPUT"
 echo "angles_json=$JSON_ARRAY" >> "$GITHUB_OUTPUT"
 echo "Enabled review angles: $CSV"
+
+# Issue #14: chunks_json output drives the second dimension of the GHA matrix.
+# When chunks.txt is absent (sub-threshold diff), emit `[""]` — one job per
+# angle, no chunking. When present, emit the chunk IDs verbatim so the matrix
+# fans out as angles × chunks.
+if [ -f "$OUTDIR/chunks.txt" ] && [ -s "$OUTDIR/chunks.txt" ]; then
+  CHUNKS_JSON=$(jq -R . "$OUTDIR/chunks.txt" | jq -s -c .)
+  echo "chunks_json=$CHUNKS_JSON" >> "$GITHUB_OUTPUT"
+  echo "Chunked review: $(jq 'length' <<<"$CHUNKS_JSON") chunk(s) × ${#ANGLES[@]} angle(s) = $(( $(jq 'length' <<<"$CHUNKS_JSON") * ${#ANGLES[@]} )) job(s)"
+else
+  echo 'chunks_json=[""]' >> "$GITHUB_OUTPUT"
+fi

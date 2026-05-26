@@ -48,20 +48,22 @@ Perform all phases (1 through 4) sequentially.
 
 Read `/tmp/pr-review/diff.txt`, `/tmp/pr-review/meta.json`, `/tmp/pr-review/angles.txt`. Draft a 1–2 sentence summary, change bullets, files-by-category, optional manual test plan — all destined for the **Review body** in Phase 4. Do NOT call `gh pr edit`; the PR title and description must remain untouched.
 
-## Phase 2 — Per-Angle Audit
+## Phase 2 — Per-Angle Audit (chunk-aware)
 
-For each angle listed in `/tmp/pr-review/angles.txt`:
+If `/tmp/pr-review/chunks.txt` exists (issue #14), the unit of work is `(angle, chunk_id)` rather than plain angle: each agent reads `/tmp/pr-review/diff.chunk-<id>.txt` and writes findings to `/tmp/pr-review/findings.<angle>.<chunk_id>.json`. When `chunks.txt` is absent, the angle agent uses `diff.txt` and `findings.<angle>.json` as before.
 
-- If the OpenCode runtime supports parallel subagents, spawn one subagent per angle in parallel.
-- Otherwise run them sequentially in the order listed.
+For each angle in `/tmp/pr-review/angles.txt` (× each chunk when chunked):
+
+- If the OpenCode runtime supports parallel subagents, spawn one subagent per `(angle, chunk_id)` (or per angle in the unchunked case) in parallel.
+- Otherwise run them sequentially in listed order.
 
 Each angle agent:
 
 1. Loads `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md`.
-2. Executes the angle prompt. For `react` run `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline`.
-3. Writes findings to `/tmp/pr-review/findings.<angle>.json` (JSON array per the schema in `_header.md`).
+2. Executes the angle prompt against its assigned diff. For `react` run `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline`.
+3. Writes findings to `/tmp/pr-review/findings.<angle>.json` (or `findings.<angle>.<chunk_id>.json` in chunked mode) — JSON array per the schema in `_header.md`.
 
-Stay within each angle's scope; do not let one angle flag issues that belong to another.
+Stay within each angle's scope; do not let one angle flag issues that belong to another. `merge-findings.sh` (Phase 3) handles within-angle dedup across chunks.
 
 ## Phase 3 — Adversarial Validation (prosecutor + defender, sequential)
 

@@ -42,15 +42,17 @@ Perform all phases (1 through 4) sequentially.
 
 Read `/tmp/pr-review/diff.txt`, `/tmp/pr-review/meta.json`, `/tmp/pr-review/angles.txt`. Draft a 1–2 sentence summary, change bullets, files-by-category, optional manual test plan — all destined for the **Review body** in Phase 4. Do NOT call `gh pr edit`; the PR title and description must remain untouched.
 
-## Phase 2 — Per-Angle Audit (sequential loop)
+## Phase 2 — Per-Angle Audit (sequential loop, chunk-aware)
 
-For each angle listed in `/tmp/pr-review/angles.txt`, in order:
+If `/tmp/pr-review/chunks.txt` exists (issue #14), the outer loop iterates `(angle, chunk_id)` pairs instead of plain angles. For each pair, read the chunk-specific diff at `/tmp/pr-review/diff.chunk-<id>.txt` and write findings to `/tmp/pr-review/findings.<angle>.<chunk_id>.json`. When `chunks.txt` is absent, the inner steps use `diff.txt` and `findings.<angle>.json` as before.
+
+For each angle listed in `/tmp/pr-review/angles.txt`, in order (× each chunk when chunked):
 
 1. Read `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md`.
-2. Execute the angle prompt against the diff. For `react` run `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline`.
-3. Write the angle's findings to `/tmp/pr-review/findings.<angle>.json` (JSON array conforming to the schema in `_header.md`).
+2. Execute the angle prompt against the angle's diff (full or chunk-specific). For `react` run `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline`.
+3. Write the angle's findings to `/tmp/pr-review/findings.<angle>.json` (or `findings.<angle>.<chunk_id>.json` in chunked mode) — JSON array conforming to the schema in `_header.md`.
 
-Stay within each angle's scope; do not let `bugs` flag a design issue or vice versa.
+Stay within each angle's scope; do not let `bugs` flag a design issue or vice versa. `merge-findings.sh` (Phase 3) handles within-angle dedup across chunks.
 
 ## Phase 3 — Adversarial Validation (prosecutor + defender, sequential)
 
