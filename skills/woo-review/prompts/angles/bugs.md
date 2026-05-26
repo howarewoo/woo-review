@@ -29,4 +29,4 @@ tier: standard
 - `MEDIUM` + `blocking: false` — likely-incorrect behavior under common conditions but not provable from diff alone.
 - `LOW` + `blocking: false` — missing test, defensive coding improvement.
 
-**Output.** Write findings as a JSON array to `/tmp/pr-review/findings.bugs.json` using the schema in `_header.md`. Each finding gets `"angle": "bugs"` and MUST populate `title` (bold headline ≤60 chars), `description` (the issue only — no fix), and `fix` (recommended change in prose). Add `suggestion` only when a verbatim replacement snippet is safe.
+**Output.** Write findings as a JSON array to `/tmp/pr-review/findings.bugs.json` using the schema in `_header.md`. Each finding gets `"angle": "bugs"` and MUST populate `title` (bold headline ≤60 chars), `description` (the issue only — no fix), `fix` (recommended change in prose), and `fix_type`. Set `fix_type: "suggestion"` only when a ≤10-line single-file drop-in replacement at `line` is safe — and populate `suggestion` accordingly. Otherwise set `fix_type: "prose"` with `suggestion: null`. See `_header.md` for the full rule.

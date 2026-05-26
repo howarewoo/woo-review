@@ -216,7 +216,8 @@ Now act as the **Skeptical Validator** by following `prompts/validator.md`:
 2. Defense-attorney audit: try to prove each finding wrong. Drop pedantic / style-only / lint-catchable / "maybe" findings.
 3. Severity check: you MAY downgrade (HIGH → MEDIUM, blocking true → false). You MAY NOT upgrade.
 4. Comment-shape check: every surviving finding has `title` (bold headline ≤60 chars), `description` (issue only, no fix), and `fix` (recommended change in prose). Split overloaded `description` fields when an angle collapsed them.
-5. Write the surviving array to `/tmp/pr-review/findings.json`.
+5. `fix_type` enforcement: every surviving finding MUST carry `fix_type` (`"suggestion"` or `"prose"`). Downgrade any `fix_type: "suggestion"` that violates the ≤10-line / single-file / self-contained / no-placeholder / no-fence-break rules — set `fix_type: "prose"` and `suggestion: null`. Full rule list lives in `prompts/validator.md` step 7.
+6. Write the surviving array to `/tmp/pr-review/findings.json`.
 
 ### Stage 5 — Report
 
