@@ -15,7 +15,10 @@
 #               ClaudeBot / Google-Extended / anthropic-ai) or JSON-LD schema
 #               types (FAQPage / HowTo / Article / Product / ItemList)
 #   design    — *.{tsx,jsx,vue,svelte,html,css,scss,sass,less,styl,astro}
-#   react     — *.{tsx,jsx} AND consumer repo's package.json declares react dep
+#   react     — *.{tsx,jsx} in the diff. The angle handles non-React .tsx
+#               (e.g. Solid, Preact-only) gracefully, so a package.json check is
+#               unnecessary and breaks monorepos where react lives in workspace
+#               packages, not the root manifest.
 #   database  — *.sql, migrations/ trees (db/supabase/prisma), prisma/schema.prisma,
 #               drizzle.config.{ts,js,mjs}, drizzle/, knexfile.{ts,js},
 #               supabase/(config.toml|seed.sql), OR diff body contains SQL DDL
@@ -81,10 +84,7 @@ has_design_file() {
 }
 
 has_react_signal() {
-  echo "$CHANGED_PATHS" | grep -qE '\.(tsx|jsx)$' || return 1
-  local pkg="${GITHUB_WORKSPACE:-.}/package.json"
-  [ -f "$pkg" ] || return 1
-  jq -e '(.dependencies // {}) + (.devDependencies // {}) | has("react")' "$pkg" >/dev/null 2>&1
+  echo "$CHANGED_PATHS" | grep -qE '\.(tsx|jsx)$'
 }
 
 has_database_file() {
