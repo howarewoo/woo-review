@@ -28,7 +28,7 @@ inputs:
     required: false
     default: ''
   mode:
-    description: 'Execution mode: full (sequential) | detect | review | validate'
+    description: 'Execution mode: full (sequential) | detect | review | validate-prosecutor | validate. The adversarial validator runs as two passes: validate-prosecutor first (writes findings.prosecutor.json), then validate (writes findings.defender.json, runs intersect-findings.sh, and posts the review).'
     required: false
     default: 'full'
   angle:
@@ -136,22 +136,26 @@ runs:
 
     - name: Detect review angles
       id: angles
-      if: steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'detect' || inputs.mode == 'validate')
+      if: steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'detect' || inputs.mode == 'validate' || inputs.mode == 'validate-prosecutor')
       shell: bash
       env:
         GITHUB_WORKSPACE: ${{ github.workspace }}
         INPUT_DISABLE_ANGLES: ${{ inputs.disable_angles }}
       run: |
-        if [ "${{ inputs.mode }}" = "validate" ] && [ -f "/tmp/pr-review/angles.txt" ]; then
-          CSV=$(paste -sd "," /tmp/pr-review/angles.txt)
-          echo "angles=$CSV" >> "$GITHUB_OUTPUT"
-          echo "Loaded angles from angles.txt: $CSV"
+        if [ "${{ inputs.mode }}" = "validate" ] || [ "${{ inputs.mode }}" = "validate-prosecutor" ]; then
+          if [ -f "/tmp/pr-review/angles.txt" ]; then
+            CSV=$(paste -sd "," /tmp/pr-review/angles.txt)
+            echo "angles=$CSV" >> "$GITHUB_OUTPUT"
+            echo "Loaded angles from angles.txt: $CSV"
+          else
+            bash "${{ github.action_path }}/skills/woo-review/scripts/detect-angles.sh"
+          fi
         else
           bash "${{ github.action_path }}/skills/woo-review/scripts/detect-angles.sh"
         fi
 
-    - name: Merge findings (validate mode)
-      if: steps.prefetch.outputs.skip != 'true' && inputs.mode == 'validate'
+    - name: Merge findings (validate modes)
+      if: steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'validate' || inputs.mode == 'validate-prosecutor')
       shell: bash
       run: bash "${{ github.action_path }}/skills/woo-review/scripts/merge-findings.sh"
 
@@ -167,12 +171,16 @@ runs:
 
     - name: Load prompt
       id: load-prompt
-      if: steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review' || inputs.mode == 'validate')
+      if: steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review' || inputs.mode == 'validate' || inputs.mode == 'validate-prosecutor')
       shell: bash
       env:
         PROVIDER: ${{ steps.detect.outputs.provider }}
         ACTION_PATH: ${{ github.action_path }}/skills/woo-review
-        INPUT_PROMPT_OVERRIDE: ${{ (inputs.mode == 'validate' && format('{0}/skills/woo-review/prompts/validator.md', github.action_path)) || inputs.prompt_override }}
+        # The adversarial validator runs as two passes against the same `raw_findings.json`.
+        # `validate-prosecutor` mode loads validator-prosecutor.md (inclusive bias);
+        # `validate` mode loads validator.md (defender bias) which runs the intersect
+        # script + posts the final review. See issue #13.
+        INPUT_PROMPT_OVERRIDE: ${{ (inputs.mode == 'validate' && format('{0}/skills/woo-review/prompts/validator.md', github.action_path)) || (inputs.mode == 'validate-prosecutor' && format('{0}/skills/woo-review/prompts/validator-prosecutor.md', github.action_path)) || inputs.prompt_override }}
         PR_NUMBER: ${{ steps.pr.outputs.number }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         EVENT_NAME: ${{ github.event_name }}
@@ -186,7 +194,7 @@ runs:
 
     - name: Run review (Anthropic)
       id: run-anthropic
-      if: steps.detect.outputs.provider == 'anthropic' && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review' || inputs.mode == 'validate')
+      if: steps.detect.outputs.provider == 'anthropic' && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review' || inputs.mode == 'validate' || inputs.mode == 'validate-prosecutor')
       uses: anthropics/claude-code-action@537ffff2eff706bd7e3e1c3daf2d4b39067a9f85 # v1
       with:
         claude_code_oauth_token: ${{ inputs.anthropic_token }}
@@ -257,7 +265,7 @@ runs:
 
     - name: Run review (OpenAI Codex)
       id: run-openai
-      if: steps.detect.outputs.provider == 'openai' && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review' || inputs.mode == 'validate')
+      if: steps.detect.outputs.provider == 'openai' && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review' || inputs.mode == 'validate' || inputs.mode == 'validate-prosecutor')
       uses: openai/codex-action@a26d2d4d8b78a694338b8e3715c3630254340b2c # v1 (== v1.8 as of 2026-04-29)
       with:
         openai-api-key: ${{ inputs.openai_api_key }}
@@ -276,7 +284,7 @@ runs:
 
     - name: Run review (Google Gemini)
       id: run-google
-      if: steps.detect.outputs.provider == 'google' && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review' || inputs.mode == 'validate')
+      if: steps.detect.outputs.provider == 'google' && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review' || inputs.mode == 'validate' || inputs.mode == 'validate-prosecutor')
       uses: google-github-actions/run-gemini-cli@f77273f4c914e4bf38440cf36a0369cb64a37489 # v0
       with:
         gemini_api_key: ${{ inputs.gemini_api_key }}
@@ -293,7 +301,7 @@ runs:
 
     - name: Run review (OpenRouter via opencode)
       id: run-opencode
-      if: steps.detect.outputs.provider == 'openrouter' && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review' || inputs.mode == 'validate')
+      if: steps.detect.outputs.provider == 'openrouter' && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review' || inputs.mode == 'validate' || inputs.mode == 'validate-prosecutor')
       # TODO: pin to commit SHA once sst/opencode publishes a verifiable github-v1.15.10 ref.
       # The repo appears to have moved to anomalyco/opencode; verify upstream before pinning.
       uses: sst/opencode/github@v1.15.10

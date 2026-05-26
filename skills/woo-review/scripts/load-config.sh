@@ -15,6 +15,8 @@
 #   models.standard     str
 #   models.deep         str
 #   fix_commands        list[str]  (consumed by issue #15 --loop mode)
+#   disable_adversarial bool       (cost-sensitive opt-out for issue #13's
+#                                   prosecutor+defender pipeline; default false)
 
 set -euo pipefail
 
@@ -53,7 +55,7 @@ VALID_ANGLES = {"bugs", "security", "conventions", "seo", "aeo", "design", "reac
 VALID_FLOORS = {"low", "medium", "high"}
 TOP_KEYS = {
     "angles", "severity_floor", "ignore", "project_rules",
-    "authors_skip", "models", "fix_commands",
+    "authors_skip", "models", "fix_commands", "disable_adversarial",
 }
 MODEL_TIERS = {"fast", "standard", "deep"}
 
@@ -136,6 +138,12 @@ for key in ("ignore", "project_rules", "authors_skip", "fix_commands"):
     if key in raw:
         require_list_of_strings(raw[key], key)
         out[key] = list(raw[key])
+
+if "disable_adversarial" in raw:
+    val = raw["disable_adversarial"]
+    if not isinstance(val, bool):
+        loud("`disable_adversarial` must be a boolean (true/false), got {}".format(type(val).__name__))
+    out["disable_adversarial"] = val
 
 if "models" in raw:
     models = raw["models"]

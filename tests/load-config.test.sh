@@ -172,7 +172,37 @@ assert_json_eq "models-passthrough" '.models.standard' "openai/gpt-5" || ok=0
 assert_json_eq "models-passthrough" '.models.deep' "anthropic/claude-opus-4-7" || ok=0
 [ $ok -eq 1 ] && echo "ok   models-passthrough"
 
-# ---------- Case 9: empty file -> empty {} JSON ----------
+# ---------- Case 9a: disable_adversarial bool round-trips ----------
+cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+disable_adversarial: true
+YAML
+bash "$SCRIPT" >/dev/null
+if [ "$(jq -r '.disable_adversarial' "$PREFETCH/config.json")" = "true" ]; then
+  echo "ok   disable-adversarial-bool-roundtrip"
+else
+  echo "FAIL disable-adversarial-bool-roundtrip: got $(jq -r '.disable_adversarial' "$PREFETCH/config.json")"
+  fail=1
+fi
+
+# ---------- Case 9b: disable_adversarial non-bool rejected ----------
+cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+disable_adversarial: "yes"
+YAML
+err_out="$WORK/err.txt"
+if bash "$SCRIPT" 2>"$err_out" >/dev/null; then
+  echo "FAIL disable-adversarial-non-bool: loader exited 0"
+  fail=1
+else
+  if grep -q 'disable_adversarial' "$err_out" && grep -q 'must be a boolean' "$err_out"; then
+    echo "ok   disable-adversarial-non-bool-rejected"
+  else
+    echo "FAIL disable-adversarial-non-bool: wrong error"
+    cat "$err_out"
+    fail=1
+  fi
+fi
+
+# ---------- Case 10: empty file -> empty {} JSON ----------
 : > "$GITHUB_WORKSPACE/.woo-review.yml"
 bash "$SCRIPT" >/dev/null
 if [ "$(jq -r 'keys | length' "$PREFETCH/config.json")" = "0" ]; then

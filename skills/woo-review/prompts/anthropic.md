@@ -87,16 +87,29 @@ Read `/tmp/pr-review/angles.txt`. Launch **one subagent per enabled angle in the
 
 If the Task tool caps practical parallelism below the angle count, spawn the angles in two waves: `[bugs, security, seo, aeo]` then `[design, react, database]`. Do not skip any enabled angle.
 
-## Step 3 — Validation (Opus 4.7, only if any findings)
+## Step 3 — Adversarial Validation (Opus 4.7, prosecutor + defender)
 
 Skip if every per-angle file is empty / missing; status is `APPROVED`.
 
-Otherwise launch one `claude-opus-4-7` validator subagent with the full diff and the merged findings (concat all `findings.<angle>.json` arrays). For each finding:
+Otherwise this step runs **two** sequential `claude-opus-4-7` validator subagents with opposing biases, then a deterministic intersection (issue #13). The intersection is the high-confidence set of findings the author sees.
 
-1. **Verdict**: YES (confirmed) or NO (false positive) with brief reasoning. Only YES survives.
-2. **Severity / blocking**: confirm or downgrade the `blocking` flag. May downgrade `true → false`. May NOT upgrade `false → true`.
+Read `disable_adversarial` from `/tmp/pr-review/config.json`:
 
-Write surviving findings to `/tmp/pr-review/findings.json` per the schema in `_header.md`.
+```bash
+DISABLE_ADV="$(jq -r '.disable_adversarial // false' /tmp/pr-review/config.json 2>/dev/null || echo false)"
+```
+
+### Step 3a — Prosecutor pass (skip if `DISABLE_ADV == true`)
+
+Launch one `claude-opus-4-7` subagent with `$WOO_REVIEW_ACTION_PATH/prompts/validator-prosecutor.md` as its prompt. It assumes each finding is real and only drops the clearly-wrong ones. It writes `/tmp/pr-review/findings.prosecutor.json` and EXITS — it MUST NOT post a review.
+
+### Step 3b — Defender pass
+
+Launch one `claude-opus-4-7` subagent with `$WOO_REVIEW_ACTION_PATH/prompts/validator.md` as its prompt. It applies the strict "defense attorney" filter — drops pedantic / lint-catchable / maybe-issues / placeholder-suggestion findings — and writes `/tmp/pr-review/findings.defender.json`. It then runs `bash $WOO_REVIEW_ACTION_PATH/scripts/intersect-findings.sh` which produces the final `/tmp/pr-review/findings.json` (intersection of prosecutor + defender; when adversarial is disabled or the prosecutor file is absent, the script copies defender output verbatim). The defender subagent continues into Step 4 below to post the review.
+
+The two passes MUST be sequential — the defender runs the intersect script after writing its output, so the prosecutor's file must already exist when adversarial mode is on.
+
+Per-pass and disagreement counts land in `/tmp/pr-review/validator-metrics.json` for downstream telemetry.
 
 ## Step 4 — Submit Native PR Review
 

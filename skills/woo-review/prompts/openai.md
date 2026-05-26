@@ -52,15 +52,31 @@ For each angle listed in `/tmp/pr-review/angles.txt`, in order:
 
 Stay within each angle's scope; do not let `bugs` flag a design issue or vice versa.
 
-## Phase 3 — Self-Validation
+## Phase 3 — Adversarial Validation (prosecutor + defender, sequential)
 
-Merge all `findings.<angle>.json` arrays. For each finding:
+Merge all `findings.<angle>.json` arrays into `/tmp/pr-review/raw_findings.json` (use `$WOO_REVIEW_ACTION_PATH/scripts/merge-findings.sh`).
 
-1. Real, in-diff, this-PR-introduced? If NO → drop.
-2. Confirm or downgrade `blocking`. Never upgrade.
-3. Dedupe across angles: if two angles flag identical `(file, line, description-equivalent)`, keep one (prefer the angle most-specific to the issue type).
+Then run TWO opposing-bias validation passes followed by a deterministic intersection (issue #13). Codex Action has no subagent primitive, so this is sequenced inside the single agentic loop using `bash` to invoke the intersect script. Read `disable_adversarial` first:
 
-Persist surviving findings to `/tmp/pr-review/findings.json` per the schema in `_header.md`.
+```bash
+DISABLE_ADV="$(jq -r '.disable_adversarial // false' /tmp/pr-review/config.json 2>/dev/null || echo false)"
+```
+
+### Phase 3a — Prosecutor pass (skip if `DISABLE_ADV == true`)
+
+Apply `$WOO_REVIEW_ACTION_PATH/prompts/validator-prosecutor.md` against `raw_findings.json`. Bias: assume each finding is real; drop only the demonstrably wrong. Write surviving findings to `/tmp/pr-review/findings.prosecutor.json`.
+
+### Phase 3b — Defender pass
+
+Apply `$WOO_REVIEW_ACTION_PATH/prompts/validator.md` against `raw_findings.json`. Bias: try to prove each finding wrong; drop pedantic / lint-catchable / "maybe" findings; enforce the comment-shape + `fix_type` rules. Write surviving findings to `/tmp/pr-review/findings.defender.json`.
+
+### Phase 3c — Intersect
+
+```bash
+bash "$WOO_REVIEW_ACTION_PATH/scripts/intersect-findings.sh"
+```
+
+This produces the final `/tmp/pr-review/findings.json` (intersection by `(file, line, title-stem)`; severity = min, blocking = AND). When `disable_adversarial == true` or the prosecutor file is absent, the script copies defender output verbatim. Per-pass and disagreement counts land in `/tmp/pr-review/validator-metrics.json`.
 
 ## Phase 4 — Submit Native PR Review
 

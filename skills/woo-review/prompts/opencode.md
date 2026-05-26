@@ -63,15 +63,29 @@ Each angle agent:
 
 Stay within each angle's scope; do not let one angle flag issues that belong to another.
 
-## Phase 3 — Self-Validation
+## Phase 3 — Adversarial Validation (prosecutor + defender, sequential)
 
-Sequential (do not parallelize validation). Merge all `findings.<angle>.json`. For each finding:
+Merge all `findings.<angle>.json` into `/tmp/pr-review/raw_findings.json` via `$WOO_REVIEW_ACTION_PATH/scripts/merge-findings.sh`. Validation does NOT parallelize; it runs the two opposing-bias passes in sequence, followed by a deterministic intersection (issue #13). Read `disable_adversarial` first:
 
-1. Real, in-diff, this-PR-introduced? If NO → drop.
-2. Confirm or downgrade `blocking`. Never upgrade.
-3. Dedupe across angles.
+```bash
+DISABLE_ADV="$(jq -r '.disable_adversarial // false' /tmp/pr-review/config.json 2>/dev/null || echo false)"
+```
 
-Persist to `/tmp/pr-review/findings.json` per `_header.md`.
+### Phase 3a — Prosecutor pass (skip if `DISABLE_ADV == true`)
+
+If the OpenCode runtime supports per-call routing, spawn a `deep`-tier subagent with `$WOO_REVIEW_ACTION_PATH/prompts/validator-prosecutor.md`; otherwise apply the same prompt within the main loop. Bias: assume each finding is real; drop only the demonstrably wrong. Write surviving findings to `/tmp/pr-review/findings.prosecutor.json`.
+
+### Phase 3b — Defender pass
+
+Spawn another `deep`-tier subagent (or continue the main loop) with `$WOO_REVIEW_ACTION_PATH/prompts/validator.md`. Bias: defense attorney — drop pedantic / lint-catchable / "maybe" findings, enforce comment-shape + `fix_type` rules. Write surviving findings to `/tmp/pr-review/findings.defender.json`.
+
+### Phase 3c — Intersect
+
+```bash
+bash "$WOO_REVIEW_ACTION_PATH/scripts/intersect-findings.sh"
+```
+
+Produces `/tmp/pr-review/findings.json` (intersection by `(file, line, title-stem)`; severity = min, blocking = AND). When adversarial is disabled or the prosecutor file is absent, copies defender output verbatim. Disagreement counts in `/tmp/pr-review/validator-metrics.json`.
 
 ## Phase 4 — Submit Native PR Review
 
