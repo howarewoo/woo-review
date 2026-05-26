@@ -165,10 +165,12 @@ else:
 
 comments = []
 for f in findings:
-    # Inline comment format: bold title, issue description, recommended fix.
+    # Inline comment format: bold title, issue description, recommended fix,
+    # trailing attribution footer naming the angle agent that flagged it.
     title = f["title"].strip()
     description = f["description"].strip()
     fix = (f.get("fix") or "").strip()
+    angle = (f.get("angle") or "").strip()
 
     body = f"**{title}**\n\n{description}"
     if fix:
@@ -188,6 +190,12 @@ for f in findings:
             safe_lines.append(line)
         safe = "\n".join(safe_lines)
         body += f"\n\n```suggestion\n{safe}\n```"
+
+    # Attribution footer: which angle agent found this. Whitelist against the
+    # known angle set so a malformed/garbage `angle` value cannot inject text
+    # into the rendered comment.
+    if angle in {"bugs","security","conventions","seo","aeo","design","react","database"}:
+        body += f"\n\n<sub>— flagged by the <code>{angle}</code> agent</sub>"
 
     comments.append({
         "path": f["file"],
@@ -257,7 +265,7 @@ The validator enforces these rules and will downgrade a violating `fix_type: sug
 
 ### Inline Comment Format (rendered on the PR)
 
-Every inline comment posted to GitHub MUST follow this three-part structure, assembled from the schema fields above:
+Every inline comment posted to GitHub MUST follow this four-part structure, assembled from the schema fields above:
 
 ```
 **<title>**
@@ -265,13 +273,16 @@ Every inline comment posted to GitHub MUST follow this three-part structure, ass
 <description>
 
 Fix: <fix>
+
+<sub>— flagged by the <code><angle></code> agent</sub>
 ```
 
 - **Title** — bold one-liner, ≤60 characters, no trailing punctuation. Names the problem.
 - **Description** — the issue itself: what is broken, why it matters, with diff-anchored evidence. Do NOT prescribe the fix here.
 - **Fix** — recommended change, prefixed literally with `Fix: `. Required for every finding. The body builder appends a GitHub ```suggestion``` block after the `Fix:` line if and only if `fix_type == "suggestion"` AND `suggestion` is a non-empty string; `fix_type == "prose"` renders the recommendation in prose only.
+- **Attribution footer** — small-print line naming the angle agent that flagged the issue (e.g. `<sub>— flagged by the <code>bugs</code> agent</sub>`). The body builder appends this automatically from the finding's `angle` field, which is whitelisted against the known angle set; findings with an unknown/missing angle render without the footer rather than injecting raw text.
 
-The body builder in the posting step (see python snippet above) renders this format automatically from `title` / `description` / `fix` / `fix_type` / `suggestion`. Angle agents and the validator MUST populate `title`, `description`, `fix`, and `fix_type` for every finding.
+The body builder in the posting step (see python snippet above) renders this format automatically from `title` / `description` / `fix` / `fix_type` / `suggestion` / `angle`. Angle agents and the validator MUST populate `title`, `description`, `fix`, `fix_type`, and `angle` for every finding.
 
 ## Blocking Criteria
 
