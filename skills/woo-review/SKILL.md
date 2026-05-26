@@ -40,6 +40,36 @@ The audit frameworks themselves are embedded in `prompts/` (inside this skill bu
 
 Prefetch auto-discovers project rule files (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.windsurfrules`, `GEMINI.md`) at the repo root, and additionally walks up from each changed file path to collect any `AGENTS.md` / `CLAUDE.md` along the way. The discovered content is concatenated (each section prefixed by a `## SOURCE: <path>` header, 100KB cap) into `/tmp/pr-review/rules.md` and surfaced to every angle as additional rubric. When that file is present, an extra `conventions` angle fires; the validator drops any finding that claims a rule violation but cannot quote the rule verbatim. Repos without rule files run unchanged.
 
+## Per-repo Configuration (`.woo-review.yml`)
+
+Drop an optional `.woo-review.yml` at the consumer repo root to tune the review without forking the skill. Prefetch parses it into `/tmp/pr-review/config.json`; downstream stages read from there. Missing file = current behaviour. Invalid YAML or unknown keys → loud `::error file=.woo-review.yml,line=N::<msg>` annotation and the workflow fails (no silent fallback).
+
+```yaml
+# .woo-review.yml — all keys optional
+angles:
+  force: [database]            # always run, even if not auto-detected
+  skip:  [seo]                 # never run (bugs/security cannot be skipped)
+severity_floor: medium         # one of: low | medium | high; drops findings below the floor
+ignore:                        # fnmatch globs; ignored paths skip angle triggers + diff body
+  - "**/*.generated.ts"
+  - "migrations/*.sql"
+project_rules:                 # appended to auto-discovered rules.md
+  - constitution.md
+  - "docs/standards/*.md"
+authors_skip:                  # PR author logins that short-circuit the entire review
+  - "dependabot[bot]"
+  - "renovate[bot]"
+models:                        # per-tier overrides; inputs.model still wins
+  fast:     anthropic/claude-haiku-4-5
+  standard: openai/gpt-5
+  deep:     anthropic/claude-opus-4-7
+fix_commands:                  # reserved for --loop mode (issue #15)
+  - pnpm lint:fix
+  - pnpm format
+```
+
+**Precedence**: for the angle set, `angles.force` beats `angles.skip` when the same angle is listed in both. For model resolution, the action input `inputs.model` beats `models.<tier>` which beats the table default in `prompts/_header.md`. `ignore` is applied to both file paths and the per-file diff sections before angle gates evaluate.
+
 ## `/woo-review` Workflow
 
 When the user invokes `/woo-review [PR#]`, the host agent MUST perform the following stages. **All file paths below are relative to `$WOO_REVIEW_ACTION_PATH`**.
@@ -70,7 +100,7 @@ If `PR_NUMBER` is non-empty, proceed as if it had been passed in. If empty (no o
 ```bash
 mkdir -p /tmp/pr-review
 gh pr diff "$PR_NUMBER" > /tmp/pr-review/diff.txt
-gh pr view "$PR_NUMBER" --json headRefOid,baseRefName,title,body,files \
+gh pr view "$PR_NUMBER" --json headRefOid,baseRefName,title,body,files,author \
   > /tmp/pr-review/meta.json
 ```
 
@@ -94,6 +124,7 @@ git diff --name-only "$BASE"...HEAD \
 ### Stage 2 — Detect Angles
 
 ```bash
+bash "$WOO_REVIEW_ACTION_PATH/scripts/load-config.sh"   # parses .woo-review.yml (no-op if absent)
 bash "$WOO_REVIEW_ACTION_PATH/scripts/detect-angles.sh"
 ```
 

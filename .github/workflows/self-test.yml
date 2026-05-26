@@ -41,6 +41,44 @@ jobs:
       - name: Run detect-angles tests
         run: bash tests/detect-angles.test.sh
 
+      - name: Run load-config tests
+        run: bash tests/load-config.test.sh
+
+      - name: Smoke-test .woo-review.yml end-to-end
+        # Drops a fixture config into a synthetic workspace, runs the
+        # loader directly, then runs detect-angles to confirm `force:` lands
+        # and `skip:` is honored. Validates the artifact tree the prefetch
+        # step would normally build in a real PR run.
+        run: |
+          set -euo pipefail
+          export GITHUB_WORKSPACE="$(mktemp -d)"
+          export GITHUB_OUTPUT="$(mktemp)"
+          mkdir -p /tmp/pr-review
+          cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+          angles:
+            force: [database]
+            skip:  [seo]
+          severity_floor: high
+          YAML
+          cat > /tmp/pr-review/meta.json <<'JSON'
+          {
+            "headRefOid": "deadbeef", "baseRefName": "main",
+            "title": "smoke", "body": "",
+            "files": [{"path": "server/auth.py", "additions": 5, "deletions": 0}]
+          }
+          JSON
+          cat > /tmp/pr-review/diff.txt <<'DIFF'
+          diff --git a/server/auth.py b/server/auth.py
+          +<meta name="robots" content="noindex" />
+          DIFF
+          bash skills/woo-review/scripts/load-config.sh
+          test -f /tmp/pr-review/config.json
+          jq -e '.severity_floor == "high"' /tmp/pr-review/config.json >/dev/null
+          jq -e '.angles.force | index("database")' /tmp/pr-review/config.json >/dev/null
+          bash skills/woo-review/scripts/detect-angles.sh
+          grep -qE '^angles=.*database' "$GITHUB_OUTPUT"
+          ! grep -qE '^angles=.*seo' "$GITHUB_OUTPUT"
+
   review:
     name: Run self-review (manual)
     runs-on: ubuntu-latest

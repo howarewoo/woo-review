@@ -59,7 +59,8 @@ Task({
 Resolution rule per spawn:
 1. Read the angle file's frontmatter `tier:` value.
 2. Look up the Anthropic column in the tier table above.
-3. Pass that slug as `model:` on the Task call.
+3. **Per-repo override**: check `/tmp/pr-review/config.json` for `models.<tier>` (e.g. `jq -r '.models.standard // empty' /tmp/pr-review/config.json`). If non-empty, use that slug instead of the table value.
+4. Pass the resolved slug as `model:` on the Task call.
 
 Do not default the validator to Sonnet — pass `model: "claude-opus-4-7"` explicitly. Opus's stricter false-positive filter pays for itself in review quality.
 

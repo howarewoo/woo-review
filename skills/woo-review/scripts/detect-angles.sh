@@ -32,13 +32,23 @@ set -euo pipefail
 OUTDIR="/tmp/pr-review"
 META="$OUTDIR/meta.json"
 DIFF="$OUTDIR/diff.txt"
+CFG="$OUTDIR/config.json"
 
 if [ ! -f "$META" ] || [ ! -f "$DIFF" ]; then
   echo "::error::prefetch artifacts missing — detect-angles.sh requires $META and $DIFF"
   exit 1
 fi
 
-CHANGED_PATHS=$(jq -r '.files[].path' "$META")
+# Prefer ignore-filtered artifacts when prefetch.sh produced them (.woo-review.yml
+# ignore[] was set). Falls back to the unfiltered originals.
+if [ -f "$OUTDIR/diff.filtered.txt" ]; then
+  DIFF="$OUTDIR/diff.filtered.txt"
+fi
+if [ -f "$OUTDIR/changed-paths.filtered.txt" ]; then
+  CHANGED_PATHS=$(cat "$OUTDIR/changed-paths.filtered.txt")
+else
+  CHANGED_PATHS=$(jq -r '.files[].path' "$META")
+fi
 
 has_seo_file() {
   echo "$CHANGED_PATHS" | grep -qE '(^|/)(robots\.txt|sitemap\.(xml|ts)|next\.config\.(js|ts|mjs))$' && return 0
@@ -120,8 +130,21 @@ if has_database_file || has_database_diff_token; then
   ANGLES+=("database")
 fi
 
-# Apply disable list. bugs + security cannot be disabled.
+# Merge config.angles.skip into the disable CSV. Config-driven and input-driven
+# disables stack; bugs/security remain protected below.
 DISABLE="${INPUT_DISABLE_ANGLES:-}"
+if [ -f "$CFG" ] && jq -e '.angles.skip // empty' "$CFG" >/dev/null 2>&1; then
+  CFG_SKIP=$(jq -r '.angles.skip | join(",")' "$CFG")
+  if [ -n "$CFG_SKIP" ]; then
+    if [ -n "$DISABLE" ]; then
+      DISABLE="$DISABLE,$CFG_SKIP"
+    else
+      DISABLE="$CFG_SKIP"
+    fi
+  fi
+fi
+
+# Apply disable list. bugs + security cannot be disabled.
 if [ -n "$DISABLE" ]; then
   IFS=',' read -ra DIS_ARRAY <<< "$DISABLE"
   FILTERED=()
@@ -138,6 +161,18 @@ if [ -n "$DISABLE" ]; then
   done
   # ${arr[@]+...} guards empty-array expansion under `set -u` on Bash 3.2 (macOS).
   ANGLES=("${FILTERED[@]+"${FILTERED[@]}"}")
+fi
+
+# Apply config.angles.force AFTER the skip pass — force trumps skip per #11.
+if [ -f "$CFG" ] && jq -e '.angles.force // empty' "$CFG" >/dev/null 2>&1; then
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    already=0
+    for a in "${ANGLES[@]+"${ANGLES[@]}"}"; do
+      [ "$a" = "$f" ] && already=1 && break
+    done
+    [ $already -eq 0 ] && ANGLES+=("$f")
+  done < <(jq -r '.angles.force[]?' "$CFG")
 fi
 
 CSV=$(IFS=,; echo "${ANGLES[*]}")

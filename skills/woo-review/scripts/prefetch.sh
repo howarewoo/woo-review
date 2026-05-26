@@ -64,7 +64,7 @@ fi
 
 # Fetch diff + metadata.
 gh pr diff "$PR_NUMBER" > "$OUTDIR/diff.txt"
-gh pr view "$PR_NUMBER" --json headRefOid,baseRefName,title,body,files > "$OUTDIR/meta.json"
+gh pr view "$PR_NUMBER" --json headRefOid,baseRefName,title,body,files,author > "$OUTDIR/meta.json"
 
 DIFF_BYTES=$(wc -c < "$OUTDIR/diff.txt")
 CODE_FILES=$(jq -r '.files[].path' "$OUTDIR/meta.json" \
@@ -142,6 +142,98 @@ if [ -n "$ROOT" ]; then
   fi
 
   rm -f "$RULES_LIST" "$RULES_BUF"
+fi
+
+# Per-repo config (.woo-review.yml). Loads, validates, persists to config.json.
+# Missing file is bit-identical to current behaviour. Bad YAML aborts.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bash "$SCRIPT_DIR/load-config.sh"
+
+# Append config-listed project_rules to rules.md (augments auto-discovery).
+if [ -n "${ROOT:-}" ] && [ -s "$OUTDIR/config.json" ] && jq -e '.project_rules // empty' "$OUTDIR/config.json" >/dev/null 2>&1; then
+  EXTRA_LIST="$(mktemp)"
+  EXTRA_BUF="$(mktemp)"
+  # Expand each glob from inside the repo root so relative globs work as expected.
+  while IFS= read -r pat; do
+    [ -n "$pat" ] || continue
+    while IFS= read -r match; do
+      [ -n "$match" ] && [ -f "$ROOT/$match" ] && printf '%s\n' "$match" >> "$EXTRA_LIST"
+    done < <(cd "$ROOT" && compgen -G "$pat" 2>/dev/null || true)
+  done < <(jq -r '.project_rules[]?' "$OUTDIR/config.json")
+  EXTRA_UNIQUE="$(awk 'NF && !seen[$0]++' "$EXTRA_LIST")"
+  if [ -n "$EXTRA_UNIQUE" ]; then
+    while IFS= read -r rel; do
+      printf '## SOURCE: %s\n' "$rel" >> "$EXTRA_BUF"
+      cat "$ROOT/$rel" >> "$EXTRA_BUF"
+      printf '\n\n' >> "$EXTRA_BUF"
+    done <<< "$EXTRA_UNIQUE"
+    cat "$EXTRA_BUF" >> "$OUTDIR/rules.md"
+    EXTRA_COUNT=$(printf '%s\n' "$EXTRA_UNIQUE" | wc -l | xargs)
+    echo "Appended $EXTRA_COUNT config-listed rule file(s) to rules.md:"
+    printf '%s\n' "$EXTRA_UNIQUE" | sed 's/^/  /'
+  fi
+  rm -f "$EXTRA_LIST" "$EXTRA_BUF"
+fi
+
+# authors_skip — match the PR author against the configured allowlist.
+if [ -s "$OUTDIR/config.json" ] && jq -e '.authors_skip // empty' "$OUTDIR/config.json" >/dev/null 2>&1; then
+  AUTHOR_LOGIN=$(jq -r '.author.login // empty' "$OUTDIR/meta.json")
+  if [ -n "$AUTHOR_LOGIN" ]; then
+    if jq -e --arg login "$AUTHOR_LOGIN" '.authors_skip | index($login)' "$OUTDIR/config.json" >/dev/null 2>&1; then
+      emit_skip "author '$AUTHOR_LOGIN' is in authors_skip"
+    fi
+  fi
+fi
+
+# ignore[] — pre-filter changed paths and diff body for downstream angle gates.
+# fnmatch semantics; '**' matches any depth via Python's fnmatch.
+if [ -s "$OUTDIR/config.json" ] && jq -e '.ignore // empty' "$OUTDIR/config.json" >/dev/null 2>&1; then
+  python3 - "$OUTDIR/meta.json" "$OUTDIR/diff.txt" "$OUTDIR/config.json" "$OUTDIR/changed-paths.filtered.txt" "$OUTDIR/diff.filtered.txt" <<'PY'
+import json
+import os
+import re
+import sys
+from fnmatch import fnmatch
+
+meta_path, diff_path, cfg_path, paths_out, diff_out = sys.argv[1:6]
+
+cfg = json.load(open(cfg_path))
+patterns = cfg.get("ignore") or []
+
+def globmatch(path, pattern):
+    # Support '**' (any depth) on top of plain fnmatch.
+    if "**" in pattern:
+        regex = re.escape(pattern).replace(r"\*\*", ".*").replace(r"\*", "[^/]*").replace(r"\?", ".")
+        return re.fullmatch(regex, path) is not None
+    return fnmatch(path, pattern)
+
+def ignored(path):
+    return any(globmatch(path, p) for p in patterns)
+
+meta = json.load(open(meta_path))
+kept_paths = [f["path"] for f in meta.get("files", []) if not ignored(f["path"])]
+with open(paths_out, "w") as fh:
+    for p in kept_paths:
+        fh.write(p + "\n")
+
+# Strip per-file diff sections whose header path is ignored.
+with open(diff_path, "r", errors="replace") as fh:
+    diff = fh.read()
+out = []
+keep = True
+for line in diff.splitlines(keepends=True):
+    if line.startswith("diff --git "):
+        m = re.match(r"diff --git a/(\S+) b/(\S+)", line)
+        path = (m.group(2) if m else "")
+        keep = not ignored(path)
+    if keep:
+        out.append(line)
+with open(diff_out, "w") as fh:
+    fh.writelines(out)
+
+stripped = len(meta.get("files", [])) - len(kept_paths)
+print("load-config: ignore[] stripped {} path(s); filtered artifacts written".format(stripped))
+PY
 fi
 
 echo "skip=false" >> "$GITHUB_OUTPUT"

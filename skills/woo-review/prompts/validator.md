@@ -10,6 +10,7 @@ You are a Senior Software Engineer acting as a "Defense Attorney" for the code u
 - **Diff**: /tmp/pr-review/diff.txt
 - **Raw Findings**: /tmp/pr-review/raw_findings.json (Concatenated array from all angles)
 - **Project rules** (optional): /tmp/pr-review/rules.md — concatenated `AGENTS.md` / `CLAUDE.md` / `.cursorrules` / `.windsurfrules` / `GEMINI.md` discovered by prefetch. Absent when no rule files exist in the repo.
+- **Per-repo config** (optional): /tmp/pr-review/config.json — parsed `.woo-review.yml`. The validator only reads `.severity_floor` from this file; other keys are consumed upstream.
 
 ## Your Task
 
@@ -31,7 +32,8 @@ Launch one Haiku subagent. Task:
    - If `rule_quote` is not a verbatim substring of `rules.md` (exact match, not paraphrased), DISCARD the finding.
    - Use `grep -qF "$quote" /tmp/pr-review/rules.md` or equivalent literal-string check — not regex.
 4. **Severity Check**: You can downgrade severity (HIGH -> MEDIUM) or unset blocking: true -> false. You may NOT upgrade.
-5. **Comment Shape Check**: For every surviving finding, ensure `title` (bold headline ≤60 chars, no trailing punctuation), `description` (issue only, no fix prescribed), and `fix` (recommended change in prose) are all populated. Rewrite minimally if an angle agent collapsed everything into `description` — split it into the three fields. Keep `suggestion` only when a verbatim replacement snippet is safe.
+5. **Severity Floor (.woo-review.yml)**: If `/tmp/pr-review/config.json` exists and contains a `severity_floor` key, drop any finding whose `severity` is strictly below it. Apply AFTER step 4 so a downgraded finding can also be floored. Ordering: `low` < `medium` < `high`. With `severity_floor: medium`, LOW findings are removed entirely; HIGH and MEDIUM survive. Use `jq -r '.severity_floor // empty' /tmp/pr-review/config.json` to read it; comparisons are case-insensitive on the floor value (severity values in findings are already uppercase).
+6. **Comment Shape Check**: For every surviving finding, ensure `title` (bold headline ≤60 chars, no trailing punctuation), `description` (issue only, no fix prescribed), and `fix` (recommended change in prose) are all populated. Rewrite minimally if an angle agent collapsed everything into `description` — split it into the three fields. Keep `suggestion` only when a verbatim replacement snippet is safe.
 
 Write the final validated JSON array to /tmp/pr-review/findings.json.
 

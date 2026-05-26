@@ -5,9 +5,10 @@ This contract is identical across every provider runner. The orchestration secti
 ## Prefetched Artifacts (do NOT re-fetch)
 
 - **Diff**: `/tmp/pr-review/diff.txt`
-- **PR metadata** (title, body, headRefOid, baseRefName, files): `/tmp/pr-review/meta.json`
+- **PR metadata** (title, body, headRefOid, baseRefName, files, author): `/tmp/pr-review/meta.json`
 - **Enabled angles** (one per line): `/tmp/pr-review/angles.txt`
 - **Project rules** (optional, present only if discovered): `/tmp/pr-review/rules.md`
+- **Per-repo config** (always present, defaults to `{}`): `/tmp/pr-review/config.json` — parsed from `.woo-review.yml` at the consumer repo root.
 
 If `/tmp/pr-review/rules.md` exists, treat it as an additional rubric on top of the per-angle scope. Each section is prefixed by a `## SOURCE: <path>` header identifying its origin file (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.windsurfrules`, or `GEMINI.md`). Any finding that claims a project-rule violation MUST populate `rule_quote` with a verbatim substring of `rules.md` (the rule text itself, not the source header). The validator discards rule-cited findings whose `rule_quote` is missing or not literally present in `rules.md`.
 
@@ -38,6 +39,22 @@ Each angle prompt and the validator declare a `tier:` in frontmatter — `fast`,
 - **Per-call routing supported** (Claude Code `Task`, opencode `@subagent`): honor each prompt's `tier:` verbatim — spawn fast workers on the fast model, deep validator on the deep model. Maximum savings.
 - **Single model per session** (Codex Action, Gemini CLI): pin the whole run to the `standard` tier model. You lose `fast`-tier savings on rubric angles, but `standard` is the safe default that handles every angle. If `inputs.model` is set explicitly, honor that and ignore tiers.
 - **Override**: `inputs.model` (action.yml) or a runner-specific override always wins over the tier resolution.
+
+**Per-repo tier overrides (`.woo-review.yml`):** before resolving any `tier:` to a model slug, read `/tmp/pr-review/config.json`. If `models.<tier>` is set, use that slug INSTEAD of the table entry above. Example: `jq -r '.models.deep // empty' /tmp/pr-review/config.json` — empty means use the table default. `inputs.model` (action.yml) still wins over the per-repo override.
+
+## Per-repo Config (`/tmp/pr-review/config.json`)
+
+The prefetch step parses an optional `.woo-review.yml` at the consumer repo root and writes a canonical JSON copy to `/tmp/pr-review/config.json`. Missing file = `{}` (no-op). The full schema is documented in `SKILL.md`; runners only need to know which keys are consumed at which stage:
+
+| Key | Consumed by | When |
+|---|---|---|
+| `angles.force`, `angles.skip` | `detect-angles.sh` | Stage 1 |
+| `ignore` | `prefetch.sh` (filters diff + paths) | Stage 1 |
+| `project_rules` | `prefetch.sh` (appends to `rules.md`) | Stage 1 |
+| `authors_skip` | `prefetch.sh` (early-exits with `skip=true`) | Stage 1 |
+| `severity_floor` | validator | Stage 3 |
+| `models.fast` / `.standard` / `.deep` | orchestrator prompts (tier resolution) | Stage 2 |
+| `fix_commands` | persisted only; consumed by `--loop` mode (#15) | n/a |
 
 ## Review Angles
 

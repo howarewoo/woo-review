@@ -376,6 +376,143 @@ fi
 unset INPUT_DISABLE_ANGLES
 rm -f "$PREFETCH/rules.md"
 
+# --- Case 18: config.angles.force adds an angle that wasn't auto-detected.
+rm -f "$PREFETCH/changed-paths.filtered.txt" "$PREFETCH/diff.filtered.txt"
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "c0c0c0c0",
+  "baseRefName": "main",
+  "title": "feat: backend tweak",
+  "body": "",
+  "files": [
+    {"path": "server/auth.py", "additions": 6, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/server/auth.py b/server/auth.py
++def f(): return 1
+DIFF
+cat > "$PREFETCH/config.json" <<'CFG'
+{"angles": {"force": ["database"]}}
+CFG
+: > "$OUTPUT_FILE"
+run_case "config-force-adds-database" "bugs,security,database"
+rm -f "$PREFETCH/config.json"
+
+# --- Case 19: config.angles.skip removes an auto-detected angle.
+cat > "$GITHUB_WORKSPACE/package.json" <<'PKG'
+{"dependencies": {"react": "^18.0.0"}}
+PKG
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "5101599a",
+  "baseRefName": "main",
+  "title": "feat: product",
+  "body": "",
+  "files": [
+    {"path": "app/layout.tsx", "additions": 30, "deletions": 0},
+    {"path": "app/globals.css", "additions": 5, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/app/layout.tsx b/app/layout.tsx
++<meta name="robots" content="noindex" />
+DIFF
+cat > "$PREFETCH/config.json" <<'CFG'
+{"angles": {"skip": ["seo"]}}
+CFG
+: > "$OUTPUT_FILE"
+run_case "config-skip-removes-seo" "bugs,security,design,react"
+rm -f "$PREFETCH/config.json" "$GITHUB_WORKSPACE/package.json"
+
+# --- Case 20: force trumps skip when the same angle is listed in both.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "f0f0f0f0",
+  "baseRefName": "main",
+  "title": "feat: marketing",
+  "body": "",
+  "files": [
+    {"path": "src/pages/landing.tsx", "additions": 5, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/src/pages/landing.tsx b/src/pages/landing.tsx
++<meta name="robots" content="noindex" />
+DIFF
+cat > "$PREFETCH/config.json" <<'CFG'
+{"angles": {"force": ["seo"], "skip": ["seo"]}}
+CFG
+: > "$OUTPUT_FILE"
+run_case "config-force-overrides-skip" "bugs,security,design,seo"
+rm -f "$PREFETCH/config.json"
+
+# --- Case 21: detect-angles prefers ignore-filtered changed-paths file when
+#              present. Originally meta.json includes a .sql file (would
+#              trigger `database`), but the filtered list omits it.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "16110160",
+  "baseRefName": "main",
+  "title": "feat: backend + migration",
+  "body": "",
+  "files": [
+    {"path": "server/auth.py", "additions": 6, "deletions": 0},
+    {"path": "migrations/0042_users.sql", "additions": 5, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/server/auth.py b/server/auth.py
++def f(): return 1
+diff --git a/migrations/0042_users.sql b/migrations/0042_users.sql
++CREATE TABLE users (id uuid primary key);
+DIFF
+# Simulated prefetch.sh output after ignore: ["migrations/*.sql"]
+cat > "$PREFETCH/changed-paths.filtered.txt" <<'PATHS'
+server/auth.py
+PATHS
+cat > "$PREFETCH/diff.filtered.txt" <<'DIFF'
+diff --git a/server/auth.py b/server/auth.py
++def f(): return 1
+DIFF
+: > "$OUTPUT_FILE"
+run_case "config-ignore-strips-paths-and-diff" "bugs,security"
+rm -f "$PREFETCH/changed-paths.filtered.txt" "$PREFETCH/diff.filtered.txt"
+
+# --- Case 22: with filtered diff present but original diff carrying a SQL
+#              token, the filtered version wins -> no `database` angle.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "16110161",
+  "baseRefName": "main",
+  "title": "feat: pure TS",
+  "body": "",
+  "files": [
+    {"path": "src/server/route.ts", "additions": 4, "deletions": 0}
+  ]
+}
+JSON
+# Original diff contains a SQL DDL token that WOULD trigger database.
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/src/server/route.ts b/src/server/route.ts
++// CREATE TABLE foo (id int);  -- inherited from generated.ts originally
+DIFF
+# But the filtered view doesn't include that token (e.g. ignored file).
+cat > "$PREFETCH/changed-paths.filtered.txt" <<'PATHS'
+src/server/route.ts
+PATHS
+cat > "$PREFETCH/diff.filtered.txt" <<'DIFF'
+diff --git a/src/server/route.ts b/src/server/route.ts
++const x = 1;
+DIFF
+: > "$OUTPUT_FILE"
+run_case "config-ignore-suppresses-diff-trigger" "bugs,security"
+rm -f "$PREFETCH/changed-paths.filtered.txt" "$PREFETCH/diff.filtered.txt"
+
 if [ $fail -ne 0 ]; then
   echo "TESTS FAILED"
   exit 1

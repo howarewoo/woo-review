@@ -116,7 +116,7 @@ runs:
       run: |
         echo "number=$EVENT_NUMBER" >> "$GITHUB_OUTPUT"
 
-    - name: Prefetch diff, metadata, rules
+    - name: Prefetch diff, metadata, rules, .woo-review.yml
       id: prefetch
       shell: bash
       env:

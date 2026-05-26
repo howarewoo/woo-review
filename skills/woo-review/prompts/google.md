@@ -8,6 +8,8 @@ The shared header above lists prefetched artifacts, findings schema, blocking cr
 
 Gemini CLI runs one model per job (set via `inputs.model`, default `gemini-3-5-flash`). Per-call routing is not possible, so the `tier:` frontmatter is **informational only** under this provider. Google's 3.5 line currently exposes only `gemini-3-5-flash` — no Pro/Ultra/Thinking variant exists yet — so tier routing is a no-op on Gemini today. Use `gemini-3-5-flash` for all runs until Google releases a larger 3.5-line model; revisit this prompt when one ships.
 
+**Per-repo override:** if `/tmp/pr-review/config.json` has `models.standard` set, treat it as the effective slug for this run (precedence: `inputs.model` > `models.standard` > default `gemini-3-5-flash`). Read with `jq -r '.models.standard // empty' /tmp/pr-review/config.json`.
+
 ---
 
 ## IMPORTANT: MODE-BASED EXECUTION
