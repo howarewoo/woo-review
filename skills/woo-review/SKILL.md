@@ -18,8 +18,28 @@ This skill is **host-agnostic**: it works in any AI coding agent that supports s
 
 - `/woo-review` — Auto-detect: if the current branch has an open PR (via `gh pr view --json number`), behave as `/woo-review <PR#>`. Otherwise review the local diff (no GitHub posting).
 - `/woo-review <PR#>` — Fetch the PR via `gh`, run the swarm, and post a native batched GitHub Review.
+- `/woo-review --full` (or `@review --full` in a PR comment) — Force a complete re-review even when a prior SHA marker exists. Skips the incremental path described below.
 - `woo-review install` — Verify local deps (`gh`, `jq`, `node`) and pre-fetch `impeccable` + `react-doctor`.
 - `woo-review status` — Show the current PR's review status.
+
+## Incremental Mode
+
+By default (`incremental: auto` on the GitHub Action), every posted review carries a hidden watermark:
+
+```
+<!-- woo-review:sha=<headRefOid> -->
+```
+
+On the next run, `prefetch.sh` scans **bot-authored** prior review bodies (the same `BOT_NAME_PATTERN` used elsewhere) for the marker — non-bot reviewers cannot forge a marker to narrow the window. If found, prefetch diffs `<last_sha>...HEAD` via the GitHub compare API instead of the full PR diff — only the new commits since the last pass are reviewed. Unresolved prior review threads (any author) are dumped to `/tmp/pr-review/prior-findings.json` and consumed by the posting stage for two things only: (a) **event floor** — any non-empty priors list keeps the new review at minimum `REQUEST_CHANGES`, conservative gate so a stale open thread is never auto-resolved by a clean incremental pass; (b) **dedupe** — a new finding at the same `(file, line, title-stem)` as a prior unresolved thread is dropped (it would be a duplicate of an already-posted comment).
+
+Override paths:
+- Action input `incremental: off` (workflow-level opt-out).
+- A trigger comment containing `--full` (e.g. `@review --full`) — fixed-string match, regex-injection safe.
+- Force-push that drops `<last_sha>` from the branch history — the compare API returns 404; prefetch emits a `::warning::` and falls back to the full diff for that run.
+
+When the incremental diff has no new commits (i.e. `LAST_SHA == HEAD_SHA`, e.g. someone re-triggers without pushing), prefetch emits `skip=true` with reason `no new commits since last review (<last_sha>)`. To force a re-review of the same SHA, pass `--full` (or set `incremental: off`).
+
+Marker semantics are state-light: the marker IS the state. There is no DB or workflow artifact retention beyond what GitHub already keeps in review history.
 
 ## Knowledge Aggregation
 

@@ -91,6 +91,10 @@ inputs:
     description: 'npm version of impeccable CLI to invoke via npx (used by the design angle).'
     required: false
     default: 'latest'
+  incremental:
+    description: 'Review scope: `auto` re-uses the prior review SHA marker (if any) and diffs only new commits; `off` forces a full re-review of the PR diff. A PR-comment trigger containing `--full` overrides to off.'
+    required: false
+    default: 'auto'
 
 runs:
   using: 'composite'
@@ -126,6 +130,8 @@ runs:
         EVENT_NAME: ${{ github.event_name }}
         EVENT_ACTION: ${{ github.event.action }}
         INPUT_SKIP_LABELS: ${{ inputs.skip_labels }}
+        INPUT_INCREMENTAL: ${{ inputs.incremental }}
+        COMMENT_BODY: ${{ github.event.comment.body }}
       run: bash "${{ github.action_path }}/skills/woo-review/scripts/prefetch.sh"
 
     - name: Detect review angles

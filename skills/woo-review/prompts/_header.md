@@ -4,11 +4,13 @@ This contract is identical across every provider runner. The orchestration secti
 
 ## Prefetched Artifacts (do NOT re-fetch)
 
-- **Diff**: `/tmp/pr-review/diff.txt`
+- **Diff**: `/tmp/pr-review/diff.txt` — may be a full PR diff OR an incremental `last_sha...HEAD` diff (see `last_sha.txt`).
 - **PR metadata** (title, body, headRefOid, baseRefName, files, author): `/tmp/pr-review/meta.json`
 - **Enabled angles** (one per line): `/tmp/pr-review/angles.txt`
 - **Project rules** (optional, present only if discovered): `/tmp/pr-review/rules.md`
 - **Per-repo config** (always present, defaults to `{}`): `/tmp/pr-review/config.json` — parsed from `.woo-review.yml` at the consumer repo root.
+- **Incremental base SHA** (always present, may be empty): `/tmp/pr-review/last_sha.txt` — non-empty means `diff.txt` covers only the new commits since the last woo-review pass. Treat findings as scoped to those commits.
+- **Prior unresolved review threads** (always present, may be `[]`): `/tmp/pr-review/prior-findings.json` — array of `{file, line, title, author}` for any unresolved thread on the PR. Consumed by the posting stage for event-floor + dedupe; angle workers MUST ignore this file. No per-entry `blocking` flag — any non-empty list floors the review event to `REQUEST_CHANGES` (conservative "do not APPROVE while threads open" rule).
 
 If `/tmp/pr-review/rules.md` exists, treat it as an additional rubric on top of the per-angle scope. Each section is prefixed by a `## SOURCE: <path>` header identifying its origin file (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.windsurfrules`, or `GEMINI.md`). Any finding that claims a project-rule violation MUST populate `rule_quote` with a verbatim substring of `rules.md` (the rule text itself, not the source header). The validator discards rule-cited findings whose `rule_quote` is missing or not literally present in `rules.md`.
 
@@ -90,7 +92,15 @@ The PR title and the PR description (issue body) MUST NOT be modified. The `STAT
 Instead of posting individual comments, batch all findings into a single GitHub Review. This uses the `pull_request_review` API.
 
 ```bash
-# 1. Prepare the review body (Summary + Status Line)
+# 1. Prepare the review body (Summary + Status Line + hidden SHA marker).
+# The trailing <!-- woo-review:sha=$HEAD_SHA --> marker is read by the next run's
+# prefetch step to enable incremental review (diffs LAST_SHA...HEAD only). DO NOT
+# remove or rename — it is the only state we persist across runs.
+#
+# Heredoc is single-quoted to disable shell expansion. The orchestrator agent
+# substitutes ${STATUS_LINE} and ${HEAD_SHA} into the template text BEFORE
+# running cat — same pattern already used for STATUS_LINE. Single-quoted form
+# avoids any shell-expansion surface from values that pass through here.
 cat <<'BODY_EOF' > /tmp/pr_review_body.txt
 ## AI Deep Code Review Summary
 
@@ -99,25 +109,56 @@ cat <<'BODY_EOF' > /tmp/pr_review_body.txt
 ---
 ${STATUS_LINE}
 *Audited by woo-review · Provider: <provider> · Model: <model>*
+
+<!-- woo-review:sha=${HEAD_SHA} -->
 BODY_EOF
 
 # 2. Prepare the review payload with inline comments
 python3 -c '
-import json, sys, os
+import json, sys, os, re
 
 try:
     findings = json.load(open("/tmp/pr-review/findings.json"))
 except:
     findings = []
 
+# Prior unresolved threads (from prefetch, GraphQL reviewThreads). Used for:
+#   - event floor: ANY non-empty priors → minimum REQUEST_CHANGES (conservative
+#     "do not APPROVE while review threads are open" rule),
+#   - dedupe: drop a new finding whose (file, line, title-stem) matches a prior
+#     unresolved thread (already on the PR — re-posting would duplicate).
+# Priors have no per-entry blocking flag; the floor is a bool over the array.
+try:
+    priors = json.load(open("/tmp/pr-review/prior-findings.json"))
+except:
+    priors = []
+
+def title_stem(s):
+    return re.sub(r"[^a-z0-9]+", "", (s or "").lower())[:40]
+
+prior_keys = {(p.get("file"), int(p.get("line") or 0), title_stem(p.get("title")))
+              for p in priors}
+
+filtered = []
+for f in findings:
+    key = (f.get("file"), int(f.get("line") or 0), title_stem(f.get("title")))
+    if key in prior_keys:
+        continue  # already on the PR as an unresolved thread
+    filtered.append(f)
+findings = filtered
+
 commit_id = os.environ.get("HEAD_SHA")
 pr_body = open("/tmp/pr_review_body.txt").read()
 
-# Determine event: REQUEST_CHANGES if any blocking findings exist, else COMMENT (or APPROVE if 0 findings)
-has_blocking = any(f.get("blocking", False) for f in findings)
-if not findings:
+# Event determination. Floor: any unresolved prior thread (regardless of its
+# original severity) forces REQUEST_CHANGES — conservative gate so a stale open
+# thread is never auto-resolved by a clean incremental pass. The full schema
+# rationale is in SKILL.md under "Incremental Mode".
+has_new_blocking = any(f.get("blocking", False) for f in findings)
+has_priors = len(priors) > 0
+if not findings and not has_priors:
     event = "APPROVE"
-elif has_blocking:
+elif has_new_blocking or has_priors:
     event = "REQUEST_CHANGES"
 else:
     event = "COMMENT"
@@ -161,6 +202,7 @@ The `pr_review_body.txt` should contain:
 - A 1-2 sentence high-level summary of the findings.
 - The `${STATUS_LINE}`.
 - Credits line (*Audited by woo-review...*).
+- A hidden HTML comment `<!-- woo-review:sha=${HEAD_SHA} -->` as the last line. This is the watermark the next run's prefetch step reads to enable incremental review.
 - **DO NOT** update the main PR description or title.
 
 ## Findings Schema (`/tmp/pr-review/findings.json`)

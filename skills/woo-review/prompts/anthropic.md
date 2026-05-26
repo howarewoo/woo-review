@@ -100,7 +100,7 @@ Write surviving findings to `/tmp/pr-review/findings.json` per the schema in `_h
 
 ## Step 4 — Submit Native PR Review
 
-Follow `_header.md` exactly. Compute `BLOCKING_COUNT`, `NONBLOCKING_COUNT`, `HIGH_COUNT`, `MEDIUM_COUNT`, `LOW_COUNT`. Build `STATUS_LINE`. Submit a single batched `gh api repos/<repo>/pulls/<PR>/reviews` POST containing all inline comments + the summary + the `STATUS_LINE` in the review body. The review `event` is the native blocking gate: `REQUEST_CHANGES` when any finding is `blocking: true`, `COMMENT` when only non-blocking findings exist, `APPROVE` when none.
+Follow `_header.md` exactly. Compute `BLOCKING_COUNT`, `NONBLOCKING_COUNT`, `HIGH_COUNT`, `MEDIUM_COUNT`, `LOW_COUNT`. Build `STATUS_LINE`. Submit a single batched `gh api repos/<repo>/pulls/<PR>/reviews` POST containing all inline comments + the summary + the `STATUS_LINE` in the review body. The review `event` is computed by the `_header.md` payload-builder (do not duplicate the logic here): `REQUEST_CHANGES` when any new finding is `blocking: true` OR when `/tmp/pr-review/prior-findings.json` is non-empty (unresolved review threads keep the PR at minimum `REQUEST_CHANGES`), `COMMENT` when there are only non-blocking new findings and no unresolved priors, `APPROVE` only when both new findings and prior unresolved threads are empty.
 
 Do NOT call `gh pr edit`. Do NOT add, remove, or mutate PR labels. The PR title, PR description, and PR labels must remain untouched.
 
