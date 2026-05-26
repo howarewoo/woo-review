@@ -156,7 +156,45 @@ jobs:
           pattern: findings-*
           path: /tmp/pr-review/
           merge-multiple: true
-      - uses: howarewoo/woo-review@v0.1.0
+
+      # Adversarial validator (issue #13): prosecutor pass writes
+      # findings.prosecutor.json (inclusive bias), defender pass writes
+      # findings.defender.json (exclusive bias) + runs intersect-findings.sh
+      # to produce the final findings.json, then posts the review.
+      # `disable_adversarial: true` in .woo-review.yml short-circuits the
+      # prosecutor step (the intersect script then falls back to defender-only).
+      - name: Read disable_adversarial flag
+        id: adv
+        shell: bash
+        run: |
+          if [ -f /tmp/pr-review/config.json ]; then
+            disabled="$(jq -r '.disable_adversarial // false' /tmp/pr-review/config.json)"
+          else
+            disabled=false
+          fi
+          echo "disabled=$disabled" >> "$GITHUB_OUTPUT"
+          echo "adversarial validator disabled=$disabled"
+
+      - name: Validate (prosecutor pass)
+        if: steps.adv.outputs.disabled != 'true'
+        uses: howarewoo/woo-review@v0.1.0
+        with:
+          mode: validate-prosecutor
+          disable_angles: ${{ inputs.disable_angles }}
+          provider: ${{ inputs.provider }}
+          model: ${{ inputs.model }}
+          anthropic_token: ${{ secrets.anthropic_token }}
+          anthropic_api_key: ${{ secrets.anthropic_api_key }}
+          openai_api_key: ${{ secrets.openai_api_key }}
+          google_api_key: ${{ secrets.google_api_key }}
+          gemini_api_key: ${{ secrets.gemini_api_key }}
+          openrouter_api_key: ${{ secrets.openrouter_api_key }}
+          max_turns: ${{ inputs.max_turns }}
+          skip_labels: ${{ inputs.skip_labels }}
+          prompt_override: ${{ inputs.prompt_override }}
+
+      - name: Validate (defender pass + intersect + post)
+        uses: howarewoo/woo-review@v0.1.0
         with:
           mode: validate
           disable_angles: ${{ inputs.disable_angles }}
@@ -171,3 +209,12 @@ jobs:
           max_turns: ${{ inputs.max_turns }}
           skip_labels: ${{ inputs.skip_labels }}
           prompt_override: ${{ inputs.prompt_override }}
+
+      - name: Upload validator metrics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: validator-metrics
+          path: /tmp/pr-review/validator-metrics.json
+          retention-days: 7
+          if-no-files-found: ignore

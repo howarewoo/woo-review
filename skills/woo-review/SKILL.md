@@ -86,6 +86,10 @@ models:                        # per-tier overrides; inputs.model still wins
 fix_commands:                  # reserved for --loop mode (issue #15)
   - pnpm lint:fix
   - pnpm format
+disable_adversarial: false     # cost-sensitive opt-out for the prosecutor+
+                               # defender validator (issue #13). When true,
+                               # only the defender pass runs and its output
+                               # becomes findings.json directly.
 ```
 
 **Precedence**: for the angle set, `angles.force` beats `angles.skip` when the same angle is listed in both. For model resolution, the action input `inputs.model` beats `models.<tier>` which beats the table default in `prompts/_header.md`. `ignore` is applied to both file paths and the per-file diff sections before angle gates evaluate.
@@ -201,7 +205,7 @@ Per-provider resolution (full table in `_header.md`):
 - **Per-call routing** (Claude Code `Task`, opencode `@subagent`): honor each prompt's `tier:` verbatim. Maximum savings.
 - **Single model per session** (Codex Action, Gemini CLI): pin the run to the `standard` tier — covers every angle safely. `tier:` becomes informational. Split into multiple jobs if you want fast-tier savings on rubric angles or deep-tier validation.
 
-### Stage 4 — Merge + Skeptical Validation
+### Stage 4 — Merge + Adversarial Validation
 
 After every sub-agent has finished:
 
@@ -210,14 +214,34 @@ bash "$WOO_REVIEW_ACTION_PATH/scripts/merge-findings.sh"
 # Produces /tmp/pr-review/raw_findings.json
 ```
 
-Now act as the **Skeptical Validator** by following `prompts/validator.md`:
+Validation runs as an **adversarial pipeline** (issue #13): two opposing-bias `deep`-tier validator passes followed by a deterministic intersection. The intersection (findings BOTH passes agree to keep) is what authors see — this trades 2× validator cost for materially higher signal-to-noise.
+
+Read `disable_adversarial` from `/tmp/pr-review/config.json`:
+
+```bash
+DISABLE_ADV="$(jq -r '.disable_adversarial // false' /tmp/pr-review/config.json 2>/dev/null || echo false)"
+```
+
+**Stage 4a — Prosecutor pass** (skip if `DISABLE_ADV == true`):
+
+Run `prompts/validator-prosecutor.md`. Bias: assume each finding is real; drop only the clearly wrong. Writes `/tmp/pr-review/findings.prosecutor.json` and exits.
+
+**Stage 4b — Defender pass** (`prompts/validator.md`):
 
 1. Dedupe across angles (keep the most actionable description; preserve the winner's `title` / `description` / `fix`).
 2. Defense-attorney audit: try to prove each finding wrong. Drop pedantic / style-only / lint-catchable / "maybe" findings.
 3. Severity check: you MAY downgrade (HIGH → MEDIUM, blocking true → false). You MAY NOT upgrade.
 4. Comment-shape check: every surviving finding has `title` (bold headline ≤60 chars), `description` (issue only, no fix), and `fix` (recommended change in prose). Split overloaded `description` fields when an angle collapsed them.
 5. `fix_type` enforcement: every surviving finding MUST carry `fix_type` (`"suggestion"` or `"prose"`). Downgrade any `fix_type: "suggestion"` that violates the ≤10-line / single-file / self-contained / no-placeholder / no-fence-break rules — set `fix_type: "prose"` and `suggestion: null`. Full rule list lives in `prompts/validator.md` step 7.
-6. Write the surviving array to `/tmp/pr-review/findings.json`.
+6. Writes `/tmp/pr-review/findings.defender.json`.
+
+**Stage 4c — Intersect**:
+
+```bash
+bash "$WOO_REVIEW_ACTION_PATH/scripts/intersect-findings.sh"
+```
+
+Produces `/tmp/pr-review/findings.json` — the final validated set — and `/tmp/pr-review/validator-metrics.json` with `prosecutor_count`, `defender_count`, `kept_count`, `disagreement_count`. Intersection key is `(file, line, title-stem)` (same stem as prior-thread dedupe in `_header.md`). When `disable_adversarial: true` is set or `findings.prosecutor.json` is absent, the script copies defender output verbatim and tags metrics `mode: defender-only`. Severity = `min(prosecutor, defender)`, blocking = `prosecutor.blocking AND defender.blocking`, other fields take the defender's copy.
 
 ### Stage 5 — Report
 
