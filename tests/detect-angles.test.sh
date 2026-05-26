@@ -184,7 +184,7 @@ diff --git a/src/pages/marketing/Special.tsx b/src/pages/marketing/Special.tsx
 +<meta name="robots" content="noindex" />
 DIFF
 : > "$OUTPUT_FILE"
-run_case "real-meta-robots-triggers-seo" "bugs,security,seo,design"
+run_case "real-meta-robots-triggers-seo" "bugs,security,seo,design,react"
 
 # --- Case 8: new llms.txt triggers aeo (and seo via robots-family fileset is unrelated).
 cat > "$PREFETCH/meta.json" <<'JSON'
@@ -447,7 +447,7 @@ cat > "$PREFETCH/config.json" <<'CFG'
 {"angles": {"force": ["seo"], "skip": ["seo"]}}
 CFG
 : > "$OUTPUT_FILE"
-run_case "config-force-overrides-skip" "bugs,security,design,seo"
+run_case "config-force-overrides-skip" "bugs,security,design,react,seo"
 rm -f "$PREFETCH/config.json"
 
 # --- Case 21: detect-angles prefers ignore-filtered changed-paths file when
@@ -512,6 +512,60 @@ DIFF
 : > "$OUTPUT_FILE"
 run_case "config-ignore-suppresses-diff-trigger" "bugs,security"
 rm -f "$PREFETCH/changed-paths.filtered.txt" "$PREFETCH/diff.filtered.txt"
+
+# --- Case 23: monorepo with workspace-scoped react dep (root package.json
+#              declares only build tools) still triggers `react` for .tsx diffs.
+#              Regression guard for #20: previously the angle was silently
+#              skipped when react wasn't in the root manifest.
+cat > "$GITHUB_WORKSPACE/package.json" <<'PKG'
+{
+  "name": "monorepo-root",
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.0.0",
+    "@biomejs/biome": "^1.0.0"
+  }
+}
+PKG
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "20202020",
+  "baseRefName": "main",
+  "title": "feat(web): tweak hero",
+  "body": "",
+  "files": [
+    {"path": "apps/web/src/components/Hero.tsx", "additions": 12, "deletions": 3}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/apps/web/src/components/Hero.tsx b/apps/web/src/components/Hero.tsx
++export function Hero() { return <h1>hi</h1>; }
+DIFF
+: > "$OUTPUT_FILE"
+run_case "monorepo-workspace-react-still-triggers-react" "bugs,security,design,react"
+rm -f "$GITHUB_WORKSPACE/package.json"
+
+# --- Case 24: .tsx diff with NO package.json anywhere still triggers react.
+#              The angle handles non-React .tsx gracefully, so a missing
+#              manifest is not a reason to skip it.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "24242424",
+  "baseRefName": "main",
+  "title": "feat: add component",
+  "body": "",
+  "files": [
+    {"path": "src/Widget.tsx", "additions": 5, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/src/Widget.tsx b/src/Widget.tsx
++export const Widget = () => null;
+DIFF
+: > "$OUTPUT_FILE"
+run_case "tsx-without-package-json-triggers-react" "bugs,security,design,react"
 
 if [ $fail -ne 0 ]; then
   echo "TESTS FAILED"
