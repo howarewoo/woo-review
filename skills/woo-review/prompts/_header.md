@@ -173,8 +173,21 @@ for f in findings:
     body = f"**{title}**\n\n{description}"
     if fix:
         body += f"\n\nFix: {fix}"
-    if f.get("suggestion"):
-        body += f"\n\n```suggestion\n{f['suggestion']}\n```"
+    # Render ```suggestion``` block only when validator-approved as fix_type=suggestion.
+    # fix_type=prose (or missing) → prose-only recommendation, no block.
+    if f.get("fix_type") == "suggestion" and f.get("suggestion"):
+        # Defense-in-depth: neutralize any line of ≥3 backticks inside the snippet
+        # that would close the fenced block early and let agent-supplied content
+        # escape into the surrounding PR-comment Markdown. Validator step 7
+        # already downgrades such findings, but we re-guard at the render site
+        # because the renderer is the trust boundary to GitHub.
+        safe_lines = []
+        for line in f["suggestion"].splitlines():
+            if re.match(r"^\s*`{3,}", line):
+                line = line.replace("`", "'")
+            safe_lines.append(line)
+        safe = "\n".join(safe_lines)
+        body += f"\n\n```suggestion\n{safe}\n```"
 
     comments.append({
         "path": f["file"],
@@ -219,14 +232,28 @@ Every runner MUST write a final `findings.json` (for debugging + potential post-
     "blocking": true,
     "title": "Short bold headline (≤60 chars, no trailing punctuation)",
     "description": "Issue description: what is wrong and why it matters. Do NOT include the fix here.",
+    "fix_type": "suggestion",
     "fix": "Recommended change in prose (e.g. 'use `<=` instead of `<` so the boundary value is included').",
-    "suggestion": "optional verbatim replacement snippet for the GitHub ```suggestion``` block, else null",
+    "suggestion": "verbatim replacement code for the GitHub ```suggestion``` block — REQUIRED when fix_type == \"suggestion\", MUST be null when fix_type == \"prose\"",
     "rule_quote": "exact quoted rule text if rule-based, else null"
   }
 ]
 ```
 
 `angle` is one of `bugs | security | conventions | seo | aeo | design | react | database`.
+
+### `fix_type` discriminator
+
+Every finding MUST set `fix_type` to exactly one of:
+
+- `"suggestion"` — a one-click GitHub ```suggestion``` block is safe. Requires `suggestion` to be populated with self-contained replacement code that is ALL of:
+  - ≤10 lines,
+  - scoped to the single file at `file`,
+  - a complete drop-in replacement for the existing line(s) at `line` (no `...` placeholders, no partial diffs),
+  - self-contained (does not reference symbols, imports, or context the diff does not already establish).
+- `"prose"` — the change is too large, multi-file, structural, or context-dependent for a one-click block. `suggestion` MUST be `null`; the human-readable `fix` field carries the recommendation.
+
+The validator enforces these rules and will downgrade a violating `fix_type: suggestion` to `fix_type: prose` (clearing `suggestion`) rather than emitting a broken block. When in doubt, prefer `prose` — a usable prose recommendation beats a broken one-click suggestion that loses author trust.
 
 ### Inline Comment Format (rendered on the PR)
 
@@ -242,9 +269,9 @@ Fix: <fix>
 
 - **Title** — bold one-liner, ≤60 characters, no trailing punctuation. Names the problem.
 - **Description** — the issue itself: what is broken, why it matters, with diff-anchored evidence. Do NOT prescribe the fix here.
-- **Fix** — recommended change, prefixed literally with `Fix: `. Required for every finding. If a verbatim replacement is possible, ALSO populate `suggestion` so a GitHub ```suggestion``` block is appended after the `Fix:` line.
+- **Fix** — recommended change, prefixed literally with `Fix: `. Required for every finding. The body builder appends a GitHub ```suggestion``` block after the `Fix:` line if and only if `fix_type == "suggestion"` AND `suggestion` is a non-empty string; `fix_type == "prose"` renders the recommendation in prose only.
 
-The body builder in the posting step (see python snippet above) renders this format automatically from `title` / `description` / `fix` / `suggestion`. Angle agents and the validator MUST populate `title`, `description`, and `fix` for every finding.
+The body builder in the posting step (see python snippet above) renders this format automatically from `title` / `description` / `fix` / `fix_type` / `suggestion`. Angle agents and the validator MUST populate `title`, `description`, `fix`, and `fix_type` for every finding.
 
 ## Blocking Criteria
 

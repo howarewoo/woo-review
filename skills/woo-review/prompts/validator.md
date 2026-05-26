@@ -33,7 +33,19 @@ Launch one Haiku subagent. Task:
    - Use `grep -qF "$quote" /tmp/pr-review/rules.md` or equivalent literal-string check — not regex.
 4. **Severity Check**: You can downgrade severity (HIGH -> MEDIUM) or unset blocking: true -> false. You may NOT upgrade.
 5. **Severity Floor (.woo-review.yml)**: If `/tmp/pr-review/config.json` exists and contains a `severity_floor` key, drop any finding whose `severity` is strictly below it. Apply AFTER step 4 so a downgraded finding can also be floored. Ordering: `low` < `medium` < `high`. With `severity_floor: medium`, LOW findings are removed entirely; HIGH and MEDIUM survive. Use `jq -r '.severity_floor // empty' /tmp/pr-review/config.json` to read it; comparisons are case-insensitive on the floor value (severity values in findings are already uppercase).
-6. **Comment Shape Check**: For every surviving finding, ensure `title` (bold headline ≤60 chars, no trailing punctuation), `description` (issue only, no fix prescribed), and `fix` (recommended change in prose) are all populated. Rewrite minimally if an angle agent collapsed everything into `description` — split it into the three fields. Keep `suggestion` only when a verbatim replacement snippet is safe.
+6. **Comment Shape Check**: For every surviving finding, ensure `title` (bold headline ≤60 chars, no trailing punctuation), `description` (issue only, no fix prescribed), and `fix` (recommended change in prose) are all populated. Rewrite minimally if an angle agent collapsed everything into `description` — split it into the three fields.
+7. **`fix_type` Enforcement (size + scope cap)**: For every surviving finding, normalize and validate `fix_type`:
+   - If `fix_type` is missing, infer it: `"suggestion"` only when `suggestion` is a non-empty string AND passes every rule below; otherwise `"prose"`.
+   - Downgrade `fix_type` from `"suggestion"` to `"prose"` (and set `suggestion = null`) when ANY of:
+     - `suggestion` is null, empty, or whitespace-only.
+     - `suggestion` exceeds **10 lines** (count `\n` + 1; trailing newline does not count).
+     - `suggestion` contains `...`, `<...>`, `// ...`, `# ...`, `/* ... */`, or any other partial-diff placeholder indicating missing context.
+     - `suggestion` contains a line matching `/^\s*` + three or more backticks (would prematurely close the GitHub ```suggestion``` fence and let snippet content escape into the surrounding comment Markdown — verify with `grep -nE '^[[:space:]]*\`{3,}'`).
+     - The finding implies a change in more than one file (e.g., `description` or `fix` references other files / paths, multiple `file` values, or the snippet adds an `import` for a symbol not visible at `line`).
+     - The snippet is not a self-contained drop-in for the existing line(s) at `line` (e.g., references a helper/import the diff does not establish, requires renaming a symbol elsewhere, or depends on unstated surrounding code).
+     - The change is structural (new function, refactor, file move) rather than a localized edit at `line`.
+   - Do NOT discard the finding for this — only downgrade. The `fix` prose remains the recommendation.
+   - After enforcement, every finding MUST have `fix_type ∈ {"suggestion", "prose"}` and the `suggestion` field MUST be a non-empty string when `fix_type == "suggestion"` and `null` when `fix_type == "prose"`.
 
 Write the final validated JSON array to /tmp/pr-review/findings.json.
 
