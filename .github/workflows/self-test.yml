@@ -51,8 +51,9 @@ jobs:
         # step would normally build in a real PR run.
         run: |
           set -euo pipefail
-          export GITHUB_WORKSPACE="$(mktemp -d)"
-          export GITHUB_OUTPUT="$(mktemp)"
+          GITHUB_WORKSPACE="$(mktemp -d)"
+          GITHUB_OUTPUT="$(mktemp)"
+          export GITHUB_WORKSPACE GITHUB_OUTPUT
           mkdir -p /tmp/pr-review
           cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
           angles:
