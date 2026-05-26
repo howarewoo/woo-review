@@ -7,6 +7,9 @@ This contract is identical across every provider runner. The orchestration secti
 - **Diff**: `/tmp/pr-review/diff.txt`
 - **PR metadata** (title, body, headRefOid, baseRefName, files): `/tmp/pr-review/meta.json`
 - **Enabled angles** (one per line): `/tmp/pr-review/angles.txt`
+- **Project rules** (optional, present only if discovered): `/tmp/pr-review/rules.md`
+
+If `/tmp/pr-review/rules.md` exists, treat it as an additional rubric on top of the per-angle scope. Each section is prefixed by a `## SOURCE: <path>` header identifying its origin file (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.windsurfrules`, or `GEMINI.md`). Any finding that claims a project-rule violation MUST populate `rule_quote` with a verbatim substring of `rules.md` (the rule text itself, not the source header). The validator discards rule-cited findings whose `rule_quote` is missing or not literally present in `rules.md`.
 
 Set `PR_NUMBER` and `HEAD_SHA` as shell variables before posting anything:
 
@@ -44,6 +47,7 @@ This action runs up to seven distinct review angles, auto-selected from the chan
 |---|---|---|
 | `bugs` | yes | LLM only |
 | `security` | yes | LLM + `openai/security-best-practices` rubric (loaded from installed skill or fetched via `gh api repos/openai/skills/contents/skills/.curated/security-best-practices/references/<file>`) |
+| `conventions` | gated on `rules.md` presence | LLM + project-discovered `rules.md` (concatenated `AGENTS.md` / `CLAUDE.md` / `.cursorrules` / `.windsurfrules` / `GEMINI.md`) |
 | `seo` | no | LLM + `coreyhaines31/seo-audit` rubric (embedded in `prompts/angles/seo.md`) |
 | `aeo` | no | LLM + `coreyhaines31/ai-seo` rubric (embedded in `prompts/angles/aeo.md`); deeper `references/` fetched on demand via `gh api repos/coreyhaines31/marketingskills/contents/skills/ai-seo/references/<file>` |
 | `design` | no | LLM + `npx -y impeccable@$IMPECCABLE_VERSION detect --json` (one run; quantitative pass from JSON + qualitative critique scoped to flagged files) |
@@ -163,7 +167,7 @@ Every runner MUST write a final `findings.json` (for debugging + potential post-
 ]
 ```
 
-`angle` is one of `bugs | security | seo | aeo | design | react | database`.
+`angle` is one of `bugs | security | conventions | seo | aeo | design | react | database`.
 
 ### Inline Comment Format (rendered on the PR)
 

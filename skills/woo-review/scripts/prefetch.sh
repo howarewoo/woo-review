@@ -3,7 +3,9 @@
 # Inputs (env): GH_TOKEN, GITHUB_REPOSITORY, INPUT_SKIP_LABELS,
 #               PR_NUMBER, EVENT_NAME, EVENT_ACTION.
 # Outputs: skip=true|false to $GITHUB_OUTPUT.
-# Side effects: writes /tmp/pr-review/{diff.txt,meta.json}.
+# Side effects: writes /tmp/pr-review/{diff.txt,meta.json}, and rules.md when
+#               project-rule files (AGENTS.md / CLAUDE.md / .cursorrules /
+#               .windsurfrules / GEMINI.md) are discovered.
 
 set -euo pipefail
 
@@ -88,6 +90,58 @@ if [ "$DIFF_BYTES" -gt 300000 ]; then
     printf '\n[DIFF TRUNCATED AT 300KB]\n'
   } > "$OUTDIR/diff.txt.capped"
   mv "$OUTDIR/diff.txt.capped" "$OUTDIR/diff.txt"
+fi
+
+# Discover project-rule files.
+# Root scan: AGENTS.md / CLAUDE.md / .cursorrules / .windsurfrules / GEMINI.md.
+# Per-changed-file walk: collect AGENTS.md / CLAUDE.md from every parent dir
+# between the changed file and repo root. Each path is collected at most once.
+ROOT="$(git -C "${GITHUB_WORKSPACE:-.}" rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -n "$ROOT" ]; then
+  RULES_LIST="$(mktemp)"
+  RULES_BUF="$(mktemp)"
+
+  for f in AGENTS.md CLAUDE.md .cursorrules .windsurfrules GEMINI.md; do
+    [ -f "$ROOT/$f" ] && printf '%s\n' "$f" >> "$RULES_LIST"
+  done
+
+  while IFS= read -r changed; do
+    [ -n "$changed" ] || continue
+    dir="$(dirname "$changed")"
+    while [ "$dir" != "." ] && [ "$dir" != "/" ]; do
+      for f in AGENTS.md CLAUDE.md; do
+        [ -f "$ROOT/$dir/$f" ] && printf '%s\n' "$dir/$f" >> "$RULES_LIST"
+      done
+      dir="$(dirname "$dir")"
+    done
+  done < <(jq -r '.files[].path' "$OUTDIR/meta.json")
+
+  RULES_UNIQUE="$(awk 'NF && !seen[$0]++' "$RULES_LIST")"
+
+  if [ -n "$RULES_UNIQUE" ]; then
+    while IFS= read -r rel; do
+      printf '## SOURCE: %s\n' "$rel" >> "$RULES_BUF"
+      cat "$ROOT/$rel" >> "$RULES_BUF"
+      printf '\n\n' >> "$RULES_BUF"
+    done <<< "$RULES_UNIQUE"
+
+    RULES_BYTES=$(wc -c < "$RULES_BUF")
+    if [ "$RULES_BYTES" -gt 100000 ]; then
+      {
+        head -c 100000 "$RULES_BUF"
+        printf '\n[RULES TRUNCATED AT 100KB]\n'
+      } > "$OUTDIR/rules.md"
+    else
+      mv "$RULES_BUF" "$OUTDIR/rules.md"
+    fi
+
+    RULES_COUNT=$(printf '%s\n' "$RULES_UNIQUE" | wc -l | xargs)
+    FINAL_BYTES=$(wc -c < "$OUTDIR/rules.md")
+    echo "Discovered $RULES_COUNT rule file(s), $FINAL_BYTES bytes:"
+    printf '%s\n' "$RULES_UNIQUE" | sed 's/^/  /'
+  fi
+
+  rm -f "$RULES_LIST" "$RULES_BUF"
 fi
 
 echo "skip=false" >> "$GITHUB_OUTPUT"

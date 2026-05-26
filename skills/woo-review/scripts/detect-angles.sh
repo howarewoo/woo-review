@@ -23,6 +23,9 @@
 #               RLS tokens (CREATE POLICY, ENABLE ROW LEVEL SECURITY, SECURITY
 #               DEFINER, auth.uid()/auth.jwt()), Supabase client construction, or
 #               ORM raw-SQL call sites (.raw(, sql`, db.query(, pool.query()
+#   conventions — gated on prefetch having produced /tmp/pr-review/rules.md
+#               (i.e. the repo carries AGENTS.md / CLAUDE.md / .cursorrules /
+#               .windsurfrules / GEMINI.md somewhere along the changed paths).
 
 set -euo pipefail
 
@@ -92,6 +95,10 @@ has_database_diff_token() {
 }
 
 ANGLES=("bugs" "security")
+
+if [ -f "$OUTDIR/rules.md" ]; then
+  ANGLES+=("conventions")
+fi
 
 if has_seo_file || has_seo_diff_token; then
   ANGLES+=("seo")

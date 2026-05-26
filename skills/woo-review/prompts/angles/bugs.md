@@ -21,7 +21,7 @@ tier: standard
 - Anything lint-catchable (Biome / ESLint / Prettier / tsc warnings).
 - Input-dependent maybe-issues with no concrete failure case.
 - Pre-existing issues not introduced by this PR.
-- Style / naming taste without rule backing.
+- Style / naming taste without rule backing (unless `/tmp/pr-review/rules.md` explicitly requires it — then cite the rule via `rule_quote`).
 
 **Severity rubric:**
 

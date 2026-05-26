@@ -38,7 +38,7 @@ Filename pattern: `<language>-<framework>-<stack>-security.md`, with `<language>
 
 - Generic "could this ever be a problem" speculation without a concrete exploit path.
 - Pre-existing issues not introduced by this PR.
-- Defense-in-depth nice-to-haves without concrete exploit path.
+- Defense-in-depth nice-to-haves without concrete exploit path (unless `/tmp/pr-review/rules.md` explicitly mandates it — then cite the rule via `rule_quote`).
 - Theoretical timing attacks unless the diff actually adds a verifying compare.
 
 **Severity rubric:**

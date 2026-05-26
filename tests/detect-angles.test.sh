@@ -329,6 +329,53 @@ DIFF
 : > "$OUTPUT_FILE"
 run_case "docs-prose-no-database-trigger" "bugs,security,aeo"
 
+# --- Case 15: rules.md present -> conventions enabled.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "ru1e5abc",
+  "baseRefName": "main",
+  "title": "feat: small backend tweak",
+  "body": "",
+  "files": [
+    {"path": "server/handler.py", "additions": 6, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/server/handler.py b/server/handler.py
++def handle(req):
++    return ok()
+DIFF
+cat > "$PREFETCH/rules.md" <<'RULES'
+## SOURCE: AGENTS.md
+All handlers MUST return typed responses.
+RULES
+: > "$OUTPUT_FILE"
+run_case "rules-md-present-triggers-conventions" "bugs,security,conventions"
+
+# --- Case 16: rules.md absent -> conventions NOT enabled.
+rm -f "$PREFETCH/rules.md"
+: > "$OUTPUT_FILE"
+run_case "rules-md-absent-no-conventions" "bugs,security"
+
+# --- Case 17: rules.md + disable_angles=conventions -> conventions dropped.
+cat > "$PREFETCH/rules.md" <<'RULES'
+## SOURCE: AGENTS.md
+All handlers MUST return typed responses.
+RULES
+: > "$OUTPUT_FILE"
+INPUT_DISABLE_ANGLES="conventions" \
+  bash "$SCRIPT" > /dev/null
+actual=$(grep '^angles=' "$OUTPUT_FILE" | tail -n1 | cut -d= -f2-)
+if [ "$actual" = "bugs,security" ]; then
+  echo "ok   disable_angles=conventions drops conventions -> $actual"
+else
+  echo "FAIL disable_angles=conventions: expected 'bugs,security', got '$actual'"
+  fail=1
+fi
+unset INPUT_DISABLE_ANGLES
+rm -f "$PREFETCH/rules.md"
+
 if [ $fail -ne 0 ]; then
   echo "TESTS FAILED"
   exit 1
