@@ -142,6 +142,10 @@ export WOO_REVIEW_ACTION_PATH="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)
 
 Build the same `/tmp/pr-review/` artifact tree the GitHub Action builds.
 
+> **Atomic state.** `prefetch.sh` wipes `$OUTDIR` (defaults to `/tmp/pr-review`) before recreating it. Hosts that invoke individual stages directly (skipping `prefetch.sh`) MUST do the same — stale `findings.<angle>.json` from a prior run will otherwise re-enter the merge step and contaminate the review.
+>
+> **OUTDIR override.** All scripts (`prefetch.sh`, `load-config.sh`, `detect-angles.sh`, `merge-findings.sh`, `intersect-findings.sh`, `chunk-diff.sh`, `resolve-diff-line.sh`) honor the `OUTDIR` environment variable. Hosts that cannot use `/tmp/pr-review/` (e.g. sandboxed runtimes with workspace-scoped temp dirs) MUST export `OUTDIR=<their_dir>` to **every** sub-agent. Without that, sub-agents will write findings to a different directory than the merge step reads, silently dropping them.
+
 **If no PR number was supplied**, first try to resolve one from the current branch:
 
 ```bash
@@ -153,18 +157,22 @@ If `PR_NUMBER` is non-empty, proceed as if it had been passed in. If empty (no o
 **If a PR number is set (supplied or auto-detected):**
 
 ```bash
-mkdir -p /tmp/pr-review
-gh pr diff "$PR_NUMBER" > /tmp/pr-review/diff.txt
+OUTDIR="${OUTDIR:-/tmp/pr-review}"
+rm -rf "$OUTDIR"
+mkdir -p "$OUTDIR"
+gh pr diff "$PR_NUMBER" > "$OUTDIR/diff.txt"
 gh pr view "$PR_NUMBER" --json headRefOid,baseRefName,title,body,files,author \
-  > /tmp/pr-review/meta.json
+  > "$OUTDIR/meta.json"
 ```
 
 **If no PR number resolved (local mode):**
 
 ```bash
-mkdir -p /tmp/pr-review
+OUTDIR="${OUTDIR:-/tmp/pr-review}"
+rm -rf "$OUTDIR"
+mkdir -p "$OUTDIR"
 BASE="$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main)"
-git diff "$BASE"...HEAD > /tmp/pr-review/diff.txt
+git diff "$BASE"...HEAD > "$OUTDIR/diff.txt"
 # Synthesize meta.json from git for downstream scripts.
 git diff --name-only "$BASE"...HEAD \
   | jq -R . | jq -s '{
@@ -173,7 +181,7 @@ git diff --name-only "$BASE"...HEAD \
       title: "(local diff)",
       body: "",
       files: [.[] | {path: .}]
-    }' > /tmp/pr-review/meta.json
+    }' > "$OUTDIR/meta.json"
 ```
 
 ### Stage 2 — Detect Angles
@@ -207,11 +215,16 @@ Each sub-agent receives the same brief:
 You are the <angle> reviewer for this PR. Read:
 - $WOO_REVIEW_ACTION_PATH/prompts/_header.md   (shared contract)
 - $WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md   (your scope)
-- /tmp/pr-review/diff.txt, /tmp/pr-review/meta.json
+- $OUTDIR/diff.txt, $OUTDIR/meta.json   (OUTDIR defaults to /tmp/pr-review)
 
 Execute any shell commands the angle prompt specifies (e.g. impeccable detect,
 react-doctor). Write your findings as a JSON array to
-/tmp/pr-review/findings.<angle>.json per the schema in _header.md. EXIT.
+$OUTDIR/findings.<angle>.json per the schema in _header.md. The file MUST
+start with `[` and end with `]` — no preamble, no commentary, no markdown
+fences. Before writing each finding's `line` field, validate it via
+`bash $WOO_REVIEW_ACTION_PATH/scripts/resolve-diff-line.sh --file <path> --line <N>`
+and drop the finding when the helper prints `null` (the line is not anchorable
+on the diff's RIGHT side and the GitHub API will reject the comment). EXIT.
 ```
 
 **Chunked fan-out.** When `/tmp/pr-review/chunks.txt` exists, spawn one sub-agent per `(angle, chunk_id)` instead of one per angle. Pass the chunk ID in the brief, and tell the sub-agent to read `/tmp/pr-review/diff.chunk-<id>.txt` and write `/tmp/pr-review/findings.<angle>.chunk-<id>.json`. The validator pass still runs **once globally** — `merge-findings.sh` collapses any within-angle duplicates across chunks before validation, and the validator handles cross-angle dedup as today.
@@ -337,5 +350,10 @@ Zero local setup required in the consumer repo — the action ships its own prom
 ## Troubleshooting
 
 - **Missing artifacts** in cloud mode — verify the `detect` job uploaded `review-artifacts`.
-- **Empty validator output** — inspect `/tmp/pr-review/raw_findings.json`. If empty, no angle wrote findings; check each `findings.<angle>.json`.
+- **Empty validator output** — inspect `$OUTDIR/raw_findings.json`. If empty, no angle wrote findings; check each `findings.<angle>.json`.
 - **Sub-agents posting prematurely** — re-read the Stage 3 brief; workers must write JSON only.
+- **`gh api ... /reviews` returns HTTP 422 "Line could not be resolved"** — a finding's `line` field did not map to a `+` or context line on the diff's RIGHT side. The merge step now drops these via `resolve-diff-line.sh`, but mismatches outside the helper's reach can still slip through. Re-run with the resolver enabled (it runs by default in `merge-findings.sh`) and inspect `$OUTDIR/diff-line-cache.json` to see which lookups returned `null`.
+- **Stale findings from a prior run** — `prefetch.sh` now wipes `$OUTDIR` before recreating it. Hosts that skip `prefetch.sh` MUST `rm -rf "$OUTDIR"` themselves; otherwise files like `findings.bugs.json` from an earlier session leak into the merge step.
+- **`detect-angles.sh` crashes outside GitHub Actions** — fixed: the script now emits `angles=` / `chunks_json=` lines to stdout and writes `$OUTDIR/angles.json` + `$OUTDIR/chunks-matrix.json` when `$GITHUB_OUTPUT` is unset. Inspect those files when running locally.
+- **Sub-agent writes findings to the wrong path** — caused by host workspace drift (the sub-agent's CWD differs from the orchestrator's). Export `OUTDIR` to every sub-agent — see Stage 1.
+- **Adversarial validators dropped a finding both passes agreed on** — the intersection now applies a fuzzy second pass (`±10` lines, prefix-20 title-stem match). Check `$OUTDIR/validator-metrics.json` for `disagreement_count`; surprises usually mean title-stem prefix mismatch, not line drift.

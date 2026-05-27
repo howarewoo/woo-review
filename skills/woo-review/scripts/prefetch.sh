@@ -19,7 +19,12 @@
 
 set -euo pipefail
 
-OUTDIR="/tmp/pr-review"
+# Atomic state. Prior runs may have left stale findings.<angle>.json,
+# raw_findings.json, validator-metrics.json, etc. in $OUTDIR. Without a wipe,
+# stale files (e.g. from an earlier meta-review of the skill itself) silently
+# re-enter the merge step. Wipe first, recreate empty.
+OUTDIR="${OUTDIR:-/tmp/pr-review}"
+rm -rf "$OUTDIR"
 mkdir -p "$OUTDIR"
 
 PR_NUMBER="${PR_NUMBER:-}"
@@ -81,7 +86,10 @@ if [ "$EVENT_NAME" = "issue_comment" ]; then
 fi
 
 emit_skip() {
-  echo "skip=true" >> "$GITHUB_OUTPUT"
+  if [ -n "${GITHUB_OUTPUT:-}" ]; then
+    echo "skip=true" >> "$GITHUB_OUTPUT"
+  fi
+  echo "skip=true"
   echo "Skipping: $1"
   exit 0
 }
@@ -512,5 +520,8 @@ echo "Prior unresolved threads: $PRIOR_COUNT"
 # is a no-op (no chunks.txt produced, downstream behaves exactly as before).
 bash "$SCRIPT_DIR/chunk-diff.sh"
 
-echo "skip=false" >> "$GITHUB_OUTPUT"
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+  echo "skip=false" >> "$GITHUB_OUTPUT"
+fi
+echo "skip=false"
 echo "Prefetch complete: $OUTDIR/"

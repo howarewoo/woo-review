@@ -18,7 +18,8 @@ You are running as a parallel worker for a specific angle.
 - Do NOT manage labels.
 - Do NOT launch subagents for other angles.
 - Run ONLY the logic for your target angle (loading its prompt from `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md`).
-- Write your findings to `/tmp/pr-review/findings.<angle>.json` and then EXIT.
+- Write your findings to `$OUTDIR/findings.<angle>.json` (default `/tmp/pr-review/findings.<angle>.json`) and then EXIT.
+- The findings file MUST be a JSON array only — starts with `[`, ends with `]`, no preamble, no markdown fences, no commentary. See *Output Discipline* in `_header.md`. Validate every `line` via `scripts/resolve-diff-line.sh` and drop findings the helper rejects.
 
 ### MODE: validate
 You are running as the final aggregator.

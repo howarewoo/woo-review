@@ -156,6 +156,65 @@ assert_eq "empty-both kept" "$(jq 'length' "$CASE/findings.json")" "0" || ok=0
 assert_eq "empty-both disagreement" "$(jq -r '.disagreement_count' "$CASE/validator-metrics.json")" "0" || ok=0
 [ $ok -eq 1 ] && echo "ok   empty-both-arrays"
 
+# ---------- Case 9: fuzzy match — ±10 line drift on same file is matched ----------
+new_case "fuzzy-line-drift"
+cat > "$CASE/findings.defender.json" <<'JSON'
+[{"file":"a.ts","line":39,"title":"REVOKE statement on shared role","severity":"HIGH","blocking":true,"description":"defender prose","fix":"y","fix_type":"prose","suggestion":null,"angle":"security"}]
+JSON
+cat > "$CASE/findings.prosecutor.json" <<'JSON'
+[{"file":"a.ts","line":33,"title":"REVOKE statement on shared role","severity":"MEDIUM","blocking":true,"description":"prosecutor prose","fix":"y","fix_type":"prose","suggestion":null,"angle":"security"}]
+JSON
+bash "$SCRIPT" >/dev/null 2>"$CASE/err.txt"
+ok=1
+assert_eq "fuzzy-line-drift kept" "$(jq 'length' "$CASE/findings.json")" "1" || ok=0
+# Defender prose wins; defender line wins.
+assert_eq "fuzzy-line-drift line" "$(jq -r '.[0].line' "$CASE/findings.json")" "39" || ok=0
+assert_eq "fuzzy-line-drift description" "$(jq -r '.[0].description' "$CASE/findings.json")" "defender prose" || ok=0
+# Severity = min(HIGH, MEDIUM) = MEDIUM; blocking = AND(true, true) = true.
+assert_eq "fuzzy-line-drift severity" "$(jq -r '.[0].severity' "$CASE/findings.json")" "MEDIUM" || ok=0
+assert_eq "fuzzy-line-drift blocking" "$(jq -r '.[0].blocking' "$CASE/findings.json")" "true" || ok=0
+grep -q 'fuzzy-matched 1 finding' "$CASE/err.txt" || { echo "FAIL fuzzy-line-drift: stderr metric missing"; fail=1; ok=0; }
+[ $ok -eq 1 ] && echo "ok   fuzzy-line-drift-within-window"
+
+# ---------- Case 10: fuzzy match — title reworded but prefix-20 stem matches ----------
+new_case "fuzzy-title-reword"
+cat > "$CASE/findings.defender.json" <<'JSON'
+[{"file":"a.ts","line":12,"title":"Missing null check on user lookup","severity":"MEDIUM","blocking":false,"description":"d","fix":"y","fix_type":"prose","suggestion":null,"angle":"bugs"}]
+JSON
+cat > "$CASE/findings.prosecutor.json" <<'JSON'
+[{"file":"a.ts","line":15,"title":"Missing null check on user fetch result","severity":"MEDIUM","blocking":false,"description":"d","fix":"y","fix_type":"prose","suggestion":null,"angle":"bugs"}]
+JSON
+bash "$SCRIPT" >/dev/null 2>"$CASE/err.txt"
+ok=1
+assert_eq "fuzzy-title-reword kept" "$(jq 'length' "$CASE/findings.json")" "1" || ok=0
+grep -q 'fuzzy-matched 1 finding' "$CASE/err.txt" || { echo "FAIL fuzzy-title-reword: not matched"; fail=1; ok=0; }
+[ $ok -eq 1 ] && echo "ok   fuzzy-title-prefix-20-match"
+
+# ---------- Case 11: out-of-window line drift is NOT matched ----------
+new_case "fuzzy-out-of-window"
+cat > "$CASE/findings.defender.json" <<'JSON'
+[{"file":"a.ts","line":10,"title":"Same finding","severity":"HIGH","blocking":true,"description":"d","fix":"y","fix_type":"prose","suggestion":null,"angle":"bugs"}]
+JSON
+cat > "$CASE/findings.prosecutor.json" <<'JSON'
+[{"file":"a.ts","line":50,"title":"Same finding","severity":"HIGH","blocking":true,"description":"d","fix":"y","fix_type":"prose","suggestion":null,"angle":"bugs"}]
+JSON
+bash "$SCRIPT" >/dev/null 2>"$CASE/err.txt"
+ok=1
+assert_eq "fuzzy-out-of-window kept" "$(jq 'length' "$CASE/findings.json")" "0" || ok=0
+grep -q 'fuzzy-matched 0 finding' "$CASE/err.txt" || { echo "FAIL fuzzy-out-of-window: should report 0"; fail=1; ok=0; }
+[ $ok -eq 1 ] && echo "ok   fuzzy-out-of-window-not-matched"
+
+# ---------- Case 12: different files do NOT fuzzy match ----------
+new_case "fuzzy-different-files"
+cat > "$CASE/findings.defender.json" <<'JSON'
+[{"file":"a.ts","line":10,"title":"Same finding","severity":"HIGH","blocking":true,"description":"d","fix":"y","fix_type":"prose","suggestion":null,"angle":"bugs"}]
+JSON
+cat > "$CASE/findings.prosecutor.json" <<'JSON'
+[{"file":"b.ts","line":10,"title":"Same finding","severity":"HIGH","blocking":true,"description":"d","fix":"y","fix_type":"prose","suggestion":null,"angle":"bugs"}]
+JSON
+bash "$SCRIPT" >/dev/null 2>"$CASE/err.txt"
+assert_eq "fuzzy-different-files kept" "$(jq 'length' "$CASE/findings.json")" "0" && echo "ok   fuzzy-different-files-not-matched"
+
 if [ $fail -ne 0 ]; then
   echo "TESTS FAILED"
   exit 1

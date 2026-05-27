@@ -42,7 +42,7 @@ This pass is one half of an adversarial validation pipeline. Your output is inte
    - The change is structural (new function, refactor, file move).
    - Do NOT discard for this — only downgrade.
 
-Write the surviving JSON array to **`/tmp/pr-review/findings.prosecutor.json`**.
+Write the surviving JSON array to **`$OUTDIR/findings.prosecutor.json`** (default `/tmp/pr-review/findings.prosecutor.json`). The file MUST be a JSON array only: starts with `[`, ends with `]`, no preamble, no commentary, no markdown fences.
 
 ### Step 2 — Exit
 
