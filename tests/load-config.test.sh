@@ -272,6 +272,66 @@ else
   fi
 fi
 
+# ---------- Case 12a: release_rollup_pattern string round-trips ----------
+cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+release_rollup_pattern: '^(staging|release)'
+YAML
+bash "$SCRIPT" >/dev/null
+if [ "$(jq -r '.release_rollup_pattern' "$PREFETCH/config.json")" = "^(staging|release)" ]; then
+  echo "ok   release-rollup-pattern-roundtrip"
+else
+  echo "FAIL release-rollup-pattern-roundtrip: got $(jq -r '.release_rollup_pattern' "$PREFETCH/config.json")"
+  fail=1
+fi
+
+# ---------- Case 12b: invalid regex rejected with line annotation ----------
+cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+release_rollup_pattern: '(unbalanced'
+YAML
+err_out="$WORK/err.txt"
+if bash "$SCRIPT" 2>"$err_out" >/dev/null; then
+  echo "FAIL release-rollup-pattern-invalid-regex: loader exited 0"
+  fail=1
+else
+  if grep -q 'release_rollup_pattern' "$err_out" && grep -q 'not a valid regex' "$err_out"; then
+    echo "ok   release-rollup-pattern-invalid-regex-rejected"
+  else
+    echo "FAIL release-rollup-pattern-invalid-regex: wrong error"
+    cat "$err_out"
+    fail=1
+  fi
+fi
+
+# ---------- Case 12c: empty release_rollup_pattern is valid (opt-out) ----------
+cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+release_rollup_pattern: ''
+YAML
+bash "$SCRIPT" >/dev/null
+if [ "$(jq -r '.release_rollup_pattern' "$PREFETCH/config.json")" = "" ]; then
+  echo "ok   release-rollup-pattern-empty-allowed"
+else
+  echo "FAIL release-rollup-pattern-empty-allowed: got $(jq -r '.release_rollup_pattern' "$PREFETCH/config.json")"
+  fail=1
+fi
+
+# ---------- Case 12d: non-string release_rollup_pattern rejected ----------
+cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+release_rollup_pattern: 42
+YAML
+err_out="$WORK/err.txt"
+if bash "$SCRIPT" 2>"$err_out" >/dev/null; then
+  echo "FAIL release-rollup-pattern-non-string: loader exited 0"
+  fail=1
+else
+  if grep -q 'release_rollup_pattern' "$err_out" && grep -q 'must be a string' "$err_out"; then
+    echo "ok   release-rollup-pattern-non-string-rejected"
+  else
+    echo "FAIL release-rollup-pattern-non-string: wrong error"
+    cat "$err_out"
+    fail=1
+  fi
+fi
+
 # ---------- Case 11: empty file -> empty {} JSON ----------
 : > "$GITHUB_WORKSPACE/.woo-review.yml"
 bash "$SCRIPT" >/dev/null

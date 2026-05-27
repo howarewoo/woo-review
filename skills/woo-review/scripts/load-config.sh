@@ -10,7 +10,17 @@
 #   severity_floor      "low" | "medium" | "high" (case-insensitive)
 #   ignore              list[str] (fnmatch globs)
 #   project_rules       list[str] (fnmatch globs, relative to repo root)
-#   authors_skip        list[str] (GitHub login strings)
+#   authors_skip        list[str] (GitHub login strings; absent => default
+#                                  [dependabot[bot], renovate[bot],
+#                                  github-actions[bot]] applied at use-site
+#                                  in prefetch.sh — explicit empty list opts
+#                                  out)
+#   release_rollup_pattern str    (Python regex; matched against PR title to
+#                                  short-circuit mechanical release / rollup
+#                                  PRs. Absent => default
+#                                  `^(staging|release|chore\(release\))`
+#                                  applied at use-site. Empty string opts
+#                                  out entirely.)
 #   models.fast         str
 #   models.standard     str
 #   models.deep         str
@@ -58,8 +68,8 @@ VALID_ANGLES = {"bugs", "security", "conventions", "seo", "aeo", "design", "reac
 VALID_FLOORS = {"low", "medium", "high"}
 TOP_KEYS = {
     "angles", "severity_floor", "ignore", "project_rules",
-    "authors_skip", "models", "fix_commands", "disable_adversarial",
-    "chunking",
+    "authors_skip", "release_rollup_pattern", "models", "fix_commands",
+    "disable_adversarial", "chunking",
 }
 MODEL_TIERS = {"fast", "standard", "deep"}
 
@@ -142,6 +152,19 @@ for key in ("ignore", "project_rules", "authors_skip", "fix_commands"):
     if key in raw:
         require_list_of_strings(raw[key], key)
         out[key] = list(raw[key])
+
+if "release_rollup_pattern" in raw:
+    pat = raw["release_rollup_pattern"]
+    if not isinstance(pat, str):
+        loud("`release_rollup_pattern` must be a string, got {}".format(type(pat).__name__))
+    # Empty string is valid — explicit opt-out of the rollup-pattern check.
+    if pat:
+        import re as _re
+        try:
+            _re.compile(pat)
+        except _re.error as exc:
+            loud("`release_rollup_pattern` is not a valid regex: {}".format(exc))
+    out["release_rollup_pattern"] = pat
 
 if "disable_adversarial" in raw:
     val = raw["disable_adversarial"]

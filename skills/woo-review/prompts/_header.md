@@ -54,7 +54,8 @@ The prefetch step parses an optional `.woo-review.yml` at the consumer repo root
 | `angles.force`, `angles.skip` | `detect-angles.sh` | Stage 1 |
 | `ignore` | `prefetch.sh` (filters diff + paths) | Stage 1 |
 | `project_rules` | `prefetch.sh` (appends to `rules.md`) | Stage 1 |
-| `authors_skip` | `prefetch.sh` (early-exits with `skip=true`) | Stage 1 |
+| `authors_skip` | `prefetch.sh` (skips + posts one-line comment; default list applied when absent — issue #19) | Stage 1 |
+| `release_rollup_pattern` | `prefetch.sh` (skips + posts one-line comment when PR title matches; default `^(staging\|release\|chore\(release\))` applied when absent — issue #19) | Stage 1 |
 | `severity_floor` | validator | Stage 3 |
 | `models.fast` / `.standard` / `.deep` | orchestrator prompts (tier resolution) | Stage 2 |
 | `fix_commands` | persisted only; consumed by `--loop` mode (#15) | n/a |

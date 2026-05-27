@@ -34,10 +34,15 @@ jobs:
   review:
     name: AI Code Review
     runs-on: ubuntu-latest
+    # NOTE: bot-author skip (dependabot/renovate/github-actions) + release-rollup
+    # title skip are now enforced inside the action by .woo-review.yml defaults,
+    # so the workflow no longer needs to hard-code them. `/woo-review force` in
+    # a PR comment overrides those skips — that path is what the issue_comment
+    # branch below enables.
     if: >
-      (github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.user.login != 'renovate[bot]') ||
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
       (github.event_name == 'pull_request_target' && github.event.label.name == 'ai-review') ||
-      (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && contains(github.event.comment.body, '@review'))
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && (contains(github.event.comment.body, '@review') || contains(github.event.comment.body, '/woo-review')))
     timeout-minutes: 15
     permissions:
       contents: read

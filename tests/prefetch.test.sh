@@ -29,9 +29,23 @@ if [[ "$ARGS" == *"--json labels"* ]]; then
   echo ""
   exit 0
 fi
-# gh pr view N --json comments --jq '... | length' → 0 prior bot comments.
+# gh pr view N --json comments --jq '...'
+# Two callers: (a) prior-bot-comment counter, (b) skip-marker idempotency check.
+# The latter's --jq carries the `woo-review:skipped` substring.
 if [[ "$ARGS" == *"--json comments"* ]]; then
-  echo "${WOO_REVIEW_TEST_ISSUE_COMMENTS:-0}"
+  if [[ "$ARGS" == *"woo-review:skipped"* ]]; then
+    echo "${WOO_REVIEW_TEST_SKIP_MARKER_COUNT:-0}"
+  else
+    echo "${WOO_REVIEW_TEST_ISSUE_COMMENTS:-0}"
+  fi
+  exit 0
+fi
+# gh pr comment N --body BODY → record to log file when WOO_REVIEW_TEST_COMMENT_LOG set.
+if [[ "$1" == "pr" && "$2" == "comment" ]]; then
+  if [ -n "${WOO_REVIEW_TEST_COMMENT_LOG:-}" ]; then
+    printf -- '--- pr comment invocation ---\n' >> "$WOO_REVIEW_TEST_COMMENT_LOG"
+    for arg in "$@"; do printf '%s\n' "$arg" >> "$WOO_REVIEW_TEST_COMMENT_LOG"; done
+  fi
   exit 0
 fi
 # gh pr view N --json reviews → only used when WOO_REVIEW_FAKE_PR_REVIEWS_JSON unset.
@@ -119,15 +133,19 @@ fail=0
 reset() {
   : > "$OUTPUT_FILE"
   rm -f "$PREFETCH"/* 2>/dev/null || true
+  rm -f "$GITHUB_WORKSPACE/.woo-review.yml" 2>/dev/null || true
   unset WOO_REVIEW_FAKE_PR_REVIEWS_JSON || true
   unset WOO_REVIEW_FAKE_INCREMENTAL_DIFF || true
   unset WOO_REVIEW_TEST_COMPARE_404 || true
+  unset WOO_REVIEW_TEST_SKIP_MARKER_COUNT || true
+  unset WOO_REVIEW_TEST_COMMENT_LOG || true
   unset INPUT_INCREMENTAL || true
   unset COMMENT_BODY || true
   # Re-export canonical event context so each case starts from a known
   # baseline regardless of what the previous case set.
   export EVENT_NAME="pull_request"
   export EVENT_ACTION="synchronize"
+  export WOO_REVIEW_TEST_META_FIXTURE="$META_FIXTURE"
 }
 
 assert_eq() {
@@ -279,6 +297,195 @@ if ! grep -q "forced to 'off' by --full" "$WORK/stdout"; then
   fail=1
 fi
 echo "ok   case9 --full PR-comment trigger -> full diff"
+
+# ===== Issue #19: auto-skip + /woo-review comment trigger =====
+
+# Dedicated meta fixtures so the author / title varies per case.
+BOT_META="$WORK/meta-dependabot.json"
+# Includes a src/* file so cases that bypass the skip get past the
+# `CODE_FILES > 0` gate downstream.
+cat > "$BOT_META" <<'JSON'
+{
+  "headRefOid": "botcommit1",
+  "baseRefName": "main",
+  "title": "chore(deps): bump axios",
+  "body": "",
+  "files": [
+    {"path":"package.json","additions":1,"deletions":1},
+    {"path":"src/app.ts","additions":20,"deletions":5}
+  ],
+  "author": {"login":"dependabot[bot]"}
+}
+JSON
+
+RELEASE_META="$WORK/meta-release.json"
+cat > "$RELEASE_META" <<'JSON'
+{
+  "headRefOid": "rel1234",
+  "baseRefName": "main",
+  "title": "chore(release): publish 1.2.3",
+  "body": "",
+  "files": [{"path":"src/app.ts","additions":20,"deletions":5}],
+  "author": {"login":"alice"}
+}
+JSON
+
+# --- Case 10: default authors_skip → skip + post comment (no marker yet) ---
+reset
+export WOO_REVIEW_TEST_META_FIXTURE="$BOT_META"
+COMMENT_LOG="$WORK/comment-log.txt"; : > "$COMMENT_LOG"
+export WOO_REVIEW_TEST_COMMENT_LOG="$COMMENT_LOG"
+export WOO_REVIEW_TEST_SKIP_MARKER_COUNT=0
+bash "$SCRIPT" > "$WORK/stdout" 2>&1 || true
+if ! grep -q '^skip=true' "$OUTPUT_FILE"; then
+  echo "FAIL case10: expected skip=true for default authors_skip"
+  sed 's/^/    /' "$WORK/stdout"
+  fail=1
+fi
+if ! grep -q "matches authors_skip" "$WORK/stdout"; then
+  echo "FAIL case10: missing skip reason in stdout"
+  sed 's/^/    /' "$WORK/stdout"
+  fail=1
+fi
+if ! grep -q "woo-review:skipped" "$COMMENT_LOG"; then
+  echo "FAIL case10: skip comment not posted (marker missing in log)"
+  cat "$COMMENT_LOG"
+  fail=1
+fi
+echo "ok   case10 default authors_skip -> skip + post comment"
+
+# --- Case 11: idempotent re-skip (marker already present) ---
+reset
+export WOO_REVIEW_TEST_META_FIXTURE="$BOT_META"
+COMMENT_LOG="$WORK/comment-log-2.txt"; : > "$COMMENT_LOG"
+export WOO_REVIEW_TEST_COMMENT_LOG="$COMMENT_LOG"
+export WOO_REVIEW_TEST_SKIP_MARKER_COUNT=1
+bash "$SCRIPT" > "$WORK/stdout" 2>&1 || true
+if ! grep -q '^skip=true' "$OUTPUT_FILE"; then
+  echo "FAIL case11: expected skip=true on re-trigger"
+  fail=1
+fi
+if [ -s "$COMMENT_LOG" ]; then
+  echo "FAIL case11: skip comment was reposted despite marker"
+  cat "$COMMENT_LOG"
+  fail=1
+fi
+if ! grep -q "Skip comment marker already present" "$WORK/stdout"; then
+  echo "FAIL case11: missing idempotency log line"
+  sed 's/^/    /' "$WORK/stdout"
+  fail=1
+fi
+echo "ok   case11 marker present -> skip silently (no repost)"
+
+# --- Case 12: /woo-review force bypasses authors_skip ---
+reset
+export WOO_REVIEW_TEST_META_FIXTURE="$BOT_META"
+export EVENT_NAME="issue_comment"
+export EVENT_ACTION="created"
+export COMMENT_BODY="/woo-review force"
+COMMENT_LOG="$WORK/comment-log-3.txt"; : > "$COMMENT_LOG"
+export WOO_REVIEW_TEST_COMMENT_LOG="$COMMENT_LOG"
+bash "$SCRIPT" > "$WORK/stdout" 2>&1 || { echo "FAIL case12 (script error):"; sed 's/^/    /' "$WORK/stdout"; fail=1; }
+if grep -q '^skip=true' "$OUTPUT_FILE"; then
+  echo "FAIL case12: /woo-review force did not bypass authors_skip"
+  sed 's/^/    /' "$WORK/stdout"
+  fail=1
+fi
+if ! grep -q "Auto-skip bypass.*'/woo-review force'" "$WORK/stdout"; then
+  echo "FAIL case12: missing bypass log line"
+  sed 's/^/    /' "$WORK/stdout"
+  fail=1
+fi
+if [ -s "$COMMENT_LOG" ]; then
+  echo "FAIL case12: skip comment was posted despite force"
+  cat "$COMMENT_LOG"
+  fail=1
+fi
+echo "ok   case12 /woo-review force -> bypass authors_skip"
+
+# --- Case 13: default release_rollup_pattern matches PR title -> skip ---
+reset
+export WOO_REVIEW_TEST_META_FIXTURE="$RELEASE_META"
+COMMENT_LOG="$WORK/comment-log-4.txt"; : > "$COMMENT_LOG"
+export WOO_REVIEW_TEST_COMMENT_LOG="$COMMENT_LOG"
+bash "$SCRIPT" > "$WORK/stdout" 2>&1 || true
+if ! grep -q '^skip=true' "$OUTPUT_FILE"; then
+  echo "FAIL case13: expected skip=true for release rollup title"
+  sed 's/^/    /' "$WORK/stdout"
+  fail=1
+fi
+if ! grep -q "release_rollup_pattern" "$WORK/stdout"; then
+  echo "FAIL case13: missing rollup-pattern reason"
+  sed 's/^/    /' "$WORK/stdout"
+  fail=1
+fi
+if ! grep -q "woo-review:skipped" "$COMMENT_LOG"; then
+  echo "FAIL case13: skip comment not posted for rollup match"
+  cat "$COMMENT_LOG"
+  fail=1
+fi
+echo "ok   case13 release_rollup_pattern match -> skip + comment"
+
+# --- Case 14: explicit authors_skip: [] opts out of default bot skip ---
+reset
+export WOO_REVIEW_TEST_META_FIXTURE="$BOT_META"
+cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+authors_skip: []
+release_rollup_pattern: ''
+YAML
+COMMENT_LOG="$WORK/comment-log-5.txt"; : > "$COMMENT_LOG"
+export WOO_REVIEW_TEST_COMMENT_LOG="$COMMENT_LOG"
+bash "$SCRIPT" > "$WORK/stdout" 2>&1 || { echo "FAIL case14 (script error):"; sed 's/^/    /' "$WORK/stdout"; fail=1; }
+if grep -q '^skip=true' "$OUTPUT_FILE"; then
+  echo "FAIL case14: explicit empty authors_skip should opt out, but PR was skipped"
+  sed 's/^/    /' "$WORK/stdout"
+  fail=1
+fi
+if [ -s "$COMMENT_LOG" ]; then
+  echo "FAIL case14: skip comment posted despite opt-out"
+  cat "$COMMENT_LOG"
+  fail=1
+fi
+echo "ok   case14 explicit empty authors_skip -> no skip"
+
+# --- Case 15: /woo-review recheck forces incremental even with --full alias?
+# (recheck explicitly overrides bare /woo-review path)
+reset
+export EVENT_NAME="issue_comment"
+export EVENT_ACTION="created"
+export COMMENT_BODY="/woo-review recheck"
+export WOO_REVIEW_FAKE_PR_REVIEWS_JSON='{"reviews":[{"body":"<!-- woo-review:sha=abcdef0 -->","author":{"login":"claude-code-bot"},"submittedAt":"2026-01-01T00:00:00Z"}]}'
+INC_DIFF=$'diff --git a/src/app.ts b/src/app.ts\n@@ -1,1 +1,2 @@\n+new\n'
+export WOO_REVIEW_FAKE_INCREMENTAL_DIFF="$INC_DIFF"
+bash "$SCRIPT" > "$WORK/stdout" 2>&1 || { echo "FAIL case15 (script error):"; sed 's/^/    /' "$WORK/stdout"; fail=1; }
+LAST_SHA=$(cat "$PREFETCH/last_sha.txt" 2>/dev/null || echo "MISSING")
+assert_eq "case15 recheck last_sha" "abcdef0" "$LAST_SHA"
+if ! grep -q "forced to 'auto' by '/woo-review recheck'" "$WORK/stdout"; then
+  echo "FAIL case15: missing recheck log line"
+  sed 's/^/    /' "$WORK/stdout"
+  fail=1
+fi
+echo "ok   case15 /woo-review recheck -> incremental"
+
+# --- Case 16: bare /woo-review forces full diff even when marker present ---
+reset
+export EVENT_NAME="issue_comment"
+export EVENT_ACTION="created"
+export COMMENT_BODY="/woo-review please"
+export WOO_REVIEW_FAKE_PR_REVIEWS_JSON='{"reviews":[{"body":"<!-- woo-review:sha=abcdef0 -->","author":{"login":"claude-code-bot"},"submittedAt":"2026-01-01T00:00:00Z"}]}'
+bash "$SCRIPT" > "$WORK/stdout" 2>&1 || { echo "FAIL case16 (script error):"; sed 's/^/    /' "$WORK/stdout"; fail=1; }
+LAST_SHA=$(cat "$PREFETCH/last_sha.txt" 2>/dev/null || echo "MISSING")
+assert_eq "case16 bare /woo-review last_sha" "" "$LAST_SHA"
+if ! diff -q "$PREFETCH/diff.txt" "$FULL_DIFF_FIXTURE" >/dev/null 2>&1; then
+  echo "FAIL case16: diff.txt should be full diff for bare /woo-review"
+  fail=1
+fi
+if ! grep -q "bare '/woo-review' trigger" "$WORK/stdout"; then
+  echo "FAIL case16: missing bare-trigger log line"
+  sed 's/^/    /' "$WORK/stdout"
+  fail=1
+fi
+echo "ok   case16 bare /woo-review -> full diff"
 
 if [ "$fail" -ne 0 ]; then
   echo "prefetch tests FAILED"
