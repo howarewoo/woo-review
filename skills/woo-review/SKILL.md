@@ -197,7 +197,8 @@ Boundary precedence: workspace packages (`packages/<name>/`, `apps/<name>/`, `se
 
 - Claude Code: `Task` tool, one call per angle in a single message.
 - Cursor / Composer: parallel subagent dispatch.
-- Gemini CLI / opencode: sequential loop (no native subagents — still launch them one at a time inside this stage).
+- Gemini CLI: built-in `@generalist` subagent, one `@generalist` per angle in the same response (see `prompts/google.md`). Parallel-vs-sequential dispatch of multiple `@<agent>` calls in a single turn is not formally documented today; treat as best-effort parallel — the isolation pattern still buys token economy even if Gemini serializes internally.
+- opencode: parallel subagent dispatch via the OpenCode runtime's primitive (see `prompts/opencode.md`); falls back to a sequential loop when the build does not support it.
 
 Each sub-agent receives the same brief:
 
