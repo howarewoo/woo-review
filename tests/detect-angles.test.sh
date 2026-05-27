@@ -900,6 +900,63 @@ diff --git a/src/auth/login.test.ts b/src/auth/login.test.ts
 DIFF
 INPUT_DISABLE_ANGLES="tests" run_case "disable_angles=tests-drops-tests" "bugs,security,types"
 
+# --- Case 43: non-GHA host (GITHUB_OUTPUT unset). The script MUST NOT crash
+#              under `set -euo pipefail` when there is no $GITHUB_OUTPUT to
+#              write to. It MUST write $OUTDIR/angles.json + $OUTDIR/chunks-matrix.json
+#              and print the same key=value lines to stdout.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "ab1e1abe",
+  "baseRefName": "main",
+  "title": "fix: tighten typing",
+  "body": "",
+  "files": [
+    {"path": "src/lib/foo.ts", "additions": 3, "deletions": 1}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/src/lib/foo.ts b/src/lib/foo.ts
++export const foo = 1;
+DIFF
+rm -f "$PREFETCH/angles.json" "$PREFETCH/chunks-matrix.json"
+saved_github_output="${GITHUB_OUTPUT:-}"
+unset GITHUB_OUTPUT
+if ! stdout_out=$(bash "$SCRIPT" 2>&1); then
+  echo "FAIL non-gha-no-crash: script exited non-zero with GITHUB_OUTPUT unset"
+  fail=1
+else
+  if ! printf '%s\n' "$stdout_out" | grep -qE '^angles=bugs,security,types$'; then
+    echo "FAIL non-gha-stdout: missing 'angles=...' on stdout"
+    echo "----- captured stdout -----"
+    printf '%s\n' "$stdout_out"
+    echo "----- end -----"
+    fail=1
+  fi
+  if [ ! -s "$PREFETCH/angles.json" ]; then
+    echo "FAIL non-gha-fallback: $PREFETCH/angles.json was not written"
+    fail=1
+  else
+    expected_json='["bugs","security","types"]'
+    actual_json=$(cat "$PREFETCH/angles.json")
+    if [ "$actual_json" != "$expected_json" ]; then
+      echo "FAIL non-gha-fallback (json): expected '$expected_json', got '$actual_json'"
+      fail=1
+    fi
+  fi
+  if [ ! -s "$PREFETCH/chunks-matrix.json" ]; then
+    echo "FAIL non-gha-fallback: $PREFETCH/chunks-matrix.json was not written"
+    fail=1
+  fi
+  if [ $fail -eq 0 ]; then
+    echo "ok   non-gha-no-crash -> stdout+files emitted without GITHUB_OUTPUT"
+  fi
+fi
+# Restore GITHUB_OUTPUT for any later cases.
+if [ -n "$saved_github_output" ]; then
+  export GITHUB_OUTPUT="$saved_github_output"
+fi
+
 if [ $fail -ne 0 ]; then
   echo "TESTS FAILED"
   exit 1

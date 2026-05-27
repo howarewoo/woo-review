@@ -2,6 +2,22 @@
 
 This contract is identical across every provider runner. The orchestration sections below the `---` are provider-specific.
 
+## Output Discipline (READ FIRST)
+
+Every artifact you write under `$OUTDIR/findings.*.json` (default `/tmp/pr-review/findings.<angle>.json`) MUST be a valid JSON array — and **only** a JSON array.
+
+- The file MUST start with `[` and end with `]`.
+- No preamble, no commentary, no "I have completed the review…" sentence, no markdown fences (` ``` `), no trailing chatter.
+- If you have nothing to report, write the literal `[]`.
+- If your runtime offers a "write file" tool, use it directly — do NOT echo the JSON through a chat channel that prepends prose.
+- Before writing each finding's `line` field, validate it via:
+  ```bash
+  bash "$WOO_REVIEW_ACTION_PATH/scripts/resolve-diff-line.sh" \
+    --file "<path>" --line "<N>"
+  ```
+  When the helper prints `null`, the line is not anchorable on the diff's RIGHT side and GitHub will reject the comment (HTTP 422). DROP the finding entirely rather than guessing a different line. The merge step also runs a final-pass safety net on this, but resolving up-front saves a round-trip and keeps the finding count honest.
+- `$OUTDIR` defaults to `/tmp/pr-review` — when the host has set it to something else (e.g. a sandboxed workspace temp dir), prefer the env var over the literal path throughout this contract.
+
 ## Prefetched Artifacts (do NOT re-fetch)
 
 - **Diff**: `/tmp/pr-review/diff.txt` — may be a full PR diff OR an incremental `last_sha...HEAD` diff (see `last_sha.txt`).
@@ -269,6 +285,8 @@ Every runner MUST write a final `findings.json` (for debugging + potential post-
 ```
 
 `angle` is one of `bugs | security | conventions | seo | aeo | design | react | database | tests | api | infra | observability | types | i18n | docs | deps`.
+
+`line` MUST be the post-patch absolute file line — i.e. a line that exists on the RIGHT side of the diff (a `+` added line or a ` ` context line within a hunk for `file`). Lines that fall in a deletion-only region, or outside any hunk for the file, will be rejected by the GitHub API. Validate every line via `scripts/resolve-diff-line.sh` before writing the finding (see *Output Discipline* above); drop the finding when the helper returns `null`.
 
 ### `fix_type` discriminator
 

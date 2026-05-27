@@ -95,6 +95,80 @@ grep -q 'Skipping empty' "$CASE/log.txt" || { echo "FAIL robust: empty file not 
 grep -q 'Skipping malformed' "$CASE/log.txt" || { echo "FAIL robust: malformed file not warned about"; fail=1; ok=0; }
 [ $ok -eq 1 ] && echo "ok   empty-and-malformed-files-skipped"
 
+# ---------- Case 5: prose preamble before JSON array is recovered ----------
+new_case "preamble-recovery"
+cat > "$CASE/findings.security.json" <<'EOF'
+I have completed the review and identified the following issue.
+
+[{"angle":"security","file":"a.ts","line":1,"title":"Recovered","severity":"MEDIUM","blocking":false,"description":"d","fix":"f","fix_type":"prose","suggestion":null}]
+
+Done.
+EOF
+bash "$SCRIPT" >"$CASE/log.txt" 2>&1
+ok=1
+assert_eq "preamble-count" "$(jq 'length' "$CASE/raw_findings.json")" "1" || ok=0
+grep -q 'Recovered JSON array from preamble' "$CASE/log.txt" || { echo "FAIL preamble: recovery warning missing"; fail=1; ok=0; }
+if ! jq -e '.[0].title == "Recovered"' "$CASE/raw_findings.json" >/dev/null; then
+  echo "FAIL preamble: recovered finding has wrong title"
+  fail=1
+  ok=0
+fi
+[ $ok -eq 1 ] && echo "ok   preamble-recovered"
+
+# ---------- Case 6: line-resolve safety net drops unresolvable findings ----------
+new_case "line-resolve-drop"
+# Diff: adds two lines (post-patch lines 13 and 14) in src/foo.ts.
+cat > "$CASE/diff.txt" <<'DIFF'
+diff --git a/src/foo.ts b/src/foo.ts
+--- a/src/foo.ts
++++ b/src/foo.ts
+@@ -10,4 +10,5 @@ function foo() {
+   const a = 1;
+   const b = 2;
+-  return a;
++  return a + b;
++  // new line
+ }
+DIFF
+cat > "$CASE/findings.bugs.json" <<'JSON'
+[
+  {"angle":"bugs","file":"src/foo.ts","line":13,"title":"in-diff","severity":"HIGH","blocking":true,"description":"d","fix":"f","fix_type":"prose","suggestion":null},
+  {"angle":"bugs","file":"src/foo.ts","line":99,"title":"out-of-range","severity":"LOW","blocking":false,"description":"d","fix":"f","fix_type":"prose","suggestion":null},
+  {"angle":"bugs","file":"src/nope.ts","line":1,"title":"file-not-in-diff","severity":"LOW","blocking":false,"description":"d","fix":"f","fix_type":"prose","suggestion":null}
+]
+JSON
+bash "$SCRIPT" >"$CASE/log.txt" 2>&1
+ok=1
+assert_eq "line-resolve-count" "$(jq 'length' "$CASE/raw_findings.json")" "1" || ok=0
+if ! jq -e '.[0].title == "in-diff"' "$CASE/raw_findings.json" >/dev/null; then
+  echo "FAIL line-resolve: wrong finding survived"
+  fail=1
+  ok=0
+fi
+grep -q 'line-resolve safety net dropped' "$CASE/log.txt" || { echo "FAIL line-resolve: drop log missing"; fail=1; ok=0; }
+[ $ok -eq 1 ] && echo "ok   line-resolve-safety-net-drops-unresolvable"
+
+# ---------- Case 7: prosecutor/defender files excluded from merge ----------
+new_case "intermediate-files-excluded"
+cat > "$CASE/findings.bugs.json" <<'JSON'
+[{"angle":"bugs","file":"a.ts","line":1,"title":"only-survivor","severity":"LOW","blocking":false,"description":"d","fix":"f","fix_type":"prose","suggestion":null}]
+JSON
+cat > "$CASE/findings.prosecutor.json" <<'JSON'
+[{"angle":"bugs","file":"a.ts","line":1,"title":"prosecutor-leak","severity":"LOW","blocking":false,"description":"d","fix":"f","fix_type":"prose","suggestion":null}]
+JSON
+cat > "$CASE/findings.defender.json" <<'JSON'
+[{"angle":"bugs","file":"a.ts","line":1,"title":"defender-leak","severity":"LOW","blocking":false,"description":"d","fix":"f","fix_type":"prose","suggestion":null}]
+JSON
+bash "$SCRIPT" >"$CASE/log.txt" 2>&1
+ok=1
+assert_eq "intermediates-excluded-count" "$(jq 'length' "$CASE/raw_findings.json")" "1" || ok=0
+if ! jq -e '.[0].title == "only-survivor"' "$CASE/raw_findings.json" >/dev/null; then
+  echo "FAIL intermediates: prosecutor/defender leaked into merge"
+  fail=1
+  ok=0
+fi
+[ $ok -eq 1 ] && echo "ok   prosecutor-and-defender-files-excluded"
+
 if [ $fail -ne 0 ]; then
   echo "TESTS FAILED"
   exit 1

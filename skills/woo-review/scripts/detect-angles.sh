@@ -63,7 +63,7 @@
 
 set -euo pipefail
 
-OUTDIR="/tmp/pr-review"
+OUTDIR="${OUTDIR:-/tmp/pr-review}"
 META="$OUTDIR/meta.json"
 DIFF="$OUTDIR/diff.txt"
 CFG="$OUTDIR/config.json"
@@ -326,8 +326,21 @@ CSV=$(IFS=,; echo "${ANGLES[*]}")
 JSON_ARRAY=$(printf '%s\n' "${ANGLES[@]}" | jq -R . | jq -s -c .)
 
 printf '%s\n' "${ANGLES[@]}" > "$OUTDIR/angles.txt"
-echo "angles=$CSV" >> "$GITHUB_OUTPUT"
-echo "angles_json=$JSON_ARRAY" >> "$GITHUB_OUTPUT"
+# JSON fallback artifact for non-GHA hosts (Gemini CLI, opencode, local skill
+# invocation) that have no $GITHUB_OUTPUT to read.
+printf '%s\n' "$JSON_ARRAY" > "$OUTDIR/angles.json"
+
+# $GITHUB_OUTPUT is GHA-only. Without the guard, `echo >> ""` under `set -u`
+# crashes immediately when run outside Actions.
+emit_kv() {
+  local key="$1" value="$2"
+  if [ -n "${GITHUB_OUTPUT:-}" ]; then
+    printf '%s=%s\n' "$key" "$value" >> "$GITHUB_OUTPUT"
+  fi
+  printf '%s=%s\n' "$key" "$value"
+}
+emit_kv angles "$CSV"
+emit_kv angles_json "$JSON_ARRAY"
 echo "Enabled review angles: $CSV"
 
 # Issue #14: chunks_json output drives the second dimension of the GHA matrix.
@@ -336,8 +349,10 @@ echo "Enabled review angles: $CSV"
 # fans out as angles × chunks.
 if [ -f "$OUTDIR/chunks.txt" ] && [ -s "$OUTDIR/chunks.txt" ]; then
   CHUNKS_JSON=$(jq -R . "$OUTDIR/chunks.txt" | jq -s -c .)
-  echo "chunks_json=$CHUNKS_JSON" >> "$GITHUB_OUTPUT"
+  emit_kv chunks_json "$CHUNKS_JSON"
+  printf '%s\n' "$CHUNKS_JSON" > "$OUTDIR/chunks-matrix.json"
   echo "Chunked review: $(jq 'length' <<<"$CHUNKS_JSON") chunk(s) × ${#ANGLES[@]} angle(s) = $(( $(jq 'length' <<<"$CHUNKS_JSON") * ${#ANGLES[@]} )) job(s)"
 else
-  echo 'chunks_json=[""]' >> "$GITHUB_OUTPUT"
+  emit_kv chunks_json '[""]'
+  printf '%s\n' '[""]' > "$OUTDIR/chunks-matrix.json"
 fi

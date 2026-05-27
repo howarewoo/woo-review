@@ -33,7 +33,7 @@
 
 set -euo pipefail
 
-OUTDIR="/tmp/pr-review"
+OUTDIR="${OUTDIR:-/tmp/pr-review}"
 mkdir -p "$OUTDIR"
 
 ROOT="${GITHUB_WORKSPACE:-$(pwd)}"

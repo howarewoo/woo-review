@@ -23,7 +23,8 @@ You are running as a parallel worker for a specific angle.
 - Do NOT update the PR body or title.
 - Do NOT manage labels.
 - Run ONLY Phase 2 below for your target angle.
-- Write findings to `/tmp/pr-review/findings.<angle>.json` and then EXIT.
+- Write findings to `$OUTDIR/findings.<angle>.json` (default `/tmp/pr-review/findings.<angle>.json`) and then EXIT.
+- The findings file MUST be a JSON array only — starts with `[`, ends with `]`, no preamble, no markdown fences, no commentary. See *Output Discipline* in `_header.md`. Validate every `line` via `scripts/resolve-diff-line.sh` and drop findings the helper rejects.
 
 ### MODE: validate
 You are running as the final aggregator.

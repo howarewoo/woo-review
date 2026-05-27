@@ -49,7 +49,9 @@ Launch one Haiku subagent. Task:
    - Do NOT discard the finding for this — only downgrade. The `fix` prose remains the recommendation.
    - After enforcement, every finding MUST have `fix_type ∈ {"suggestion", "prose"}` and the `suggestion` field MUST be a non-empty string when `fix_type == "suggestion"` and `null` when `fix_type == "prose"`.
 
-Write the defender-validated JSON array to **`/tmp/pr-review/findings.defender.json`** — NOT `findings.json`. The final `findings.json` is produced by the intersect script in Step 3.
+Write the defender-validated JSON array to **`$OUTDIR/findings.defender.json`** (default `/tmp/pr-review/findings.defender.json`) — NOT `findings.json`. The file MUST be a JSON array only: starts with `[`, ends with `]`, no preamble, no commentary, no markdown fences. The final `findings.json` is produced by the intersect script in Step 3.
+
+> **Note for the intersect step.** The script applies a two-pass match: exact `(file, line, title_stem)` first, then a fuzzy fallback (`±10` line window, prefix-20 title-stem). Do not aggressively rewrite peer findings' titles or shift their line anchors — minor drift between prosecutor and defender is now tolerated, so over-normalizing the title only loses fuzzy matches.
 
 ### Step 3 — Intersect with Prosecutor pass
 
