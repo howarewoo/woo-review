@@ -47,12 +47,21 @@ for f in "${FILES[@]}"; do
     merged_count=$((merged_count + 1))
     continue
   fi
-  # Prose-preamble recovery. Sub-agents occasionally emit text like
-  # "I have completed the review..." before the JSON array. Strip everything
-  # before the first `[` and after the matching `]`, then retry jq. Only
-  # skip when no JSON array can be extracted at all.
+  # Prose-preamble + bad-escape recovery. Sub-agents occasionally emit text
+  # like "I have completed the review..." before the JSON array, and inside
+  # strings they sometimes write invalid JSON escapes (\x, \!, bare control
+  # bytes) — both make jq reject the file. Three-stage recovery:
+  #   1. Strip preamble + trailing prose around the outermost balanced `[...]`.
+  #   2. Try strict json.loads.
+  #   3. Sanitize: strip bare control bytes (U+0000–U+001F except \t\n\r),
+  #      replace invalid `\<char>` escapes with the literal char, retry with
+  #      strict=False.
+  # Only sub-agents authored by woo-review write these files; recovery is
+  # tolerant of LLM-introduced noise, NOT of attacker-supplied JSON. The
+  # downstream finding schema still validates structure.
   RECOVERED="$(python3 - "$f" <<'PY' 2>/dev/null || true
 import json
+import re
 import sys
 
 with open(sys.argv[1], "r", errors="replace") as fh:
@@ -91,12 +100,57 @@ if end < 0:
     sys.exit(1)
 
 candidate = text[start:end + 1]
-try:
-    data = json.loads(candidate)
-except json.JSONDecodeError:
-    sys.exit(1)
 
-if not isinstance(data, list):
+
+def sanitize(s):
+    # Strip bare control bytes inside strings (tab/newline/CR remain valid
+    # escape source chars; json.loads strict=False also accepts them).
+    s = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", s)
+    # Replace invalid `\<char>` escapes (anything not in the JSON spec) with
+    # the bare char. Walk the string state to avoid touching content outside
+    # JSON strings.
+    out = []
+    i = 0
+    in_str = False
+    while i < len(s):
+        ch = s[i]
+        if in_str:
+            if ch == "\\" and i + 1 < len(s):
+                nxt = s[i + 1]
+                if nxt in '"\\/bfnrt':
+                    out.append(ch)
+                    out.append(nxt)
+                    i += 2
+                    continue
+                if nxt == "u" and i + 5 < len(s) and re.match(r"[0-9a-fA-F]{4}", s[i + 2:i + 6]):
+                    out.append(s[i:i + 6])
+                    i += 6
+                    continue
+                # Invalid escape — drop the backslash, keep the char.
+                out.append(nxt)
+                i += 2
+                continue
+            if ch == '"':
+                in_str = False
+            out.append(ch)
+            i += 1
+            continue
+        if ch == '"':
+            in_str = True
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+data = None
+for attempt in (candidate, sanitize(candidate)):
+    try:
+        data = json.loads(attempt, strict=False)
+        break
+    except json.JSONDecodeError:
+        continue
+
+if data is None or not isinstance(data, list):
     sys.exit(1)
 
 print(json.dumps(data))

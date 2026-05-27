@@ -9,7 +9,9 @@ Every artifact you write under `$OUTDIR/findings.*.json` (default `/tmp/pr-revie
 - The file MUST start with `[` and end with `]`.
 - No preamble, no commentary, no "I have completed the review…" sentence, no markdown fences (` ``` `), no trailing chatter.
 - If you have nothing to report, write the literal `[]`.
+- **Write `[]` to your findings file as the FIRST action.** Replace it with the real array just before EXIT. Sub-agents have died mid-run (stream errors, turn-limit interrupts) and left no file at all — the merge step then has no array to merge for that angle. An up-front empty array makes failure non-destructive: the worst case becomes "this angle reported nothing," not "this angle silently dropped out of the review."
 - If your runtime offers a "write file" tool, use it directly — do NOT echo the JSON through a chat channel that prepends prose.
+- **Escape discipline inside string fields.** Every `"description"`, `"fix"`, and `"suggestion"` is a JSON string — inside it, the only valid backslash escapes are `\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, and `\uXXXX`. Bare backslashes in code samples (Windows paths, regex like `\d`, LaTeX) MUST be doubled to `\\`. Tabs and newlines in code samples MUST be `\t` / `\n`, never raw control bytes. The merge step has a fallback sanitizer, but a finding that loses content during sanitization is one that fails to land cleanly on the PR.
 - Before writing each finding's `line` field, validate it via:
   ```bash
   bash "$WOO_REVIEW_ACTION_PATH/scripts/resolve-diff-line.sh" \
@@ -119,6 +121,15 @@ The PR title and the PR description (issue body) MUST NOT be modified. The `STAT
 Instead of posting individual comments, batch all findings into a single GitHub Review. This uses the `pull_request_review` API.
 
 ```bash
+# 0. Self-PR detection. The GitHub API rejects `event: REQUEST_CHANGES` when
+# the authenticated user is the PR author (HTTP 422 "Can not request changes
+# on your own pull request"). Capture both logins so the payload-builder can
+# downgrade silently when they match — without this, every self-review run
+# with a blocking finding fails to post at all.
+AUTH_LOGIN=$(gh api user --jq .login 2>/dev/null || echo "")
+PR_AUTHOR=$(jq -r '.author.login // empty' /tmp/pr-review/meta.json 2>/dev/null || echo "")
+export AUTH_LOGIN PR_AUTHOR
+
 # 1. Prepare the review body (Summary + Status Line + hidden SHA marker).
 # The trailing <!-- woo-review:sha=$HEAD_SHA --> marker is read by the next run's
 # prefetch step to enable incremental review (diffs LAST_SHA...HEAD only). DO NOT
@@ -188,6 +199,21 @@ if not findings and not has_priors:
 elif has_new_blocking or has_priors:
     event = "REQUEST_CHANGES"
 else:
+    event = "COMMENT"
+
+# Self-PR downgrade. GitHub rejects REQUEST_CHANGES + APPROVE when the
+# authenticated user is the PR author (HTTP 422 "Can not request changes on
+# your own pull request" / "Can not approve your own pull request"). Downgrade
+# both to COMMENT so the review still posts; the STATUS_LINE in the body
+# already carries the accurate signal.
+auth_login = (os.environ.get("AUTH_LOGIN") or "").lower()
+pr_author = (os.environ.get("PR_AUTHOR") or "").lower()
+self_pr = bool(auth_login) and bool(pr_author) and auth_login == pr_author
+if self_pr and event in ("REQUEST_CHANGES", "APPROVE"):
+    pr_body = pr_body.rstrip() + (
+        f"\n\n_Review event downgraded to COMMENT — GitHub blocks "
+        f"{event} on your own PR. Status line above carries the actual verdict._\n"
+    )
     event = "COMMENT"
 
 comments = []

@@ -120,6 +120,18 @@ emit_skip_with_comment() {
   emit_skip "$reason"
 }
 
+# Host-portability: when invoked outside GitHub Actions and no PR number was
+# supplied, try to derive one from the current branch. Subshell is internal to
+# this script (script-local subshells are not blocked by host sandboxes the way
+# caller-side `PR_NUMBER="$(gh pr view ...)"` is — that pattern is what forced
+# manual PR# resolution under Gemini CLI's tool gating).
+if [ -z "$PR_NUMBER" ] && [ "${GITHUB_ACTIONS:-}" != "true" ]; then
+  PR_NUMBER=$(gh pr view --json number --jq .number 2>/dev/null || true)
+  if [ -n "$PR_NUMBER" ]; then
+    echo "Resolved PR_NUMBER=$PR_NUMBER from current branch"
+  fi
+fi
+
 if [ -z "$PR_NUMBER" ]; then
   emit_skip "no PR number resolvable from event"
 fi
@@ -182,7 +194,14 @@ TOTAL_BOT_COMMENTS=$((ISSUE_COMMENTS + REVIEW_COMMENTS))
 
 echo "Event: $EVENT_NAME, Action: $EVENT_ACTION, Prior bot comments: $TOTAL_BOT_COMMENTS, Marker: ${LAST_SHA:-none}, Incremental: $INCREMENTAL"
 
-if [ "$TOTAL_BOT_COMMENTS" -gt 0 ] && [ -z "$LAST_SHA" ] && \
+# Re-run guard scope: this check only applies inside GitHub Actions, where the
+# review is auto-triggered by GitHub events and "explicit" is a meaningful
+# concept. When invoked from a local host (Claude Code, Gemini CLI, opencode
+# /woo-review skill), the user typed the command — by definition explicit —
+# so EVENT_NAME is empty and the gate would otherwise misclassify the run as
+# implicit and skip it whenever any prior bot comment exists on the PR.
+if [ "${GITHUB_ACTIONS:-}" = "true" ] && \
+   [ "$TOTAL_BOT_COMMENTS" -gt 0 ] && [ -z "$LAST_SHA" ] && \
    [ "$EVENT_NAME" != "issue_comment" ] && \
    [ "$EVENT_NAME" != "pull_request_target" ] && \
    [ "$EVENT_NAME" != "workflow_dispatch" ] && \

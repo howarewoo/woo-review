@@ -55,6 +55,8 @@ For each angle listed in `/tmp/pr-review/angles.txt`, in order (× each chunk wh
 
 Stay within each angle's scope. `merge-findings.sh` (Phase 3) handles within-angle dedup across chunks.
 
+**Retry-once recovery.** Angle iterations can be cut short by tool-stream errors or turn-limit interrupts and leave no findings file. After the loop finishes, scan `/tmp/pr-review/angles.txt` (× `chunks.txt` when chunked) and check that each expected `findings.<angle>.json` (or `findings.<angle>.<chunk_id>.json`) exists and parses as a JSON array via `jq -e 'type == "array"'`. For any path that fails the check, re-run THAT angle iteration ONCE. Cap is one retry per `(angle, chunk)` pair; if the retry also fails, leave the file as-is and proceed to Phase 3 — the merge step recovers malformed JSON, and missing files just mean the angle produced no findings.
+
 ## Phase 3 — Adversarial Validation (prosecutor + defender, sequential)
 
 Merge all `findings.<angle>.json` arrays into `/tmp/pr-review/raw_findings.json` via `$WOO_REVIEW_ACTION_PATH/scripts/merge-findings.sh`.

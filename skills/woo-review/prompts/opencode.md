@@ -66,6 +66,8 @@ Each angle agent:
 
 Stay within each angle's scope; do not let one angle flag issues that belong to another. `merge-findings.sh` (Phase 3) handles within-angle dedup across chunks.
 
+**Retry-once recovery.** Subagents can die mid-run (stream errors, turn-limit interrupts) and leave no findings file. After Phase 2 reports done, before invoking `merge-findings.sh`, scan `/tmp/pr-review/angles.txt` (× `chunks.txt` when chunked) and check that each expected `findings.<angle>.json` (or `findings.<angle>.<chunk_id>.json`) exists and parses as a JSON array via `jq -e 'type == "array"'`. For any path that fails the check, re-spawn THAT `(angle, chunk)` subagent ONCE with the same brief and model slug. Cap is one retry total per pair — if the retry also fails, leave the file as-is and proceed to Phase 3. The merge step's recovery handles malformed JSON; missing files just mean the angle produced no findings.
+
 ## Phase 3 — Adversarial Validation (prosecutor + defender, sequential)
 
 Merge all `findings.<angle>.json` into `/tmp/pr-review/raw_findings.json` via `$WOO_REVIEW_ACTION_PATH/scripts/merge-findings.sh`. Validation does NOT parallelize; it runs the two opposing-bias passes in sequence, followed by a deterministic intersection (issue #13). Read `disable_adversarial` first:

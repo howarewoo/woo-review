@@ -169,6 +169,40 @@ if ! jq -e '.[0].title == "only-survivor"' "$CASE/raw_findings.json" >/dev/null;
 fi
 [ $ok -eq 1 ] && echo "ok   prosecutor-and-defender-files-excluded"
 
+# ---------- Case 8: bad-escape JSON recovered via sanitizer ----------
+# Sub-agents occasionally emit `\x`, `\!`, or a bare control byte inside a
+# string field — strict JSON parsers reject it. The recovery path should
+# strip invalid escapes + control bytes (json.loads strict=False fallback)
+# and still surface the finding rather than dropping the whole file.
+new_case "bad-escape-recovery"
+python3 - "$CASE/findings.bugs.json" <<'PY'
+import sys
+# Use Python to write the file with deliberate JSON-invalid bytes so the
+# heredoc itself cannot accidentally normalize them.
+text = (
+    '[\n'
+    '  {"angle":"bugs","file":"a.ts","line":1,"title":"escape-survivor",'
+    '"severity":"HIGH","blocking":true,'
+    # Invalid \x escape inside description + a bare 0x07 BEL control byte.
+    '"description":"path C:\\x5cusers\\x07","fix":"f",'
+    '"fix_type":"prose","suggestion":null}\n'
+    ']\n'
+)
+open(sys.argv[1], "w").write(text)
+PY
+bash "$SCRIPT" >"$CASE/log.txt" 2>&1
+ok=1
+assert_eq "bad-escape-count" "$(jq 'length' "$CASE/raw_findings.json")" "1" || ok=0
+if ! jq -e '.[0].title == "escape-survivor"' "$CASE/raw_findings.json" >/dev/null; then
+  echo "FAIL bad-escape: finding lost during sanitization"
+  cat "$CASE/log.txt"
+  fail=1
+  ok=0
+fi
+grep -q 'Recovered JSON array from preamble' "$CASE/log.txt" \
+  || { echo "FAIL bad-escape: recovery path did not engage (file went straight to skip)"; fail=1; ok=0; }
+[ $ok -eq 1 ] && echo "ok   bad-escape-recovered"
+
 if [ $fail -ne 0 ]; then
   echo "TESTS FAILED"
   exit 1

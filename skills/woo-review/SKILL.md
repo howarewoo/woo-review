@@ -146,24 +146,14 @@ Build the same `/tmp/pr-review/` artifact tree the GitHub Action builds.
 >
 > **OUTDIR override.** All scripts (`prefetch.sh`, `load-config.sh`, `detect-angles.sh`, `merge-findings.sh`, `intersect-findings.sh`, `chunk-diff.sh`, `resolve-diff-line.sh`) honor the `OUTDIR` environment variable. Hosts that cannot use `/tmp/pr-review/` (e.g. sandboxed runtimes with workspace-scoped temp dirs) MUST export `OUTDIR=<their_dir>` to **every** sub-agent. Without that, sub-agents will write findings to a different directory than the merge step reads, silently dropping them.
 
-**If no PR number was supplied**, first try to resolve one from the current branch:
+**If a PR number was supplied** — export it and invoke `prefetch.sh` directly. The script handles diff fetch, meta fetch, project-rule discovery, auto-skip checks, and prior-findings extraction. Hosts whose tool gating blocks caller-side `$(...)` substitution (notably Gemini CLI) MUST use this path — `prefetch.sh` self-resolves the PR number from the current branch when none is exported and `GITHUB_ACTIONS != "true"`, so callers never need their own subshell.
 
 ```bash
-PR_NUMBER="$(gh pr view --json number --jq .number 2>/dev/null || true)"
+export PR_NUMBER=<n>   # optional; prefetch.sh derives it from the branch when unset
+bash "$WOO_REVIEW_ACTION_PATH/scripts/prefetch.sh"
 ```
 
-If `PR_NUMBER` is non-empty, proceed as if it had been passed in. If empty (no open PR for this branch, or no GitHub remote), fall back to local-diff mode.
-
-**If a PR number is set (supplied or auto-detected):**
-
-```bash
-OUTDIR="${OUTDIR:-/tmp/pr-review}"
-rm -rf "$OUTDIR"
-mkdir -p "$OUTDIR"
-gh pr diff "$PR_NUMBER" > "$OUTDIR/diff.txt"
-gh pr view "$PR_NUMBER" --json headRefOid,baseRefName,title,body,files,author \
-  > "$OUTDIR/meta.json"
-```
+When prefetch resolves a PR number AND finds an open PR, it produces the full artifact tree (`diff.txt`, `meta.json`, `last_sha.txt`, `prior-findings.json`, `rules.md` when applicable). When no PR resolves, it emits `skip=true` — the host then falls back to local-diff mode below.
 
 **If no PR number resolved (local mode):**
 
@@ -357,3 +347,8 @@ Zero local setup required in the consumer repo — the action ships its own prom
 - **`detect-angles.sh` crashes outside GitHub Actions** — fixed: the script now emits `angles=` / `chunks_json=` lines to stdout and writes `$OUTDIR/angles.json` + `$OUTDIR/chunks-matrix.json` when `$GITHUB_OUTPUT` is unset. Inspect those files when running locally.
 - **Sub-agent writes findings to the wrong path** — caused by host workspace drift (the sub-agent's CWD differs from the orchestrator's). Export `OUTDIR` to every sub-agent — see Stage 1.
 - **Adversarial validators dropped a finding both passes agreed on** — the intersection now applies a fuzzy second pass (`±10` lines, prefix-20 title-stem match). Check `$OUTDIR/validator-metrics.json` for `disagreement_count`; surprises usually mean title-stem prefix mismatch, not line drift.
+- **Caller-side `PR_NUMBER="$(gh pr view ...)"` blocked by host sandbox** — some hosts (Gemini CLI, sandboxed runtimes) reject inline `$(...)` substitutions on tool calls. Skip the caller-side resolution: `bash $WOO_REVIEW_ACTION_PATH/scripts/prefetch.sh` derives the PR number itself from the current branch when `PR_NUMBER` is unset and `GITHUB_ACTIONS != "true"`.
+- **`prefetch.sh` skipped with "bot already commented and trigger is not explicit" on a local run** — fixed: that re-run guard now only applies inside GitHub Actions (`GITHUB_ACTIONS=true`). Local `/woo-review` invocations are explicit by definition and no longer trip the gate.
+- **GitHub API rejects `REQUEST_CHANGES` / `APPROVE` on a self-authored PR** — fixed in `_header.md`: the payload-builder compares `gh api user --jq .login` against `meta.json .author.login` and downgrades the event to `COMMENT` when they match. The STATUS_LINE in the review body still carries the accurate verdict; a small note is appended explaining the downgrade.
+- **Sub-agent died mid-run and left no `findings.<angle>.json`** — orchestrator prompts now write `[]` to the findings path on entry (so a crash leaves an empty array, not a missing file) and re-launch any angle whose file is missing or non-array after the swarm completes (one retry per `(angle, chunk)` pair). If the retry also fails, that angle simply contributes no findings — the rest of the review still posts.
+- **`merge-findings.sh` failed on bad JSON escapes from a worker** — the recovery path now tries `json.loads(strict=False)` and a fallback that strips bare control bytes + invalid `\<char>` escapes inside strings. Workers that emit raw tabs/newlines or Windows paths inside `description` fields no longer sink the whole merge. The Output Discipline section of `_header.md` documents the escape rules workers should follow up-front.

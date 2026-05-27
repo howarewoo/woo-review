@@ -91,7 +91,16 @@ Each subagent:
 - For `react`: runs `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline`, parses output, then performs LLM review per the react prompt.
 - Returns its findings list AND writes them to `/tmp/pr-review/findings.<angle>.json` (unchunked) or `/tmp/pr-review/findings.<angle>.<chunk_id>.json` (chunked).
 
-If the Task tool caps practical parallelism below the angle count, spawn in waves of ≤4 subagents. Do not skip any enabled angle. After every subagent has finished, run `bash $WOO_REVIEW_ACTION_PATH/scripts/merge-findings.sh` — it concatenates every `findings.<angle>*.json` into `raw_findings.json` and applies within-angle dedup so duplicates across chunks collapse to a single entry before validation.
+If the Task tool caps practical parallelism below the angle count, spawn in waves of ≤4 subagents. Do not skip any enabled angle.
+
+**Retry-once recovery.** Sub-agents can die mid-run (model stream errors, turn-limit interrupts) and leave no findings file. After the swarm reports done, before invoking `merge-findings.sh`, scan `/tmp/pr-review/angles.txt` and check each angle's expected output:
+
+- Unchunked: `/tmp/pr-review/findings.<angle>.json`
+- Chunked: every `/tmp/pr-review/findings.<angle>.<chunk_id>.json` for each chunk id in `chunks.txt`
+
+For any path that (a) does not exist, OR (b) does not parse as a JSON array (`jq -e 'type == "array"'` returns non-zero), re-launch THAT subagent ONCE with an identical brief and `model:` slug. Cap is one retry total per `(angle, chunk)` pair — if the retry also fails, leave the file missing/malformed and proceed to merge. The merge step's recovery handles malformed files; missing files simply count as "this angle produced no findings."
+
+After recovery, run `bash $WOO_REVIEW_ACTION_PATH/scripts/merge-findings.sh` — it concatenates every `findings.<angle>*.json` into `raw_findings.json` and applies within-angle dedup so duplicates across chunks collapse to a single entry before validation.
 
 ## Step 3 — Adversarial Validation (Opus 4.7, prosecutor + defender)
 
