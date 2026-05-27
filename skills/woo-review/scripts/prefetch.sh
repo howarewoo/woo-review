@@ -39,18 +39,77 @@ if [ "$TEST_MODE" = "1" ] && [ "${GITHUB_ACTIONS:-}" = "true" ]; then
   echo "::error::WOO_REVIEW_TEST_MODE is refused inside GitHub Actions. Test hooks are local-only." >&2
   exit 1
 fi
-# Fixed-string match for `--full` in a trigger comment overrides to off. Fixed
-# string (grep -F) avoids any regex injection from user-controlled comment body.
-if [ "$EVENT_NAME" = "issue_comment" ] && \
-   printf '%s' "${COMMENT_BODY:-}" | grep -qF -- '--full'; then
-  INCREMENTAL="off"
-  echo "Incremental: forced to 'off' by --full in trigger comment"
+# Trigger-comment parsing (issue #19 + existing --full override). Two channels:
+#   1. `--full` substring → INCREMENTAL=off (legacy `@review --full` syntax).
+#   2. `/woo-review [force|recheck]` slash command:
+#        force   → bypass authors_skip + release_rollup_pattern (FORCE_BYPASS=1)
+#        recheck → INCREMENTAL=auto (default; explicit override of --full)
+#        (none)  → INCREMENTAL=off (full re-review)
+#      `force` and `recheck` may co-occur.
+# Fixed-string match avoids regex injection from user-controlled comment body.
+FORCE_BYPASS=""
+if [ "$EVENT_NAME" = "issue_comment" ]; then
+  if printf '%s' "${COMMENT_BODY:-}" | grep -qF -- '--full'; then
+    INCREMENTAL="off"
+    echo "Incremental: forced to 'off' by --full in trigger comment"
+  fi
+  if printf '%s' "${COMMENT_BODY:-}" | grep -qE '(^|[[:space:]])/woo-review([[:space:]]|$)'; then
+    HAS_FORCE=0; HAS_RECHECK=0
+    if printf '%s' "${COMMENT_BODY:-}" | grep -qE '(^|[[:space:]])/woo-review[[:space:]]+(force|recheck[[:space:]]+force)([[:space:]]|$)'; then
+      HAS_FORCE=1
+    elif printf '%s' "${COMMENT_BODY:-}" | grep -qE '(^|[[:space:]])/woo-review[[:space:]]+force([[:space:]]|$)'; then
+      HAS_FORCE=1
+    fi
+    if printf '%s' "${COMMENT_BODY:-}" | grep -qE '(^|[[:space:]])/woo-review[[:space:]]+(recheck|force[[:space:]]+recheck)([[:space:]]|$)'; then
+      HAS_RECHECK=1
+    elif printf '%s' "${COMMENT_BODY:-}" | grep -qE '(^|[[:space:]])/woo-review[[:space:]]+recheck([[:space:]]|$)'; then
+      HAS_RECHECK=1
+    fi
+    if [ "$HAS_FORCE" = "1" ]; then
+      FORCE_BYPASS=1
+      echo "Auto-skip bypass: '/woo-review force' detected in trigger comment"
+    fi
+    if [ "$HAS_RECHECK" = "1" ]; then
+      INCREMENTAL="auto"
+      echo "Incremental: forced to 'auto' by '/woo-review recheck'"
+    elif [ "$HAS_FORCE" = "0" ]; then
+      # Bare `/woo-review` → full review.
+      INCREMENTAL="off"
+      echo "Incremental: forced to 'off' by bare '/woo-review' trigger"
+    fi
+  fi
 fi
 
 emit_skip() {
   echo "skip=true" >> "$GITHUB_OUTPUT"
   echo "Skipping: $1"
   exit 0
+}
+
+# Auto-skip (issue #19): emit a single explanatory comment then exit. Idempotent
+# via the `<!-- woo-review:skipped -->` marker — repeat triggers (synchronize on
+# a dependabot PR, etc.) re-skip silently. Marker scan also picks up prior skip
+# comments authored by the action across re-runs, so the comment is posted at
+# most once per PR until a human types `/woo-review force`.
+emit_skip_with_comment() {
+  local reason="$1"
+  local body="woo-review skipped: ${reason}
+
+<!-- woo-review:skipped -->"
+  local existing
+  existing=$(gh pr view "$PR_NUMBER" --json comments \
+    --jq '[.comments[]? | select((.body // "") | test("<!-- woo-review:skipped -->"))] | length' \
+    2>/dev/null || echo 0)
+  if [ "${existing:-0}" = "0" ]; then
+    if gh pr comment "$PR_NUMBER" --body "$body" >/dev/null 2>&1; then
+      echo "Posted skip comment: ${reason}"
+    else
+      echo "::warning::failed to post skip comment (gh pr comment exit nonzero); continuing to skip"
+    fi
+  else
+    echo "Skip comment marker already present; not reposting"
+  fi
+  emit_skip "$reason"
 }
 
 if [ -z "$PR_NUMBER" ]; then
@@ -128,6 +187,48 @@ fi
 # Fetch metadata first — HEAD_SHA is needed for the compare-API incremental path.
 gh pr view "$PR_NUMBER" --json headRefOid,baseRefName,title,body,files,author > "$OUTDIR/meta.json"
 HEAD_SHA=$(jq -r '.headRefOid' "$OUTDIR/meta.json")
+
+# Load per-repo config early (issue #19) so the bot-author / release-rollup
+# skip checks can read user overrides BEFORE we pay for the diff fetch.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bash "$SCRIPT_DIR/load-config.sh"
+
+# Issue #19: auto-skip mechanical bot PRs (renovate / dependabot / etc.) and
+# release-rollup PRs. Effective lists fall back to defaults when the user did
+# not supply them. An explicit empty list (`authors_skip: []`) opts out.
+# `/woo-review force` in a trigger comment bypasses both checks.
+if [ "${FORCE_BYPASS:-}" != "1" ]; then
+  AUTHOR_LOGIN=$(jq -r '.author.login // empty' "$OUTDIR/meta.json")
+  PR_TITLE=$(jq -r '.title // ""' "$OUTDIR/meta.json")
+
+  # authors_skip — config wins; defaults apply when key absent (`// null`
+  # distinguishes "absent" from "explicit []").
+  SKIP_MATCH=$(jq -r --arg login "$AUTHOR_LOGIN" '
+    (if has("authors_skip") then .authors_skip
+     else ["dependabot[bot]","renovate[bot]","github-actions[bot]"] end)
+    | if index($login) then "yes" else "no" end
+  ' "$OUTDIR/config.json" 2>/dev/null || echo "no")
+  if [ -n "$AUTHOR_LOGIN" ] && [ "$SKIP_MATCH" = "yes" ]; then
+    emit_skip_with_comment "author '$AUTHOR_LOGIN' matches authors_skip (override with \`/woo-review force\`)"
+  fi
+
+  # release_rollup_pattern — same precedence. Empty string opts out.
+  ROLLUP_PATTERN=$(jq -r '
+    if has("release_rollup_pattern") then .release_rollup_pattern
+    else "^(staging|release|chore\\(release\\))" end
+  ' "$OUTDIR/config.json" 2>/dev/null || echo '^(staging|release|chore\(release\))')
+  if [ -n "$ROLLUP_PATTERN" ] && [ -n "$PR_TITLE" ]; then
+    # Python regex (matches the engine used to validate the pattern in
+    # load-config.sh, so a pattern that validated will execute identically).
+    if python3 -c '
+import re, sys
+pattern, title = sys.argv[1], sys.argv[2]
+sys.exit(0 if re.search(pattern, title) else 1)
+' "$ROLLUP_PATTERN" "$PR_TITLE" 2>/dev/null; then
+      emit_skip_with_comment "PR title matches release_rollup_pattern (override with \`/woo-review force\`)"
+    fi
+  fi
+fi
 
 # No-new-commits short-circuit: marker present and HEAD already matches it
 # (e.g. user re-triggered without pushing). SKILL.md documents this skip.
@@ -278,11 +379,7 @@ if [ -n "$ROOT" ]; then
   rm -f "$RULES_LIST" "$RULES_BUF"
 fi
 
-# Per-repo config (.woo-review.yml). Loads, validates, persists to config.json.
-# Missing file is bit-identical to current behaviour. Bad YAML aborts.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-bash "$SCRIPT_DIR/load-config.sh"
-
+# `load-config.sh` already ran near the top (issue #19 auto-skip needs it).
 # Append config-listed project_rules to rules.md (augments auto-discovery).
 if [ -n "${ROOT:-}" ] && [ -s "$OUTDIR/config.json" ] && jq -e '.project_rules // empty' "$OUTDIR/config.json" >/dev/null 2>&1; then
   EXTRA_LIST="$(mktemp)"
@@ -309,15 +406,8 @@ if [ -n "${ROOT:-}" ] && [ -s "$OUTDIR/config.json" ] && jq -e '.project_rules /
   rm -f "$EXTRA_LIST" "$EXTRA_BUF"
 fi
 
-# authors_skip — match the PR author against the configured allowlist.
-if [ -s "$OUTDIR/config.json" ] && jq -e '.authors_skip // empty' "$OUTDIR/config.json" >/dev/null 2>&1; then
-  AUTHOR_LOGIN=$(jq -r '.author.login // empty' "$OUTDIR/meta.json")
-  if [ -n "$AUTHOR_LOGIN" ]; then
-    if jq -e --arg login "$AUTHOR_LOGIN" '.authors_skip | index($login)' "$OUTDIR/config.json" >/dev/null 2>&1; then
-      emit_skip "author '$AUTHOR_LOGIN' is in authors_skip"
-    fi
-  fi
-fi
+# `authors_skip` + `release_rollup_pattern` already enforced above (issue #19),
+# pre-diff-fetch so a skipped PR never pays for the diff download.
 
 # ignore[] — pre-filter changed paths and diff body for downstream angle gates.
 # fnmatch semantics; '**' matches any depth via Python's fnmatch.

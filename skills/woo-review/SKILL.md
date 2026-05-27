@@ -22,6 +22,27 @@ This skill is **host-agnostic**: it works in any AI coding agent that supports s
 - `woo-review install` — Verify local deps (`gh`, `jq`, `node`) and pre-fetch `impeccable` + `react-doctor`.
 - `woo-review status` — Show the current PR's review status.
 
+### PR-comment triggers (issue #19)
+
+When the companion GitHub Action is installed, the following comment commands re-trigger the review without leaving the PR:
+
+| Comment | Effect |
+|---|---|
+| `/woo-review` | Full re-review (sets `incremental=off`). Equivalent to `@review --full`. |
+| `/woo-review recheck` | Incremental review of new commits since the last marker. Same path as a `synchronize` event. |
+| `/woo-review force` | Bypass auto-skip (see *Auto-skip* below). Combinable: `/woo-review force recheck`. |
+
+The legacy `@review` trigger phrase still works; `/woo-review` is an alias the example workflow's `issue_comment` `if:` recognizes.
+
+### Auto-skip (bot PRs + release rollups)
+
+`prefetch.sh` short-circuits the review with a single one-line PR comment when either condition holds (before fetching the diff, so token cost is ~zero):
+
+- **PR author matches `authors_skip`.** Default list: `dependabot[bot]`, `renovate[bot]`, `github-actions[bot]`. Override with `authors_skip: [...]` in `.woo-review.yml`; explicit `authors_skip: []` opts out entirely.
+- **PR title matches `release_rollup_pattern`** (Python regex). Default: `^(staging|release|chore\(release\))`. Override with any string; explicit empty string opts out.
+
+The skip comment carries a `<!-- woo-review:skipped -->` marker; subsequent triggers on the same PR detect the marker and re-skip silently (no comment spam). To force a full review of a skipped PR, post `/woo-review force`.
+
 ## Incremental Mode
 
 By default (`incremental: auto` on the GitHub Action), every posted review carries a hidden watermark:
@@ -76,9 +97,11 @@ ignore:                        # fnmatch globs; ignored paths skip angle trigger
 project_rules:                 # appended to auto-discovered rules.md
   - constitution.md
   - "docs/standards/*.md"
-authors_skip:                  # PR author logins that short-circuit the entire review
-  - "dependabot[bot]"
-  - "renovate[bot]"
+authors_skip:                  # PR author logins that short-circuit the entire review.
+  - "dependabot[bot]"          # Defaults: dependabot[bot], renovate[bot],
+  - "renovate[bot]"            # github-actions[bot]. Set to [] to opt out.
+release_rollup_pattern: '^(staging|release|chore\(release\))'  # Python regex on PR
+                               # title. Default shown. Empty string opts out.
 models:                        # per-tier overrides; inputs.model still wins
   fast:     anthropic/claude-haiku-4-5
   standard: openai/gpt-5
