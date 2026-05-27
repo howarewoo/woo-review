@@ -29,6 +29,37 @@
 #   conventions — gated on prefetch having produced /tmp/pr-review/rules.md
 #               (i.e. the repo carries AGENTS.md / CLAUDE.md / .cursorrules /
 #               .windsurfrules / GEMINI.md somewhere along the changed paths).
+#   tests     — test-file paths in diff: *.test.{ts,tsx,js,jsx,mjs,cjs},
+#               *_test.{go,py}, *.spec.{ts,tsx,js,jsx}, *_spec.rb, and the
+#               tests/, __tests__/, spec/ directory trees.
+#   api       — OpenAPI / Swagger (openapi.{yaml,yml,json}, swagger.{...}),
+#               GraphQL schema (*.graphql, *.gql, schema.gql), .proto, route
+#               trees (pages/api/, app/api/, routes/, handlers/, controllers/),
+#               OR diff body contains HTTP-verb route bindings (app.get(,
+#               router.post(, @app.get, @router.delete), Fastify route(),
+#               or GraphQL `extend type (Query|Mutation|Subscription)`.
+#   infra     — .github/workflows/*.{yml,yaml}, Dockerfile*, docker-compose.*,
+#               compose.{yml,yaml}, *.tf / *.tfvars, terraform/, pulumi.*,
+#               cdk.*, k8s/, kubernetes/, helm/, .devcontainer/, ansible/,
+#               playbook.{yml,yaml}, OR diff body contains apiVersion: apps/,
+#               kind: (Deployment|Service|StatefulSet|DaemonSet),
+#               resource "(aws|google|azurerm)_, or `FROM ` Docker directive.
+#   observability — logging / error-handling tokens in diff body:
+#               console.log/error, logger./log., print(, fmt.Println, Sentry.,
+#               OpenTelemetry / span. / metrics., bare `catch {}` swallow,
+#               `.catch(() => null|undefined)`.
+#   types     — *.ts / *.tsx / *.cts / *.mts in diff. TypeScript-only.
+#   i18n      — locales/, messages/, i18n/, translations/ directory trees,
+#               *.po / *.pot files, or `i18n.t(` / `useTranslations(` /
+#               `<Trans` / `FormattedMessage` tokens in the diff body.
+#   docs      — README*, CHANGELOG*, docs/, *.md / *.mdx (excluding the rule
+#               files consumed by the conventions angle: AGENTS.md, CLAUDE.md,
+#               GEMINI.md, .cursorrules, .windsurfrules), .env.example,
+#               openapi.{yaml,yml,json}.
+#   deps      — dependency manifests / lockfiles: package.json, package-lock.json,
+#               pnpm-lock.yaml, yarn.lock, bun.lockb, requirements.txt,
+#               pyproject.toml, poetry.lock, uv.lock, go.mod, go.sum,
+#               Cargo.toml, Cargo.lock, Gemfile(.lock), composer.{json,lock}.
 
 set -euo pipefail
 
@@ -104,6 +135,90 @@ has_database_diff_token() {
   grep -qE "\b(CREATE|ALTER|DROP)[[:space:]]+(TABLE|INDEX|POLICY|FUNCTION|TRIGGER|SCHEMA|TYPE|VIEW|MATERIALIZED)\b|\bENABLE[[:space:]]+ROW[[:space:]]+LEVEL[[:space:]]+SECURITY\b|\bSECURITY[[:space:]]+DEFINER\b|\bauth\.(uid|jwt|role)\(\)|createClient\([^)]*supabase|\.raw\(|\bsql\`|\bdb\.query\(|\bpool\.query\(" "$DIFF"
 }
 
+has_tests_file() {
+  echo "$CHANGED_PATHS" | grep -qE '\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '_test\.(go|py)$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '_spec\.rb$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)(tests|__tests__|spec)/' && return 0
+  return 1
+}
+
+has_api_file() {
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)(openapi|swagger)\.(ya?ml|json)$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '\.(graphql|gql|proto)$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)(pages/api|app/api|routes|handlers|controllers)/' && return 0
+  return 1
+}
+
+has_api_diff_token() {
+  # HTTP-verb route bindings + Fastify factory + GraphQL extend type.
+  # Anchored to avoid hits on docs mentioning "get the user".
+  grep -qE "\b(app|router|api|server)\.(get|post|put|patch|delete|options|head)\(|@(app|router)\.(get|post|put|patch|delete)\b|\bfastify\.(get|post|put|patch|delete)\(|\bextend[[:space:]]+type[[:space:]]+(Query|Mutation|Subscription)\b|@(Get|Post|Put|Patch|Delete)\(" "$DIFF"
+}
+
+has_infra_file() {
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)\.github/workflows/[^/]+\.ya?ml$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)Dockerfile([._-][^/]*)?$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)(docker-compose|compose)(\.[a-zA-Z0-9_-]+)*\.(ya?ml)$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '\.(tf|tfvars)$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)(terraform|pulumi|cdk|k8s|kubernetes|helm|ansible|\.devcontainer)/' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)Pulumi(\.[a-zA-Z0-9_-]+)?\.ya?ml$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)cdk(\.context)?\.json$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)playbook\.(ya?ml)$' && return 0
+  return 1
+}
+
+has_infra_diff_token() {
+  grep -qE "^\+apiVersion:[[:space:]]+(apps|batch|networking|policy|rbac|autoscaling)/|^\+kind:[[:space:]]+(Deployment|Service|StatefulSet|DaemonSet|Job|CronJob|Ingress|ConfigMap|Secret)\b|\bresource[[:space:]]+\"(aws|google|azurerm|kubernetes)_|^\+FROM[[:space:]]+[a-z0-9._/-]+" "$DIFF"
+}
+
+has_observability_diff_token() {
+  # Logging / error-handling tokens. Anchored to plus-lines so unchanged context
+  # doesn't fire the angle.
+  grep -qE "^\+.*\b(console\.(log|warn|error|info|debug)|logger\.|log\.(info|warn|error|debug|trace)|fmt\.(Println|Printf|Fprintln)|Sentry\.|OpenTelemetry|otel\.|opentelemetry|tracer\.startSpan|span\.(end|recordException)|metrics\.(counter|histogram|gauge)|\.catch\([[:space:]]*\([^)]*\)[[:space:]]*=>[[:space:]]*(null|undefined))" "$DIFF" && return 0
+  grep -qE "^\+[[:space:]]*}[[:space:]]*catch[[:space:]]*(\([^)]*\))?[[:space:]]*\{[[:space:]]*\}" "$DIFF" && return 0
+  return 1
+}
+
+has_types_signal() {
+  echo "$CHANGED_PATHS" | grep -qE '\.(ts|tsx|cts|mts)$'
+}
+
+has_i18n_file() {
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)(locales|messages|i18n|translations)/' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '\.(po|pot)$' && return 0
+  return 1
+}
+
+has_i18n_diff_token() {
+  grep -qE "\bi18n\.t\(|\buseTranslations\(|\buseTranslation\(|<Trans\b|<FormattedMessage\b|\b\\\$t\(|\bt\([\"']" "$DIFF"
+}
+
+has_docs_file() {
+  # docs paths excluding rule files consumed by the conventions angle.
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)README(\.[a-zA-Z0-9_-]+)*(\.(md|mdx|rst|txt))?$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)CHANGELOG(\.(md|mdx|txt))?$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)docs/' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)\.env\.example$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)(openapi|swagger)\.(ya?ml|json)$' && return 0
+  # *.md / *.mdx anywhere — except rule files that the conventions angle owns.
+  echo "$CHANGED_PATHS" \
+    | grep -vE '(^|/)(AGENTS|CLAUDE|GEMINI)\.md$' \
+    | grep -vE '(^|/)\.(cursorrules|windsurfrules)$' \
+    | grep -qE '\.(md|mdx)$' && return 0
+  return 1
+}
+
+has_deps_file() {
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)(package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb)$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)(requirements(-[a-zA-Z0-9_-]+)?\.txt|pyproject\.toml|poetry\.lock|uv\.lock|Pipfile(\.lock)?)$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)(go\.mod|go\.sum)$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)(Cargo\.toml|Cargo\.lock)$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)(Gemfile|Gemfile\.lock)$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)(composer\.(json|lock))$' && return 0
+  return 1
+}
+
 ANGLES=("bugs" "security")
 
 if [ -f "$OUTDIR/rules.md" ]; then
@@ -128,6 +243,38 @@ fi
 
 if has_database_file || has_database_diff_token; then
   ANGLES+=("database")
+fi
+
+if has_tests_file; then
+  ANGLES+=("tests")
+fi
+
+if has_api_file || has_api_diff_token; then
+  ANGLES+=("api")
+fi
+
+if has_infra_file || has_infra_diff_token; then
+  ANGLES+=("infra")
+fi
+
+if has_observability_diff_token; then
+  ANGLES+=("observability")
+fi
+
+if has_types_signal; then
+  ANGLES+=("types")
+fi
+
+if has_i18n_file || has_i18n_diff_token; then
+  ANGLES+=("i18n")
+fi
+
+if has_docs_file; then
+  ANGLES+=("docs")
+fi
+
+if has_deps_file; then
+  ANGLES+=("deps")
 fi
 
 # Merge config.angles.skip into the disable CSV. Config-driven and input-driven
