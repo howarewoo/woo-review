@@ -75,17 +75,22 @@ Launch one `claude-haiku-4-5` (fast tier) subagent. Task:
 
 Do NOT call `gh pr edit`. The PR title and description are immutable for this action.
 
-## Step 2 — Parallel Angle Audits (one subagent per enabled angle)
+## Step 2 — Parallel Angle Audits (one subagent per enabled angle, × chunk if chunked)
 
-Read `/tmp/pr-review/angles.txt`. Launch **one subagent per enabled angle in the same response** to maximize parallelism. Each subagent:
+Read `/tmp/pr-review/angles.txt`. Check `/tmp/pr-review/chunks.txt`:
+
+- **Unchunked** (file absent): launch **one subagent per enabled angle in the same response** to maximize parallelism.
+- **Chunked** (file present, issue #14): launch **one subagent per `(angle, chunk_id)` pair**, again in the same response. Pass the chunk id explicitly in the subagent prompt and instruct it to read `/tmp/pr-review/diff.chunk-<id>.txt` and write `/tmp/pr-review/findings.<angle>.chunk-<id>.json`.
+
+Each subagent:
 
 - Loads its angle prompt: `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md`.
 - Runs on the Anthropic model resolved from that prompt's `tier:` frontmatter via the table above (Sonnet for `bugs`/`security`/`design`/`react`/`database`, Haiku for `seo`/`aeo`). The spawning Task call MUST pass `model:` explicitly — see Model Routing section above.
-- Reads `/tmp/pr-review/diff.txt` and the prompts/meta as required by the angle file.
+- Reads its assigned diff (`/tmp/pr-review/diff.txt` for the unchunked case, `/tmp/pr-review/diff.chunk-<id>.txt` for chunked).
 - For `react`: runs `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline`, parses output, then performs LLM review per the react prompt.
-- Returns its findings list AND writes them to `/tmp/pr-review/findings.<angle>.json`.
+- Returns its findings list AND writes them to `/tmp/pr-review/findings.<angle>.json` (unchunked) or `/tmp/pr-review/findings.<angle>.<chunk_id>.json` (chunked).
 
-If the Task tool caps practical parallelism below the angle count, spawn the angles in two waves: `[bugs, security, seo, aeo]` then `[design, react, database]`. Do not skip any enabled angle.
+If the Task tool caps practical parallelism below the angle count, spawn in waves of ≤4 subagents. Do not skip any enabled angle. After every subagent has finished, run `bash $WOO_REVIEW_ACTION_PATH/scripts/merge-findings.sh` — it concatenates every `findings.<angle>*.json` into `raw_findings.json` and applies within-angle dedup so duplicates across chunks collapse to a single entry before validation.
 
 ## Step 3 — Adversarial Validation (Opus 4.7, prosecutor + defender)
 

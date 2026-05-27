@@ -417,5 +417,10 @@ printf '%s' "$THREADS_JSON" | jq '
 PRIOR_COUNT=$(jq 'length' "$OUTDIR/prior-findings.json" 2>/dev/null || echo 0)
 echo "Prior unresolved threads: $PRIOR_COUNT"
 
+# Issue #14: split oversized diffs into chunks. Runs LAST so it sees the final
+# post-ignore diff (diff.filtered.txt when present). Under the threshold this
+# is a no-op (no chunks.txt produced, downstream behaves exactly as before).
+bash "$SCRIPT_DIR/chunk-diff.sh"
+
 echo "skip=false" >> "$GITHUB_OUTPUT"
 echo "Prefetch complete: $OUTDIR/"

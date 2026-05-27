@@ -90,6 +90,14 @@ disable_adversarial: false     # cost-sensitive opt-out for the prosecutor+
                                # defender validator (issue #13). When true,
                                # only the defender pass runs and its output
                                # becomes findings.json directly.
+chunking:
+  max_loc: 4000                # diff-chunking threshold (issue #14). When the
+                               # post-ignore diff exceeds this many changed
+                               # lines, prefetch splits it into chunks honoring
+                               # workspace package roots > top-level dirs >
+                               # file-LOC balanced groups. Each angle fans out
+                               # as angles × chunks parallel sub-agents.
+                               # `0` disables chunking entirely. Missing => 4000.
 ```
 
 **Precedence**: for the angle set, `angles.force` beats `angles.skip` when the same angle is listed in both. For model resolution, the action input `inputs.model` beats `models.<tier>` which beats the table default in `prompts/_header.md`. `ignore` is applied to both file paths and the per-file diff sections before angle gates evaluate.
@@ -154,7 +162,15 @@ bash "$WOO_REVIEW_ACTION_PATH/scripts/detect-angles.sh"
 
 Read the result from `/tmp/pr-review/angles.txt` (one angle per line). Always-on angles: `bugs`, `security`. Conditional: `seo`, `aeo`, `design`, `react`.
 
-### Stage 3 — Spawn Parallel Sub-Agents (one per angle)
+Prefetch also produces optional chunking artifacts when the post-ignore diff exceeds `chunking.max_loc` (default 4000 LOC). When present, the host MUST fan out one sub-agent per `(angle, chunk)` pair in Stage 3:
+
+- `/tmp/pr-review/chunks.txt` — chunk IDs, one per line (`chunk-0`, `chunk-1`, …).
+- `/tmp/pr-review/chunks.json` — manifest: `[{id, files, loc, diff_path, boundary}]`.
+- `/tmp/pr-review/diff.chunk-<id>.txt` — per-chunk diff (a valid `diff --git` stream).
+
+Boundary precedence: workspace packages (`packages/<name>/`, `apps/<name>/`, `services/<name>/`, `libs/<name>/`) → top-level directories → file-LOC-balanced split. When `chunks.txt` is absent the diff is under threshold and chunking is a no-op.
+
+### Stage 3 — Spawn Parallel Sub-Agents (one per angle, × chunk if chunked)
 
 **This is the swarm step.** For each detected angle, spawn a sub-agent in parallel using your host's primitive:
 
@@ -174,6 +190,8 @@ Execute any shell commands the angle prompt specifies (e.g. impeccable detect,
 react-doctor). Write your findings as a JSON array to
 /tmp/pr-review/findings.<angle>.json per the schema in _header.md. EXIT.
 ```
+
+**Chunked fan-out.** When `/tmp/pr-review/chunks.txt` exists, spawn one sub-agent per `(angle, chunk_id)` instead of one per angle. Pass the chunk ID in the brief, and tell the sub-agent to read `/tmp/pr-review/diff.chunk-<id>.txt` and write `/tmp/pr-review/findings.<angle>.chunk-<id>.json`. The validator pass still runs **once globally** — `merge-findings.sh` collapses any within-angle duplicates across chunks before validation, and the validator handles cross-angle dedup as today.
 
 Sub-agents MUST NOT post comments, edit the PR, or touch other angles' files.
 

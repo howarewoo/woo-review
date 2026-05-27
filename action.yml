@@ -13,6 +13,9 @@ outputs:
   angles_json:
     description: 'JSON array of enabled review angles.'
     value: ${{ steps.angles.outputs.angles_json }}
+  chunks_json:
+    description: 'JSON array of chunk IDs when the diff exceeds chunking.max_loc (issue #14). When chunking does not activate the value is `[""]` — one empty-string chunk, so consumers can always use it as the second dimension of a strategy matrix.'
+    value: ${{ steps.angles.outputs.chunks_json }}
 
 inputs:
   provider:
@@ -33,6 +36,10 @@ inputs:
     default: 'full'
   angle:
     description: 'Specific angle to run (required if mode=review)'
+    required: false
+    default: ''
+  chunk:
+    description: 'Specific chunk id to run (e.g. `chunk-0`). Pairs with `angle` when mode=review to fan out angles × chunks for oversized diffs (issue #14). Empty string runs against the full diff (default).'
     required: false
     default: ''
 
@@ -168,6 +175,25 @@ runs:
       uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
       with:
         node-version: '22'
+
+    - name: Swap chunked diff (issue #14)
+      id: chunk-swap
+      if: inputs.chunk != '' && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review')
+      shell: bash
+      env:
+        CHUNK: ${{ inputs.chunk }}
+      run: |
+        set -euo pipefail
+        SRC="/tmp/pr-review/diff.${CHUNK}.txt"
+        if [ ! -s "$SRC" ]; then
+          echo "::error::chunked diff $SRC missing or empty — chunk-diff.sh may not have run"
+          exit 1
+        fi
+        if [ -f /tmp/pr-review/diff.txt ] && [ ! -f /tmp/pr-review/diff.full.txt.bak ]; then
+          cp /tmp/pr-review/diff.txt /tmp/pr-review/diff.full.txt.bak
+        fi
+        cp "$SRC" /tmp/pr-review/diff.txt
+        echo "Chunk swap: diff.txt now points at $SRC ($(wc -l < /tmp/pr-review/diff.txt) lines)"
 
     - name: Load prompt
       id: load-prompt
@@ -318,3 +344,22 @@ runs:
         IMPECCABLE_VERSION: ${{ inputs.impeccable_version }}
         REACT_DOCTOR_VERSION: ${{ inputs.react_doctor_version }}
 
+    - name: Rename chunked findings (issue #14)
+      if: always() && inputs.chunk != '' && steps.prefetch.outputs.skip != 'true' && (inputs.mode == 'full' || inputs.mode == 'review')
+      shell: bash
+      env:
+        ANGLE: ${{ inputs.angle }}
+        CHUNK: ${{ inputs.chunk }}
+      run: |
+        set -euo pipefail
+        # Restore the unchunked diff so any follow-on step in the same job
+        # (e.g. log dumps) sees the original artifact, not the chunk.
+        if [ -f /tmp/pr-review/diff.full.txt.bak ]; then
+          mv /tmp/pr-review/diff.full.txt.bak /tmp/pr-review/diff.txt
+        fi
+        # Workers wrote findings.<angle>.json — rename so multiple chunk jobs
+        # for the same angle do not clobber each other on artifact merge.
+        if [ -n "${ANGLE:-}" ] && [ -f "/tmp/pr-review/findings.${ANGLE}.json" ]; then
+          mv "/tmp/pr-review/findings.${ANGLE}.json" "/tmp/pr-review/findings.${ANGLE}.${CHUNK}.json"
+          echo "Renamed findings.${ANGLE}.json -> findings.${ANGLE}.${CHUNK}.json"
+        fi

@@ -17,6 +17,9 @@
 #   fix_commands        list[str]  (consumed by issue #15 --loop mode)
 #   disable_adversarial bool       (cost-sensitive opt-out for issue #13's
 #                                   prosecutor+defender pipeline; default false)
+#   chunking.max_loc    int >= 0   (issue #14: diff split threshold; 0 disables
+#                                   chunking entirely; absent => 4000 default
+#                                   applied by chunk-diff.sh)
 
 set -euo pipefail
 
@@ -56,6 +59,7 @@ VALID_FLOORS = {"low", "medium", "high"}
 TOP_KEYS = {
     "angles", "severity_floor", "ignore", "project_rules",
     "authors_skip", "models", "fix_commands", "disable_adversarial",
+    "chunking",
 }
 MODEL_TIERS = {"fast", "standard", "deep"}
 
@@ -144,6 +148,21 @@ if "disable_adversarial" in raw:
     if not isinstance(val, bool):
         loud("`disable_adversarial` must be a boolean (true/false), got {}".format(type(val).__name__))
     out["disable_adversarial"] = val
+
+if "chunking" in raw:
+    chunking = raw["chunking"]
+    if not isinstance(chunking, dict):
+        loud("`chunking` must be a mapping with `max_loc:` key")
+    bad = sorted(set(chunking.keys()) - {"max_loc"})
+    if bad:
+        loud("unknown chunking sub-key(s): {} (valid: max_loc)".format(", ".join(bad)))
+    if "max_loc" in chunking:
+        v = chunking["max_loc"]
+        if isinstance(v, bool) or not isinstance(v, int):
+            loud("`chunking.max_loc` must be an integer, got {}".format(type(v).__name__))
+        if v < 0:
+            loud("`chunking.max_loc` must be >= 0 (got {})".format(v))
+        out["chunking"] = {"max_loc": v}
 
 if "models" in raw:
     models = raw["models"]

@@ -202,7 +202,77 @@ else
   fi
 fi
 
-# ---------- Case 10: empty file -> empty {} JSON ----------
+# ---------- Case 10a: chunking.max_loc int round-trips ----------
+cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+chunking:
+  max_loc: 6000
+YAML
+bash "$SCRIPT" >/dev/null
+if [ "$(jq -r '.chunking.max_loc' "$PREFETCH/config.json")" = "6000" ]; then
+  echo "ok   chunking-max-loc-int-roundtrip"
+else
+  echo "FAIL chunking-max-loc-int-roundtrip: got $(jq -r '.chunking.max_loc' "$PREFETCH/config.json")"
+  fail=1
+fi
+
+# ---------- Case 10b: chunking.max_loc non-integer rejected ----------
+cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+chunking:
+  max_loc: "lots"
+YAML
+err_out="$WORK/err.txt"
+if bash "$SCRIPT" 2>"$err_out" >/dev/null; then
+  echo "FAIL chunking-max-loc-non-int: loader exited 0"
+  fail=1
+else
+  if grep -q 'chunking.max_loc' "$err_out" && grep -q 'integer' "$err_out"; then
+    echo "ok   chunking-max-loc-non-int-rejected"
+  else
+    echo "FAIL chunking-max-loc-non-int: wrong error"
+    cat "$err_out"
+    fail=1
+  fi
+fi
+
+# ---------- Case 10c: chunking.max_loc negative rejected ----------
+cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+chunking:
+  max_loc: -1
+YAML
+err_out="$WORK/err.txt"
+if bash "$SCRIPT" 2>"$err_out" >/dev/null; then
+  echo "FAIL chunking-max-loc-negative: loader exited 0"
+  fail=1
+else
+  if grep -q 'chunking.max_loc' "$err_out" && grep -q '>= 0' "$err_out"; then
+    echo "ok   chunking-max-loc-negative-rejected"
+  else
+    echo "FAIL chunking-max-loc-negative: wrong error"
+    cat "$err_out"
+    fail=1
+  fi
+fi
+
+# ---------- Case 10d: chunking unknown sub-key rejected ----------
+cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+chunking:
+  strategy: balanced
+YAML
+err_out="$WORK/err.txt"
+if bash "$SCRIPT" 2>"$err_out" >/dev/null; then
+  echo "FAIL chunking-unknown-subkey: loader exited 0"
+  fail=1
+else
+  if grep -q 'unknown chunking sub-key' "$err_out"; then
+    echo "ok   chunking-unknown-subkey-rejected"
+  else
+    echo "FAIL chunking-unknown-subkey: wrong error"
+    cat "$err_out"
+    fail=1
+  fi
+fi
+
+# ---------- Case 11: empty file -> empty {} JSON ----------
 : > "$GITHUB_WORKSPACE/.woo-review.yml"
 bash "$SCRIPT" >/dev/null
 if [ "$(jq -r 'keys | length' "$PREFETCH/config.json")" = "0" ]; then

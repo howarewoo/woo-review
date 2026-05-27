@@ -49,4 +49,24 @@ if [ "$merged_count" -eq 0 ]; then
 fi
 
 jq -s 'add // []' "$TMP" > "$MERGED_FILE"
-echo "Merged $merged_count finding files into $MERGED_FILE"
+
+# Issue #14: cross-chunk dedup. When the same angle runs against multiple
+# chunks (large-PR fan-out), the same logical finding can land in two
+# chunks. Collapse by (angle, file, line, title_stem) — same key as the
+# validator's cross-angle dedup, so the two stages agree on identity.
+# Cross-ANGLE dedup is intentionally left to the validator; this step only
+# folds within-angle duplicates so the validator sees a clean input.
+BEFORE_COUNT=$(jq 'length' "$MERGED_FILE")
+jq '
+  def title_stem(s): (s // "" | ascii_downcase | gsub("[^a-z0-9]+"; ""))[0:40];
+  unique_by([
+    (.angle // ""),
+    (.file // ""),
+    (.line // 0 | tonumber? // 0),
+    title_stem(.title)
+  ])
+' "$MERGED_FILE" > "$MERGED_FILE.deduped"
+mv "$MERGED_FILE.deduped" "$MERGED_FILE"
+AFTER_COUNT=$(jq 'length' "$MERGED_FILE")
+
+echo "Merged $merged_count finding files into $MERGED_FILE (within-angle dedup: $BEFORE_COUNT -> $AFTER_COUNT)"

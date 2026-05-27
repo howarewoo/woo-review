@@ -75,6 +75,7 @@ jobs:
       pull-requests: read
     outputs:
       angles: ${{ steps.woo.outputs.angles_json }}
+      chunks: ${{ steps.woo.outputs.chunks_json }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       # Self-references pinned to the current tag. Bump in lockstep with releases.
@@ -97,10 +98,16 @@ jobs:
       contents: read
       pull-requests: read
     if: needs.detect.outputs.angles != '[]' && needs.detect.outputs.angles != ''
+    # Two-dim matrix (issue #14): angles × chunks. When chunking does not
+    # activate, `chunks` is `[""]` and the matrix collapses to one job per
+    # angle (current behaviour, zero overhead). When it activates,
+    # `chunks` is `["chunk-0", "chunk-1", ...]` and the matrix fans out as
+    # angles × chunks so each worker stays inside the model context window.
     strategy:
       fail-fast: false
       matrix:
         angle: ${{ fromJson(needs.detect.outputs.angles) }}
+        chunk: ${{ fromJson(needs.detect.outputs.chunks) }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Download base artifacts
@@ -112,6 +119,7 @@ jobs:
         with:
           mode: review
           angle: ${{ matrix.angle }}
+          chunk: ${{ matrix.chunk }}
           provider: ${{ inputs.provider }}
           model: ${{ inputs.model }}
           anthropic_token: ${{ secrets.anthropic_token }}
@@ -126,11 +134,15 @@ jobs:
           prompt_override: ${{ inputs.prompt_override }}
           react_doctor_version: ${{ inputs.react_doctor_version }}
           impeccable_version: ${{ inputs.impeccable_version }}
+      # Artifact name includes the chunk suffix so multiple chunk jobs for the
+      # same angle cannot collide on upload. `chunk` is `""` in the un-chunked
+      # case → suffix collapses to `-all`; the merge step globs `findings-*`.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: findings-${{ matrix.angle }}
-          path: /tmp/pr-review/findings.${{ matrix.angle }}.json
+          name: findings-${{ matrix.angle }}-${{ matrix.chunk || 'all' }}
+          path: /tmp/pr-review/findings.${{ matrix.angle }}*.json
           retention-days: 1
+          if-no-files-found: ignore
 
   validate:
     needs: [detect, review]
