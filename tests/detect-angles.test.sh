@@ -99,7 +99,7 @@ diff --git a/app/layout.tsx b/app/layout.tsx
 +  openGraph: { 'og:title': 'Product' }
 +};
 DIFF
-run_case "react+seo+design" "bugs,security,seo,design,react"
+run_case "react+seo+design" "bugs,security,seo,design,react,types"
 
 # --- Case 3: pure CSS change -> bugs,security,design
 rm -f "$GITHUB_WORKSPACE/package.json"
@@ -184,7 +184,7 @@ diff --git a/src/pages/marketing/Special.tsx b/src/pages/marketing/Special.tsx
 +<meta name="robots" content="noindex" />
 DIFF
 : > "$OUTPUT_FILE"
-run_case "real-meta-robots-triggers-seo" "bugs,security,seo,design,react"
+run_case "real-meta-robots-triggers-seo" "bugs,security,seo,design,react,types"
 
 # --- Case 8: new llms.txt triggers aeo (and seo via robots-family fileset is unrelated).
 cat > "$PREFETCH/meta.json" <<'JSON'
@@ -243,7 +243,7 @@ diff --git a/content/help/faq.mdx b/content/help/faq.mdx
 +<script type="application/ld+json">{ "@type": "FAQPage", "mainEntity": [] }</script>
 DIFF
 : > "$OUTPUT_FILE"
-run_case "faq-schema-mdx-triggers-aeo" "bugs,security,aeo"
+run_case "faq-schema-mdx-triggers-aeo" "bugs,security,aeo,docs"
 
 # --- Case 11: Supabase migration *.sql triggers database (and aeo via .mdx fileset is unrelated).
 cat > "$PREFETCH/meta.json" <<'JSON'
@@ -307,7 +307,7 @@ diff --git a/src/server/lookup.ts b/src/server/lookup.ts
 +}
 DIFF
 : > "$OUTPUT_FILE"
-run_case "db-query-token-triggers-database" "bugs,security,database"
+run_case "db-query-token-triggers-database" "bugs,security,database,types"
 
 # --- Case 14: docs prose mentioning "table" / "index" must NOT trigger database (regression guard).
 cat > "$PREFETCH/meta.json" <<'JSON'
@@ -327,7 +327,7 @@ diff --git a/docs/intro.md b/docs/intro.md
 +The index lists every page in alphabetical order.
 DIFF
 : > "$OUTPUT_FILE"
-run_case "docs-prose-no-database-trigger" "bugs,security,aeo"
+run_case "docs-prose-no-database-trigger" "bugs,security,aeo,docs"
 
 # --- Case 15: rules.md present -> conventions enabled.
 cat > "$PREFETCH/meta.json" <<'JSON'
@@ -424,7 +424,7 @@ cat > "$PREFETCH/config.json" <<'CFG'
 {"angles": {"skip": ["seo"]}}
 CFG
 : > "$OUTPUT_FILE"
-run_case "config-skip-removes-seo" "bugs,security,design,react"
+run_case "config-skip-removes-seo" "bugs,security,design,react,types"
 rm -f "$PREFETCH/config.json" "$GITHUB_WORKSPACE/package.json"
 
 # --- Case 20: force trumps skip when the same angle is listed in both.
@@ -447,7 +447,7 @@ cat > "$PREFETCH/config.json" <<'CFG'
 {"angles": {"force": ["seo"], "skip": ["seo"]}}
 CFG
 : > "$OUTPUT_FILE"
-run_case "config-force-overrides-skip" "bugs,security,design,react,seo"
+run_case "config-force-overrides-skip" "bugs,security,design,react,types,seo"
 rm -f "$PREFETCH/config.json"
 
 # --- Case 21: detect-angles prefers ignore-filtered changed-paths file when
@@ -510,7 +510,7 @@ diff --git a/src/server/route.ts b/src/server/route.ts
 +const x = 1;
 DIFF
 : > "$OUTPUT_FILE"
-run_case "config-ignore-suppresses-diff-trigger" "bugs,security"
+run_case "config-ignore-suppresses-diff-trigger" "bugs,security,types"
 rm -f "$PREFETCH/changed-paths.filtered.txt" "$PREFETCH/diff.filtered.txt"
 
 # --- Case 23: monorepo with workspace-scoped react dep (root package.json
@@ -543,7 +543,7 @@ diff --git a/apps/web/src/components/Hero.tsx b/apps/web/src/components/Hero.tsx
 +export function Hero() { return <h1>hi</h1>; }
 DIFF
 : > "$OUTPUT_FILE"
-run_case "monorepo-workspace-react-still-triggers-react" "bugs,security,design,react"
+run_case "monorepo-workspace-react-still-triggers-react" "bugs,security,design,react,types"
 rm -f "$GITHUB_WORKSPACE/package.json"
 
 # --- Case 24: .tsx diff with NO package.json anywhere still triggers react.
@@ -565,7 +565,204 @@ diff --git a/src/Widget.tsx b/src/Widget.tsx
 +export const Widget = () => null;
 DIFF
 : > "$OUTPUT_FILE"
-run_case "tsx-without-package-json-triggers-react" "bugs,security,design,react"
+run_case "tsx-without-package-json-triggers-react" "bugs,security,design,react,types"
+
+# --- Case 25: test file triggers `tests` angle.
+rm -f "$PREFETCH/changed-paths.filtered.txt" "$PREFETCH/diff.filtered.txt"
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "7e575abc",
+  "baseRefName": "main",
+  "title": "test: add auth coverage",
+  "body": "",
+  "files": [
+    {"path": "src/auth/login.test.ts", "additions": 15, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/src/auth/login.test.ts b/src/auth/login.test.ts
++test("login rejects empty password", () => { expect(login("", "")).toBe(false); });
+DIFF
+: > "$OUTPUT_FILE"
+run_case "test-file-triggers-tests" "bugs,security,tests,types"
+
+# --- Case 26: route file with HTTP verb triggers `api`.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "a91abcde",
+  "baseRefName": "main",
+  "title": "feat(api): add user route",
+  "body": "",
+  "files": [
+    {"path": "src/server/routes/users.ts", "additions": 12, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/src/server/routes/users.ts b/src/server/routes/users.ts
++app.get("/users/:id", async (req, res) => res.json(await db.findUser(req.params.id)));
+DIFF
+: > "$OUTPUT_FILE"
+run_case "route-with-http-verb-triggers-api" "bugs,security,api,types"
+
+# --- Case 27: GitHub Actions workflow change triggers `infra`.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "1f7a4321",
+  "baseRefName": "main",
+  "title": "ci: bump node version",
+  "body": "",
+  "files": [
+    {"path": ".github/workflows/ci.yml", "additions": 2, "deletions": 1}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
++      - uses: actions/setup-node@v4
++        with: { node-version: '22' }
+DIFF
+: > "$OUTPUT_FILE"
+run_case "gha-workflow-triggers-infra" "bugs,security,infra"
+
+# --- Case 28: console.log in a .py file triggers `observability`.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "0b5e0b50",
+  "baseRefName": "main",
+  "title": "feat: add tracing",
+  "body": "",
+  "files": [
+    {"path": "server/worker.py", "additions": 5, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/server/worker.py b/server/worker.py
++def process(job):
++    logger.info("processing %s", job.id)
++    return job.run()
+DIFF
+: > "$OUTPUT_FILE"
+run_case "logger-call-triggers-observability" "bugs,security,observability"
+
+# --- Case 29: pure .ts source triggers `types`.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "7ype50ff",
+  "baseRefName": "main",
+  "title": "refactor: tighten util types",
+  "body": "",
+  "files": [
+    {"path": "src/util/parse.ts", "additions": 3, "deletions": 1}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/src/util/parse.ts b/src/util/parse.ts
++export const parse = (s: string): number => Number(s);
+DIFF
+: > "$OUTPUT_FILE"
+run_case "ts-file-triggers-types" "bugs,security,types"
+
+# --- Case 30: locales/ JSON triggers `i18n`.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "10ca1e54",
+  "baseRefName": "main",
+  "title": "i18n: add fr-FR strings",
+  "body": "",
+  "files": [
+    {"path": "locales/fr-FR/common.json", "additions": 8, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/locales/fr-FR/common.json b/locales/fr-FR/common.json
++{ "submit": "Envoyer" }
+DIFF
+: > "$OUTPUT_FILE"
+run_case "locales-triggers-i18n" "bugs,security,i18n"
+
+# --- Case 31: README change triggers `docs` (and aeo via *.md fileset is unrelated).
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "d0c5f001",
+  "baseRefName": "main",
+  "title": "docs: clarify setup",
+  "body": "",
+  "files": [
+    {"path": "README.md", "additions": 4, "deletions": 1}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/README.md b/README.md
++Run `npm install` then `npm run dev`.
+DIFF
+: > "$OUTPUT_FILE"
+run_case "readme-triggers-docs" "bugs,security,aeo,docs"
+
+# --- Case 32: package.json change triggers `deps`.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "deeb5abc",
+  "baseRefName": "main",
+  "title": "chore(deps): bump lodash",
+  "body": "",
+  "files": [
+    {"path": "package.json", "additions": 1, "deletions": 1},
+    {"path": "package-lock.json", "additions": 12, "deletions": 12}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/package.json b/package.json
++    "lodash": "^4.17.22"
+DIFF
+: > "$OUTPUT_FILE"
+run_case "package-json-triggers-deps" "bugs,security,deps"
+
+# --- Case 33: AGENTS.md change must NOT trigger `docs` (owned by conventions).
+rm -f "$PREFETCH/rules.md"
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "a9e7d0c5",
+  "baseRefName": "main",
+  "title": "chore: update agents rules",
+  "body": "",
+  "files": [
+    {"path": "AGENTS.md", "additions": 2, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/AGENTS.md b/AGENTS.md
++Always run tests before merging.
+DIFF
+: > "$OUTPUT_FILE"
+run_case "agents-md-skips-docs" "bugs,security,aeo"
+
+# --- Case 34: Dockerfile change triggers `infra`.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "d0cf11e0",
+  "baseRefName": "main",
+  "title": "build: pin node 22 alpine",
+  "body": "",
+  "files": [
+    {"path": "Dockerfile", "additions": 3, "deletions": 1}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/Dockerfile b/Dockerfile
++FROM node:22-alpine
++RUN apk add --no-cache git
+DIFF
+: > "$OUTPUT_FILE"
+run_case "dockerfile-triggers-infra" "bugs,security,infra"
 
 if [ $fail -ne 0 ]; then
   echo "TESTS FAILED"

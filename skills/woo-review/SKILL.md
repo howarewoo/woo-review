@@ -183,7 +183,7 @@ bash "$WOO_REVIEW_ACTION_PATH/scripts/load-config.sh"   # parses .woo-review.yml
 bash "$WOO_REVIEW_ACTION_PATH/scripts/detect-angles.sh"
 ```
 
-Read the result from `/tmp/pr-review/angles.txt` (one angle per line). Always-on angles: `bugs`, `security`. Conditional: `seo`, `aeo`, `design`, `react`.
+Read the result from `/tmp/pr-review/angles.txt` (one angle per line). Always-on angles: `bugs`, `security`. Conditional (auto-detected from changed paths + diff body): `conventions` (when `rules.md` is present), `seo`, `aeo`, `design`, `react`, `database`, `tests`, `api`, `infra`, `observability`, `types`, `i18n`, `docs`, `deps`. See `scripts/detect-angles.sh` for per-angle gating heuristics.
 
 Prefetch also produces optional chunking artifacts when the post-ignore diff exceeds `chunking.max_loc` (default 4000 LOC). When present, the host MUST fan out one sub-agent per `(angle, chunk)` pair in Stage 3:
 
@@ -226,7 +226,9 @@ Sub-agents MUST NOT post comments, edit the PR, or touch other angles' files.
 | `bugs`, `security` workers | `standard` | Reasoning-heavy: correctness + threat model. |
 | `design`, `react` workers | `standard` | Heuristic + Rules-of-Hooks judgment after deterministic tools. |
 | `database` worker | `standard` | Postgres correctness, RLS reasoning, plan/index judgment. |
+| `tests`, `api`, `infra` workers | `standard` | Coverage/contract/IaC reasoning. |
 | `seo`, `aeo` workers | `fast` | Rubric checklists; no novel reasoning. |
+| `observability`, `types`, `i18n`, `docs`, `deps` workers | `fast` | Pattern matching + diff-anchored hygiene checks. |
 | Skeptical Validator | `deep` | Highest-leverage step — strictest false-positive filter pays for itself. |
 
 Per-provider resolution (full table in `_header.md`):
@@ -330,7 +332,7 @@ Zero local setup required in the consumer repo — the action ships its own prom
 - Always parallelize Stage 3 when the host supports it; the validator pass is calibrated for ~5 angles' worth of input.
 - Trust the Skeptical Validator. Disabling it produces noisy reviews.
 - Honor angle-prompt tiers (`fast`/`standard`/`deep`) when the host supports per-call model routing. Hosts that run one model per session should pin the `standard` tier model (table above) — this matches the May 2026 flagship recommendation.
-- Pass `disable_angles` to skip optional angles when scope is narrow (e.g. backend-only PR → `disable_angles: "seo,design,react"`).
+- Pass `disable_angles` to skip optional angles when scope is narrow (e.g. backend-only PR → `disable_angles: "seo,aeo,design,react,i18n"`).
 
 ## Troubleshooting
 

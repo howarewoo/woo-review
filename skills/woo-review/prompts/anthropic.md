@@ -39,8 +39,8 @@ Claude Code's `Task` tool supports per-subagent model routing. Read each angle p
 
 | Tier | Anthropic model | Used for |
 |---|---|---|
-| `fast` | `claude-haiku-4-5` | context+summary, `seo`, `aeo` |
-| `standard` | `claude-sonnet-4-6` | `bugs`, `security`, `design`, `react`, `database` |
+| `fast` | `claude-haiku-4-5` | context+summary, `seo`, `aeo`, `observability`, `types`, `i18n`, `docs`, `deps` |
+| `standard` | `claude-sonnet-4-6` | `bugs`, `security`, `design`, `react`, `database`, `tests`, `api`, `infra` |
 | `deep` | `claude-opus-4-7` | skeptical validator |
 
 **Every Task/Agent spawn MUST pass `model:` explicitly.** Omitting it makes the subagent inherit the parent session's model — typically Opus — which silently defeats tier routing and burns ~5x the tokens on rubric angles. The `tier:` frontmatter is informational unless the spawning call passes the resolved slug.
@@ -85,7 +85,7 @@ Read `/tmp/pr-review/angles.txt`. Check `/tmp/pr-review/chunks.txt`:
 Each subagent:
 
 - Loads its angle prompt: `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md`.
-- Runs on the Anthropic model resolved from that prompt's `tier:` frontmatter via the table above (Sonnet for `bugs`/`security`/`design`/`react`/`database`, Haiku for `seo`/`aeo`). The spawning Task call MUST pass `model:` explicitly — see Model Routing section above.
+- Runs on the Anthropic model resolved from that prompt's `tier:` frontmatter via the table above (Sonnet for `bugs`/`security`/`design`/`react`/`database`/`tests`/`api`/`infra`, Haiku for `seo`/`aeo`/`observability`/`types`/`i18n`/`docs`/`deps`). The spawning Task call MUST pass `model:` explicitly — see Model Routing section above.
 - Reads its assigned diff (`/tmp/pr-review/diff.txt` for the unchunked case, `/tmp/pr-review/diff.chunk-<id>.txt` for chunked).
 - For `react`: runs `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline`, parses output, then performs LLM review per the react prompt.
 - Returns its findings list AND writes them to `/tmp/pr-review/findings.<angle>.json` (unchunked) or `/tmp/pr-review/findings.<angle>.<chunk_id>.json` (chunked).
