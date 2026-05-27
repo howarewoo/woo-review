@@ -159,9 +159,11 @@ has_api_diff_token() {
 has_infra_file() {
   echo "$CHANGED_PATHS" | grep -qE '(^|/)\.github/workflows/[^/]+\.ya?ml$' && return 0
   echo "$CHANGED_PATHS" | grep -qE '(^|/)Dockerfile([._-][^/]*)?$' && return 0
-  echo "$CHANGED_PATHS" | grep -qE '(^|/)(docker-compose|compose)\.(ya?ml)$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)(docker-compose|compose)(\.[a-zA-Z0-9_-]+)*\.(ya?ml)$' && return 0
   echo "$CHANGED_PATHS" | grep -qE '\.(tf|tfvars)$' && return 0
   echo "$CHANGED_PATHS" | grep -qE '(^|/)(terraform|pulumi|cdk|k8s|kubernetes|helm|ansible|\.devcontainer)/' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)Pulumi(\.[a-zA-Z0-9_-]+)?\.ya?ml$' && return 0
+  echo "$CHANGED_PATHS" | grep -qE '(^|/)cdk(\.context)?\.json$' && return 0
   echo "$CHANGED_PATHS" | grep -qE '(^|/)playbook\.(ya?ml)$' && return 0
   return 1
 }

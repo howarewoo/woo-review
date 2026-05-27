@@ -121,27 +121,10 @@ DIFF
 run_case "design-only" "bugs,security,design"
 
 # --- Case 4: disable_angles=design,react drops design from CSS PR -> bugs,security
-INPUT_DISABLE_ANGLES="design,react" \
-  bash "$SCRIPT" > /dev/null
-actual=$(grep '^angles=' "$OUTPUT_FILE" | tail -n1 | cut -d= -f2-)
-if [ "$actual" = "bugs,security" ]; then
-  echo "ok   disable_angles=design,react -> $actual"
-else
-  echo "FAIL disable_angles: expected 'bugs,security', got '$actual'"
-  fail=1
-fi
+INPUT_DISABLE_ANGLES="design,react" run_case "disable_angles=design,react" "bugs,security"
 
 # --- Case 5: disable_angles cannot drop bugs/security
-: > "$OUTPUT_FILE"
-INPUT_DISABLE_ANGLES="bugs,security,design" \
-  bash "$SCRIPT" > /dev/null
-actual=$(grep '^angles=' "$OUTPUT_FILE" | tail -n1 | cut -d= -f2-)
-if [ "$actual" = "bugs,security" ]; then
-  echo "ok   disable_angles refuses to drop bugs/security -> $actual"
-else
-  echo "FAIL disable_angles refusal: expected 'bugs,security', got '$actual'"
-  fail=1
-fi
+INPUT_DISABLE_ANGLES="bugs,security,design" run_case "disable_angles-refuses-bugs/security" "bugs,security"
 
 # --- Case 6: bare "robots" / "sitemap" / "canonical" words in non-SEO diff
 #            should NOT trigger seo (regex tightening regression guard).
@@ -363,17 +346,7 @@ cat > "$PREFETCH/rules.md" <<'RULES'
 ## SOURCE: AGENTS.md
 All handlers MUST return typed responses.
 RULES
-: > "$OUTPUT_FILE"
-INPUT_DISABLE_ANGLES="conventions" \
-  bash "$SCRIPT" > /dev/null
-actual=$(grep '^angles=' "$OUTPUT_FILE" | tail -n1 | cut -d= -f2-)
-if [ "$actual" = "bugs,security" ]; then
-  echo "ok   disable_angles=conventions drops conventions -> $actual"
-else
-  echo "FAIL disable_angles=conventions: expected 'bugs,security', got '$actual'"
-  fail=1
-fi
-unset INPUT_DISABLE_ANGLES
+INPUT_DISABLE_ANGLES="conventions" run_case "disable_angles=conventions" "bugs,security"
 rm -f "$PREFETCH/rules.md"
 
 # --- Case 18: config.angles.force adds an angle that wasn't auto-detected.
@@ -763,6 +736,169 @@ diff --git a/Dockerfile b/Dockerfile
 DIFF
 : > "$OUTPUT_FILE"
 run_case "dockerfile-triggers-infra" "bugs,security,infra"
+
+# --- Case 35: Go _test.go file triggers `tests`.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "90757501",
+  "baseRefName": "main",
+  "title": "test(auth): add login coverage",
+  "body": "",
+  "files": [
+    {"path": "internal/auth/login_test.go", "additions": 12, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/internal/auth/login_test.go b/internal/auth/login_test.go
++func TestLoginRejectsEmpty(t *testing.T) { t.Skip() }
+DIFF
+: > "$OUTPUT_FILE"
+run_case "go-_test.go-triggers-tests" "bugs,security,tests"
+
+# --- Case 36: Python _test.py file triggers `tests`.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "97757502",
+  "baseRefName": "main",
+  "title": "test: cover login",
+  "body": "",
+  "files": [
+    {"path": "src/auth/login_test.py", "additions": 8, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/src/auth/login_test.py b/src/auth/login_test.py
++def test_login_rejects_empty():
++    assert login("", "") is False
+DIFF
+: > "$OUTPUT_FILE"
+run_case "py-_test.py-triggers-tests" "bugs,security,tests"
+
+# --- Case 37: Ruby _spec.rb file triggers `tests`.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "5e575503",
+  "baseRefName": "main",
+  "title": "test: login spec",
+  "body": "",
+  "files": [
+    {"path": "app/auth/login_spec.rb", "additions": 6, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/app/auth/login_spec.rb b/app/auth/login_spec.rb
++describe Login do
++  it "rejects empty" do; expect(Login.new("","")).to be_falsey; end
++end
+DIFF
+: > "$OUTPUT_FILE"
+run_case "rb-_spec.rb-triggers-tests" "bugs,security,tests"
+
+# --- Case 38: __tests__/ directory triggers `tests`.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "1e575504",
+  "baseRefName": "main",
+  "title": "test: add helper coverage",
+  "body": "",
+  "files": [
+    {"path": "src/__tests__/helper.js", "additions": 4, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/src/__tests__/helper.js b/src/__tests__/helper.js
++test("helper returns 1", () => { expect(helper()).toBe(1); });
+DIFF
+: > "$OUTPUT_FILE"
+run_case "__tests__-dir-triggers-tests" "bugs,security,tests"
+
+# --- Case 39: isolated has_api_file (openapi.yaml, no HTTP-verb token) triggers `api`.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "0a91f001",
+  "baseRefName": "main",
+  "title": "feat(api): add openapi spec",
+  "body": "",
+  "files": [
+    {"path": "api/openapi.yaml", "additions": 30, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/api/openapi.yaml b/api/openapi.yaml
++openapi: 3.1.0
++info:
++  title: Users API
++  version: 1.0.0
+DIFF
+: > "$OUTPUT_FILE"
+run_case "openapi-yaml-triggers-api" "bugs,security,api,docs"
+
+# --- Case 40: isolated has_api_file (.proto, no HTTP-verb token) triggers `api`.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "0a91f002",
+  "baseRefName": "main",
+  "title": "feat(api): add user proto",
+  "body": "",
+  "files": [
+    {"path": "proto/user.proto", "additions": 10, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/proto/user.proto b/proto/user.proto
++syntax = "proto3";
++message User { string id = 1; string name = 2; }
+DIFF
+: > "$OUTPUT_FILE"
+run_case "proto-file-triggers-api" "bugs,security,api"
+
+# --- Case 41: observability tokens on context lines (no leading +) must NOT trigger.
+#              Guards the ^+ anchor in has_observability_diff_token.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "0b5f0042",
+  "baseRefName": "main",
+  "title": "refactor: rename helper",
+  "body": "",
+  "files": [
+    {"path": "server/worker.py", "additions": 1, "deletions": 1}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/server/worker.py b/server/worker.py
+ def process(job):
+     logger.info("processing %s", job.id)
+-    return job.run()
++    return job.execute()
+DIFF
+: > "$OUTPUT_FILE"
+run_case "context-line-logger-no-observability" "bugs,security"
+
+# --- Case 42: disable_angles=tests drops tests from a test-file PR.
+#              Covers the disable path for one of the 8 new angles.
+cat > "$PREFETCH/meta.json" <<'JSON'
+{
+  "headRefOid": "d15ab1ed",
+  "baseRefName": "main",
+  "title": "test: add auth coverage",
+  "body": "",
+  "files": [
+    {"path": "src/auth/login.test.ts", "additions": 8, "deletions": 0}
+  ]
+}
+JSON
+cat > "$PREFETCH/diff.txt" <<'DIFF'
+diff --git a/src/auth/login.test.ts b/src/auth/login.test.ts
++test("login rejects empty password", () => { expect(login("", "")).toBe(false); });
+DIFF
+INPUT_DISABLE_ANGLES="tests" run_case "disable_angles=tests-drops-tests" "bugs,security,types"
 
 if [ $fail -ne 0 ]; then
   echo "TESTS FAILED"
