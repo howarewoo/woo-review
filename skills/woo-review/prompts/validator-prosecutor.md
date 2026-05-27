@@ -24,8 +24,8 @@ This pass is one half of an adversarial validation pipeline. Your output is inte
    - OR it is purely cosmetic style with zero correctness/security/perf impact AND no rule backing.
    - OR it duplicates another finding kept in the deduped set.
    - When in doubt: **KEEP**. The Defender pass will drop weak findings; you do not have to.
-3. **Rule-quote Check** (same as Defender — non-negotiable invariant):
-   - If `/tmp/pr-review/rules.md` is absent, DISCARD any finding whose `description` claims a project-rule violation OR whose `rule_quote` is non-null.
+3. **Rule-quote Check** (same as Defender — non-negotiable invariant): For every finding whose `description` claims a project-rule / convention violation OR whose `rule_quote` is non-null:
+   - If `/tmp/pr-review/rules.md` is absent, DISCARD the finding.
    - If `rule_quote` is null/empty/whitespace, DISCARD.
    - If `rule_quote` is not a verbatim substring of `rules.md`, DISCARD.
    - Use `grep -qF "$quote" /tmp/pr-review/rules.md`.
