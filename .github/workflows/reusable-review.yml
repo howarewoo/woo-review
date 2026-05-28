@@ -56,7 +56,7 @@ on:
         description: 'Commit newly-resolved threads to .woo-review/dismissed.json via bot.'
         type: string
         required: false
-        default: 'false'
+        default: 'true'
     secrets:
       anthropic_token:
         required: false
@@ -161,8 +161,11 @@ jobs:
     # Only skip if detection failed/cancelled or the whole run was cancelled.
     if: always() && needs.detect.result == 'success' && needs.review.result != 'cancelled'
     runs-on: ubuntu-latest
+    # `contents: read` is sufficient — sidecar commit/push moved to the
+    # `sidecar-write` job below (issue #33), so the validator (which runs the
+    # LLM step against untrusted PR content) never sees `contents: write`.
     permissions:
-      contents: write
+      contents: read
       pull-requests: write
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -259,3 +262,29 @@ jobs:
           path: /tmp/pr-review/validator-metrics.json
           retention-days: 7
           if-no-files-found: ignore
+
+  # Sidecar write is its own job (issue #33) so `contents: write` does not
+  # leak to the validator step (which runs an LLM against untrusted PR
+  # content). Gated on `inputs.enable_sidecar_write` — when the flag is off
+  # this job is skipped entirely and no elevated permission is granted.
+  sidecar-write:
+    needs: [detect, validate]
+    if: inputs.enable_sidecar_write == 'true' && needs.validate.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      # Check out the PR head branch into the default workspace — the script
+      # commits .woo-review/dismissed.json and pushes back to that branch.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+      - uses: howarewoo/woo-review@v0.1.0
+        with:
+          mode: sidecar-write
+          enable_sidecar_write: ${{ inputs.enable_sidecar_write }}

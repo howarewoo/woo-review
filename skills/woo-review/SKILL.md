@@ -85,7 +85,7 @@ Workers MUST emit two additional fields on every finding (defined in the angle p
 
 `prefetch.sh` loads `.woo-review/dismissed.json` from the consumer repo into `/tmp/pr-review/sidecar-findings.json` at the start of each run. This file accumulates resolved threads that authors have explicitly dismissed — it prevents re-surfacing issues the team has consciously accepted.
 
-After the review POST, `sidecar-write.sh` reads any threads that became resolved during this run, appends them to the sidecar, and commits the updated `.woo-review/dismissed.json` back to the consumer repo via the bot token. This write is gated on the `enable_sidecar_write` config flag (default `false` — off during the dogfood window).
+After the review POST, `sidecar-write.sh` reads any threads that became resolved during this run, appends them to the sidecar, and commits the updated `.woo-review/dismissed.json` back to the consumer repo via the bot token. This write is gated on the `enable_sidecar_write` config flag (default `true`). In the CI extension the script runs in a *separate, permission-isolated* job that holds `contents: write` — the validator job (which runs the LLM against untrusted PR content) only holds `contents: read`, so an LLM compromise cannot pivot to repo-write capability.
 
 ### Event-floor rule change
 
@@ -103,7 +103,7 @@ When `findings.deduped.json ∪ sidecar-findings.json` contains ≥ `WOO_REVIEW_
 | Flag | Type | Default | Effect |
 |---|---|---|---|
 | `enable_history_dedup` | `.woo-review.yml` boolean | `true` | Gates `dedup-against-history.sh`. When `false`, Stage 5 consumes `findings.json` directly (legacy path). |
-| `enable_sidecar_write` | `.woo-review.yml` boolean | `false` | Gates `sidecar-write.sh`. Keep `false` until the dogfood window completes. |
+| `enable_sidecar_write` | `.woo-review.yml` boolean | `true` | Gates `sidecar-write.sh`. |
 | `WOO_REVIEW_RULES_THRESHOLD` | env integer | `2` | Cluster size at which rule recommendations are drafted. Set to `0` to disable rule recs entirely. |
 
 ## Knowledge Aggregation

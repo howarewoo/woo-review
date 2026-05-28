@@ -15,7 +15,7 @@ The companion GitHub Action is an **extension** of the skill: same prompts, same
 - **History dedup** — stable `(file, code_anchor, semantic_key)` identity survives line shifts; drops findings already posted on the PR or dismissed in the sidecar.
 - **LLM tiebreak** — Sonnet-class adjudicator handles ambiguous near-matches (`|Δline| ≤ 10`, one of anchor/sem_key matches), batched and cost-capped, fails open.
 - **Rule recommendations** — recurring `semantic_key` clusters become a "Suggested rules for AGENT.md / CLAUDE.md" section in the review body, so coding agents learn from repeated misses.
-- **Sidecar persistence** — newly-resolved threads land in `.woo-review/dismissed.json` via a bot commit, so dedup signal survives across PRs (opt-in via `enable_sidecar_write`).
+- **Sidecar persistence** — newly-resolved threads land in `.woo-review/dismissed.json` via a bot commit, so dedup signal survives across PRs.
 - **Host-agnostic** — the skill runs under Claude Code, Cursor, Gemini CLI, opencode, or any host that can spawn sub-agents.
 - **Multi-provider** — Anthropic, OpenAI, Google, and OpenRouter all work with the same prompts; provider auto-detected from the secret you supply.
 - **CI extension** — same prompts, same angles, same validator, packaged as a reusable GitHub Actions workflow.
@@ -150,7 +150,7 @@ The CI pipeline mirrors the skill's swarm 1:1 — detection job → matrix of an
 | `disable_angles` | `""` | CSV of optional angles to skip (e.g. `seo,aeo,design,react,database`). `bugs` and `security` are non-negotiable. |
 | `max_turns` | `30` | Agent loop cap (Anthropic; other providers use their equivalent). |
 | `enable_history_dedup` | `true` | Run `dedup-against-history.sh` between validator and posting. Set `false` to fall back to legacy `findings.json` consumption. |
-| `enable_sidecar_write` | `false` | After review POST, append newly-resolved threads to `.woo-review/dismissed.json` and commit via bot. Requires `contents: write`. Flip on after a dogfood window. |
+| `enable_sidecar_write` | `true` | After review POST, append newly-resolved threads to `.woo-review/dismissed.json` and commit via bot. Requires `contents: write`. |
 
 ---
 
