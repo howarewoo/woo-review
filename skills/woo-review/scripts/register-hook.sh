@@ -11,7 +11,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HOOK_CMD="bash ${SCRIPT_DIR}/sidecar-write.sh"
+# Quote the path inside the stored command so the Stop hook still resolves when
+# the skill lives under a path containing spaces or shell metacharacters.
+HOOK_CMD="bash \"${SCRIPT_DIR}/sidecar-write.sh\""
 SETTINGS=".claude/settings.local.json"
 
 mkdir -p .claude
@@ -23,7 +25,7 @@ TMP="$(mktemp)"
 jq --arg c "$HOOK_CMD" '
   .hooks.Stop = (
     [ (.hooks.Stop // [])[]
-      | .hooks = [ .hooks[]? | select((.command // "") | test("/sidecar-write\\.sh$") | not) ]
+      | .hooks = [ .hooks[]? | select((.command // "") | test("/sidecar-write\\.sh\"?$") | not) ]
       | select((.hooks | length) > 0)
     ]
     + [ { hooks: [ { type: "command", command: $c } ] } ]

@@ -14,7 +14,8 @@ expect() { local n="$1" c="$2"; if eval "$c"; then echo "PASS $n"; pass=$((pass+
 
 cd "$WORK"
 SETTINGS=".claude/settings.local.json"
-HOOK_CMD="bash $SIDECAR"
+# Path is quoted in the stored command (handles spaces / shell metacharacters).
+HOOK_CMD="bash \"$SIDECAR\""
 
 # Run twice — must be idempotent.
 bash "$SCRIPT"
@@ -47,11 +48,21 @@ cat > "$SETTINGS" <<JSON
 JSON
 bash "$SCRIPT"
 expect "stale sidecar-write entry removed" \
-  '[ "$(jq -r "[.hooks.Stop[]?.hooks[]?.command] | map(select(test(\"/sidecar-write.sh$\"))) | length" "$SETTINGS")" -eq 1 ]'
+  '[ "$(jq -r "[.hooks.Stop[]?.hooks[]?.command] | map(select(contains(\"sidecar-write.sh\"))) | length" "$SETTINGS")" -eq 1 ]'
 expect "current command is the live path" \
   '[ "$(jq -r --arg c "$HOOK_CMD" "[.hooks.Stop[]?.hooks[]?.command] | index(\$c) != null" "$SETTINGS")" = "true" ]'
 expect "unrelated keep-me hook survived dedup" \
   '[ "$(jq -r "[.hooks.Stop[]?.hooks[]?.command] | index(\"echo keep-me\") != null" "$SETTINGS")" = "true" ]'
+
+# ---- path containing a space: stored command must be quoted so it stays one arg
+SPACED="$WORK/dir with space/scripts"
+mkdir -p "$SPACED"
+cp "$REPO_ROOT/skills/woo-review/scripts/register-hook.sh" \
+   "$REPO_ROOT/skills/woo-review/scripts/sidecar-write.sh" "$SPACED/"
+rm -rf "$WORK/.claude" "$WORK/.gitignore"
+( cd "$WORK" && bash "$SPACED/register-hook.sh" >/dev/null )
+expect "spaced install path is quoted in stored command" \
+  '[ "$(jq -r ".hooks.Stop[-1].hooks[0].command" "$SETTINGS")" = "bash \"$SPACED/sidecar-write.sh\"" ]'
 
 echo "----"; echo "Results: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1

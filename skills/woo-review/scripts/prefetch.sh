@@ -225,7 +225,7 @@ jq -n \
   --arg sha  "$HEAD_SHA" \
   --arg repo "$REVIEW_REPO_SLUG" \
   --arg path "$REVIEW_REPO_PATH" \
-  '{pr_number: ($pr | tonumber), head_sha: $sha, repo: $repo, repo_path: $path}' \
+  '{pr_number: ($pr | tonumber? // null), head_sha: $sha, repo: $repo, repo_path: $path}' \
   > "$OUTDIR/review-context.json"
 
 # Load per-repo config early (issue #19) so the bot-author / release-rollup
