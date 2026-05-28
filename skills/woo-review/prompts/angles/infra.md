@@ -11,7 +11,6 @@ tier: standard
 - **GitHub Actions:**
   - Untrusted-input → script injection (`${{ github.event.* }}` interpolated into `run:` blocks; reference: github.com/security `script-injection`).
   - `pull_request_target` granting write tokens to PR-controlled code.
-  - Actions pinned to a mutable ref (`@main`, `@v1`) instead of a commit SHA, for third-party actions.
   - `permissions:` block missing or set to `write-all` when read-only would suffice.
   - Secrets passed via `env:` on a step that runs untrusted code, or echoed to logs.
 - **Dockerfiles:**
