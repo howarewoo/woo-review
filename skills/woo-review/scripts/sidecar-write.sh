@@ -6,7 +6,7 @@
 # .woo-review/dismissed.json, and commits the change via the bot identity.
 #
 # Gated on:
-#   - .woo-review.yml: enable_sidecar_write (default: false)
+#   - .woo-review.yml: enable_sidecar_write (default: true)
 #   - env: WOO_REVIEW_DISABLE_GIT_WRITE=1 → skip (tests)
 #
 # Failures (no perm, push race, malformed) → log + exit 0. Never fail the run.
@@ -26,8 +26,11 @@
 set -euo pipefail
 
 OUTDIR="${OUTDIR:-/tmp/pr-review}"
-ENABLE=$(jq -r '.enable_sidecar_write // false' "$OUTDIR/config.json" 2>/dev/null \
-         || echo false)
+# `if … == null` (not `//`) because jq's alternative operator treats `false`
+# as "missing" — `false // true` evaluates to `true`, which would silently
+# enable writes for users who explicitly set the flag to `false`.
+ENABLE=$(jq -r 'if .enable_sidecar_write == null then true else .enable_sidecar_write end' \
+           "$OUTDIR/config.json" 2>/dev/null || echo false)
 if [ "$ENABLE" != "true" ]; then
   echo "sidecar-write: disabled (.woo-review.yml: enable_sidecar_write != true)"
   exit 0

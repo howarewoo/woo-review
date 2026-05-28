@@ -281,10 +281,13 @@ print(json.dumps(payload))
 # 3. Submit the review
 gh api "repos/${GITHUB_REPOSITORY}/pulls/$PR_NUMBER/reviews" \
   --method POST --input /tmp/pr_review_payload.json
-
-# 4. After review POST: record newly-resolved threads to sidecar.
-bash "$WOO_REVIEW_ACTION_PATH/scripts/sidecar-write.sh" || true
 ```
+
+Sidecar writes (`.woo-review/dismissed.json`) run as a *separate* job after
+the review POST. The CI action invokes `sidecar-write.sh` from a job with
+`contents: write` (gated on `enable_sidecar_write`); skill hosts that do not
+fan out into separate jobs may invoke the script themselves after the review
+POST, but the LLM step itself MUST NOT have repo-write capability.
 
 ### Review Body Rules
 The `pr_review_body.txt` should contain:

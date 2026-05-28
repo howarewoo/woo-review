@@ -31,7 +31,7 @@ inputs:
     required: false
     default: ''
   mode:
-    description: 'Execution mode: full (sequential) | detect | review | validate-prosecutor | validate. The adversarial validator runs as two passes: validate-prosecutor first (writes findings.prosecutor.json), then validate (writes findings.defender.json, runs intersect-findings.sh, and posts the review).'
+    description: 'Execution mode: full (sequential) | detect | review | validate-prosecutor | validate | sidecar-write. The adversarial validator runs as two passes: validate-prosecutor first (writes findings.prosecutor.json), then validate (writes findings.defender.json, runs intersect-findings.sh, and posts the review). `sidecar-write` is a permission-isolated post-step that commits newly-resolved threads to .woo-review/dismissed.json (issue #33).'
     required: false
     default: 'full'
   angle:
@@ -109,13 +109,14 @@ inputs:
   enable_sidecar_write:
     description: 'Commit newly-resolved threads to .woo-review/dismissed.json via bot.'
     required: false
-    default: 'false'
+    default: 'true'
 
 runs:
   using: 'composite'
   steps:
     - name: Resolve provider
       id: detect
+      if: inputs.mode != 'sidecar-write'
       shell: bash
       env:
         INPUT_PROVIDER: ${{ inputs.provider }}
@@ -137,6 +138,7 @@ runs:
 
     - name: Prefetch diff, metadata, rules, .woo-review.yml
       id: prefetch
+      if: inputs.mode != 'sidecar-write'
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
@@ -148,6 +150,27 @@ runs:
         INPUT_INCREMENTAL: ${{ inputs.incremental }}
         COMMENT_BODY: ${{ github.event.comment.body }}
       run: bash "${{ github.action_path }}/skills/woo-review/scripts/prefetch.sh"
+
+    # Permission-isolated post-step (issue #33). Runs only in the dedicated
+    # `sidecar-write` job that holds `contents: write` — the validator job
+    # never sees this script invocation, so the LLM step cannot escalate from
+    # PR-write to repo-write.
+    - name: Sidecar write (commit newly-resolved threads)
+      if: inputs.mode == 'sidecar-write' && inputs.enable_sidecar_write == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        PR_NUMBER: ${{ steps.pr.outputs.number }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      run: |
+        set -euo pipefail
+        mkdir -p /tmp/pr-review
+        # Workflow guards already gate this job on enable_sidecar_write=true;
+        # write a minimal config.json so the script's defense-in-depth check
+        # passes without needing an artifact roundtrip.
+        echo '{"enable_sidecar_write": true}' > /tmp/pr-review/config.json
+        bash "${{ github.action_path }}/skills/woo-review/scripts/sidecar-write.sh"
 
     - name: Detect review angles
       id: angles
