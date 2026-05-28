@@ -87,38 +87,40 @@ PY
 LLM_DISABLED="${WOO_REVIEW_DISABLE_LLM_TIEBREAK:-0}"
 PAIR_COUNT="$(jq length "$PAIRS")"
 
+SKIP_LLM_DEDUP=0
 if [ "$LLM_DISABLED" = "1" ] || [ "$PAIR_COUNT" -eq 0 ]; then
   mv "$DEDUPED.tmp" "$DEDUPED"
   mv "$METRICS.tmp" "$METRICS"
   echo "dedup-against-history: input=$(jq length "$FINDINGS") "\
 "kept=$(jq length "$DEDUPED") "\
 "det_drops=$(jq -r .det_drops "$METRICS") llm_drops=0 (pairs=$PAIR_COUNT, llm_disabled=$LLM_DISABLED)"
-  exit 0
+  SKIP_LLM_DEDUP=1
 fi
 
-COST_CEILING_CALLS="${WOO_REVIEW_DEDUP_MAX_CALLS:-10}"
-PER_CALL_PAIRS=20
-CALLS=$(( (PAIR_COUNT + PER_CALL_PAIRS - 1) / PER_CALL_PAIRS ))
-if [ "$CALLS" -gt "$COST_CEILING_CALLS" ]; then
-  echo "dedup-against-history: pair_count=$PAIR_COUNT exceeds ceiling "\
+if [ "$SKIP_LLM_DEDUP" = "0" ]; then
+  COST_CEILING_CALLS="${WOO_REVIEW_DEDUP_MAX_CALLS:-10}"
+  PER_CALL_PAIRS=20
+  CALLS=$(( (PAIR_COUNT + PER_CALL_PAIRS - 1) / PER_CALL_PAIRS ))
+  if [ "$CALLS" -gt "$COST_CEILING_CALLS" ]; then
+    echo "dedup-against-history: pair_count=$PAIR_COUNT exceeds ceiling "\
 "($COST_CEILING_CALLS calls × $PER_CALL_PAIRS pairs); truncating"
-  CALLS="$COST_CEILING_CALLS"
-fi
-
-DROP_IDS_ALL='[]'
-for i in $(seq 0 $((CALLS - 1))); do
-  START=$((i * PER_CALL_PAIRS))
-  BATCH=$(jq ".[$START:$START+$PER_CALL_PAIRS]" "$PAIRS")
-  if [ -n "${WOO_REVIEW_FAKE_LLM_DEDUP_JSON:-}" ]; then
-    RESP="$WOO_REVIEW_FAKE_LLM_DEDUP_JSON"
-  else
-    RESP="$(bash "$(dirname "$0")/llm-dedup.sh" "$BATCH" 2>/dev/null || echo '{}')"
+    CALLS="$COST_CEILING_CALLS"
   fi
-  PARSED=$(printf '%s' "$RESP" | jq -c '.drop_ids // []' 2>/dev/null || echo '[]')
-  DROP_IDS_ALL=$(jq -c -n --argjson a "$DROP_IDS_ALL" --argjson b "$PARSED" '$a + $b')
-done
 
-python3 - "$DEDUPED.tmp" "$METRICS.tmp" "$DEDUPED" "$METRICS" "$DROP_IDS_ALL" <<'PY'
+  DROP_IDS_ALL='[]'
+  for i in $(seq 0 $((CALLS - 1))); do
+    START=$((i * PER_CALL_PAIRS))
+    BATCH=$(jq ".[$START:$START+$PER_CALL_PAIRS]" "$PAIRS")
+    if [ -n "${WOO_REVIEW_FAKE_LLM_DEDUP_JSON:-}" ]; then
+      RESP="$WOO_REVIEW_FAKE_LLM_DEDUP_JSON"
+    else
+      RESP="$(bash "$(dirname "$0")/llm-dedup.sh" "$BATCH" 2>/dev/null || echo '{}')"
+    fi
+    PARSED=$(printf '%s' "$RESP" | jq -c '.drop_ids // []' 2>/dev/null || echo '[]')
+    DROP_IDS_ALL=$(jq -c -n --argjson a "$DROP_IDS_ALL" --argjson b "$PARSED" '$a + $b')
+  done
+
+  python3 - "$DEDUPED.tmp" "$METRICS.tmp" "$DEDUPED" "$METRICS" "$DROP_IDS_ALL" <<'PY'
 import json, sys
 src, mtmp, dst, mdst, drops_raw = sys.argv[1:]
 findings = json.load(open(src))
@@ -132,9 +134,45 @@ json.dump(kept,  open(dst,  "w"), indent=2)
 json.dump(metrics, open(mdst, "w"), indent=2)
 PY
 
-rm -f "$DEDUPED.tmp" "$METRICS.tmp"
-echo "dedup-against-history: input=$(jq length "$FINDINGS") "\
+  rm -f "$DEDUPED.tmp" "$METRICS.tmp"
+  echo "dedup-against-history: input=$(jq length "$FINDINGS") "\
 "kept=$(jq length "$DEDUPED") "\
 "det_drops=$(jq -r .det_drops "$METRICS") "\
 "llm_drops=$(jq -r .llm_drops "$METRICS") "\
 "pairs=$PAIR_COUNT"
+fi
+
+# ─── Rule recommendations ──────────────────────────────────────────────
+# Cluster findings ∪ sidecar by semantic_key. Any key with ≥ THRESHOLD
+# occurrences is a candidate. One Sonnet call drafts a short bullet list.
+RULES_OUT="$OUTDIR/rule-recommendations.md"
+THRESHOLD="${WOO_REVIEW_RULES_THRESHOLD:-2}"
+
+CLUSTER_JSON="$(jq -s --argjson t "$THRESHOLD" '
+  add
+  | map(select(.semantic_key))
+  | group_by(.semantic_key)
+  | map({key: .[0].semantic_key, count: length,
+         examples: [.[0:3] | .[] | {file: .file, line: .line, title: (.title // "")}]})
+  | map(select(.count >= $t))
+' "$DEDUPED" "$SIDECAR" 2>/dev/null || echo '[]')"
+
+if [ "$(printf '%s' "$CLUSTER_JSON" | jq length)" -eq 0 ]; then
+  rm -f "$RULES_OUT"
+  exit 0
+fi
+
+if [ -n "${WOO_REVIEW_FAKE_LLM_RULES_MD:-}" ]; then
+  printf '%s' "$WOO_REVIEW_FAKE_LLM_RULES_MD" > "$RULES_OUT"
+else
+  if [ -x "$(dirname "$0")/llm-rules.sh" ]; then
+    if ! bash "$(dirname "$0")/llm-rules.sh" "$CLUSTER_JSON" > "$RULES_OUT" 2>/dev/null; then
+      rm -f "$RULES_OUT"
+    fi
+  fi
+fi
+
+if [ -s "$RULES_OUT" ]; then
+  echo "dedup-against-history: rule-recommendations.md emitted ("\
+"$(wc -c < "$RULES_OUT") bytes from $(printf '%s' "$CLUSTER_JSON" | jq length) clusters)"
+fi

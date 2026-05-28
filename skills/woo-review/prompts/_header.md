@@ -156,6 +156,12 @@ ${STATUS_LINE}
 <!-- woo-review:sha=${HEAD_SHA} -->
 BODY_EOF
 
+# Append rule recommendations if any.
+if [ -s /tmp/pr-review/rule-recommendations.md ]; then
+  printf '\n\n### Suggested rules for AGENT.md / CLAUDE.md\n\n' >> /tmp/pr_review_body.txt
+  cat /tmp/pr-review/rule-recommendations.md >> /tmp/pr_review_body.txt
+fi
+
 # Before running this posting step, the orchestrator MUST first run
 # `bash $WOO_REVIEW_ACTION_PATH/scripts/dedup-against-history.sh` so
 # `/tmp/pr-review/findings.deduped.json` is populated. Legacy hosts that skip
