@@ -76,6 +76,44 @@ bash "$SCRIPT"
 expect "E: sidecar match drops finding" \
   '[ "$(jq length "$OUT/findings.deduped.json")" -eq 0 ]'
 
+# ---- case F: same file + sem_key, anchor differs, |Δline|≤10 → LLM tiebreak
+cat > "$OUT/findings.json" <<'JSON'
+[ {"angle":"bugs","file":"d.ts","line":15,"severity":"HIGH","blocking":true,
+   "title":"x","description":"y","fix_type":"prose","fix":"f","suggestion":null,
+   "rule_quote":null,"semantic_key":"bugs/off-by-one-loop-bound","code_anchor":"NEW111111111"} ]
+JSON
+cat > "$OUT/prior-findings.json" <<'JSON'
+[ {"file":"d.ts","line":10,"title":"old","author":"bot","status":"open",
+   "semantic_key":"bugs/off-by-one-loop-bound","code_anchor":"OLD000000000"} ]
+JSON
+echo '[]' > "$OUT/sidecar-findings.json"
+export WOO_REVIEW_FAKE_LLM_DEDUP_JSON='{"drop_ids":["d.ts:15"]}'
+unset WOO_REVIEW_DISABLE_LLM_TIEBREAK
+bash "$SCRIPT"
+expect "F: LLM stub drops finding" \
+  '[ "$(jq length "$OUT/findings.deduped.json")" -eq 0 ]'
+expect "F: dedup-metrics llm_drops=1" \
+  '[ "$(jq -r .llm_drops "$OUT/dedup-metrics.json")" -eq 1 ]'
+
+# ---- case G: LLM stub returns keep
+cat > "$OUT/findings.json" <<'JSON'
+[ {"angle":"bugs","file":"d.ts","line":15,"severity":"HIGH","blocking":true,
+   "title":"x","description":"y","fix_type":"prose","fix":"f","suggestion":null,
+   "rule_quote":null,"semantic_key":"bugs/off-by-one-loop-bound","code_anchor":"NEW111111111"} ]
+JSON
+export WOO_REVIEW_FAKE_LLM_DEDUP_JSON='{"drop_ids":[]}'
+bash "$SCRIPT"
+expect "G: LLM keep verdict keeps finding" \
+  '[ "$(jq length "$OUT/findings.deduped.json")" -eq 1 ]'
+
+# ---- case H: malformed LLM response → fail open, keep
+export WOO_REVIEW_FAKE_LLM_DEDUP_JSON='{ this is not valid json'
+bash "$SCRIPT"
+expect "H: malformed LLM response keeps finding (fail-open)" \
+  '[ "$(jq length "$OUT/findings.deduped.json")" -eq 1 ]'
+unset WOO_REVIEW_FAKE_LLM_DEDUP_JSON
+export WOO_REVIEW_DISABLE_LLM_TIEBREAK=1
+
 echo "----"
 echo "Results: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1
