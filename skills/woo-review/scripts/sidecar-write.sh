@@ -40,8 +40,13 @@ if [ "${WOO_REVIEW_DISABLE_GIT_WRITE:-0}" = "1" ]; then
   exit 0
 fi
 
-PR_NUMBER="${PR_NUMBER:-}"
-HEAD_SHA="${HEAD_SHA:-}"
+# State resolution: env wins (CI), else fall back to the handoff file the
+# skill session left in $OUTDIR (local post-session Stop hook path).
+CTX="$OUTDIR/review-context.json"
+PR_NUMBER="${PR_NUMBER:-$(jq -r '.pr_number // empty' "$CTX" 2>/dev/null || echo)}"
+HEAD_SHA="${HEAD_SHA:-$(jq -r '.head_sha // empty' "$CTX" 2>/dev/null || echo)}"
+GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-$(jq -r '.repo // empty' "$CTX" 2>/dev/null || echo)}"
+export GITHUB_REPOSITORY
 
 if [ -z "$PR_NUMBER" ] || [ -z "$HEAD_SHA" ]; then
   echo "sidecar-write: PR_NUMBER or HEAD_SHA missing; skipping"
