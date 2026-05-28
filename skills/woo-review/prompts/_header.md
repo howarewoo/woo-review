@@ -33,7 +33,7 @@ Every artifact you write under `$OUTDIR/findings.*.json` (default `/tmp/pr-revie
   `/tmp/pr-review/sidecar-findings.json` — array of
   `{file, line, title, semantic_key, code_anchor, resolved_at, pr_number}`
   loaded from `.woo-review/dismissed.json` at the consumer repo root.
-  Consumed by `dedup-against-history.sh`; angle workers MUST ignore this file.
+  Consumed by `dedup-against-history.sh` (added in a later task); angle workers MUST ignore this file.
 - **Chunk manifest** (optional, present only when the diff exceeds `chunking.max_loc`): `/tmp/pr-review/chunks.txt` (one chunk id per line) and `/tmp/pr-review/chunks.json` (manifest: `[{id, files, loc, diff_path, boundary}]`). Each chunk also has its own diff at `/tmp/pr-review/diff.chunk-<id>.txt`. When a worker is dispatched with a chunk id (env `CHUNK` non-empty), it MUST read the chunk-specific diff and write findings to `/tmp/pr-review/findings.<angle>.<chunk>.json`. In the GitHub Action this swap happens transparently — `diff.txt` is replaced with the chunk's diff before the worker runs, and the worker's output is renamed afterwards. When `chunks.txt` is absent, chunking did not activate and the diff fits a single worker (no overhead).
 
 If `/tmp/pr-review/rules.md` exists, treat it as an additional rubric on top of the per-angle scope. Each section is prefixed by a `## SOURCE: <path>` header identifying its origin file (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.windsurfrules`, or `GEMINI.md`). Any finding that claims a project-rule violation MUST populate `rule_quote` with a verbatim substring of `rules.md` (the rule text itself, not the source header). The validator discards rule-cited findings whose `rule_quote` is missing or not literally present in `rules.md`.
@@ -322,8 +322,8 @@ Every runner MUST write a final `findings.json` (for debugging + potential post-
 ### `semantic_key` and `code_anchor` (dedup keys)
 
 Every finding MUST set both fields. They form the stable identity used by
-`dedup-against-history.sh` to skip findings already on the PR or in the
-committed sidecar.
+`dedup-against-history.sh` (added in a later task) to skip findings already
+on the PR or in the committed sidecar.
 
 - `semantic_key` — kebab-case `<angle>/<issue-type>`, max 40 chars. Each
   angle prompt enumerates the valid values for that angle. Unknown issues
@@ -333,7 +333,7 @@ committed sidecar.
   the post-PR diff content. Compute via:
 
   ```bash
-  printf '%s' "$context" | sha1sum | cut -c1-12
+  printf '%s' "$context" | shasum -a 1 | cut -c1-12
   ```
 
   The anchor survives line shifts in unrelated code; the surrounding
