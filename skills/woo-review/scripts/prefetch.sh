@@ -530,7 +530,7 @@ printf '%s' "$THREADS_JSON" | jq '
   ]' > "$OUTDIR/prior-findings.json" 2>/dev/null || echo '[]' > "$OUTDIR/prior-findings.json"
 
 PRIOR_COUNT=$(jq 'length' "$OUTDIR/prior-findings.json" 2>/dev/null || echo 0)
-echo "Prior unresolved threads: $PRIOR_COUNT"
+echo "Prior review threads (open + resolved): $PRIOR_COUNT"
 
 # Repository dismissal sidecar — committed source of cross-PR dedup signal.
 # Missing file or malformed JSON falls back to []. Hard cap on size to keep
@@ -551,7 +551,7 @@ if [ -f "$SIDECAR_SRC" ]; then
 else
   echo '[]' > "$SIDECAR_OUT"
 fi
-SIDECAR_COUNT=$(jq length "$SIDECAR_OUT")
+SIDECAR_COUNT=$(jq length "$SIDECAR_OUT" 2>/dev/null || echo 0)
 echo "Sidecar dismissed entries: $SIDECAR_COUNT"
 
 # Issue #14: split oversized diffs into chunks. Runs LAST so it sees the final
