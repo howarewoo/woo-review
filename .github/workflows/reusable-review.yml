@@ -220,20 +220,19 @@ jobs:
 
       - name: Merge action inputs into config.json
         shell: bash
+        env:
+          ENABLE_SIDECAR: ${{ inputs.enable_sidecar_write }}
+          ENABLE_DEDUP: ${{ inputs.enable_history_dedup }}
         run: |
           CFG=/tmp/pr-review/config.json
           [ -f "$CFG" ] || echo '{}' > "$CFG"
-          ENABLE="${{ inputs.enable_sidecar_write }}"
-          jq --argjson v "$ENABLE" \
-             '.enable_sidecar_write = $v' "$CFG" > "$CFG.tmp" && mv "$CFG.tmp" "$CFG"
+          jq --argjson sw "$ENABLE_SIDECAR" --argjson hd "$ENABLE_DEDUP" \
+             '.enable_sidecar_write = $sw | .enable_history_dedup = $hd' \
+             "$CFG" > "$CFG.tmp" && mv "$CFG.tmp" "$CFG"
 
-      - name: Dedup against history
-        if: ${{ inputs.enable_history_dedup == 'true' }}
-        continue-on-error: true
-        shell: bash
-        run: bash skills/woo-review/scripts/dedup-against-history.sh
-        env:
-          OUTDIR: /tmp/pr-review
+      # History dedup is invoked inside the validator (Step 3b in validator.md),
+      # after intersect-findings.sh writes findings.json and before the post step.
+      # Running it here would be a no-op because findings.json does not yet exist.
 
       - name: Validate (defender pass + intersect + post)
         uses: howarewoo/woo-review@v0.1.0

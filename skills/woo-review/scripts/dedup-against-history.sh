@@ -9,6 +9,22 @@ SIDECAR="$OUTDIR/sidecar-findings.json"
 DEDUPED="$OUTDIR/findings.deduped.json"
 METRICS="$OUTDIR/dedup-metrics.json"
 PAIRS="$OUTDIR/dedup-pairs.json"
+CONFIG="$OUTDIR/config.json"
+
+# enable_history_dedup gate. Default true so existing tests and direct invocations
+# still dedup without writing config.json. When false, copy findings through and exit.
+ENABLE_DEDUP=true
+if [ -f "$CONFIG" ]; then
+  # jq `//` treats `false` as missing — use explicit `if has(...)` so a stored
+  # `false` actually disables dedup (default stays `true` when the key is absent).
+  ENABLE_DEDUP="$(jq -r 'if has("enable_history_dedup") then .enable_history_dedup else true end' "$CONFIG" 2>/dev/null || echo true)"
+fi
+if [ "$ENABLE_DEDUP" != "true" ]; then
+  if [ -f "$FINDINGS" ]; then cp "$FINDINGS" "$DEDUPED"; else echo '[]' > "$DEDUPED"; fi
+  echo '{"det_drops":0,"llm_drops":0,"pair_count":0,"skipped":true}' > "$METRICS"
+  echo "dedup-against-history: disabled via enable_history_dedup=false; passed through"
+  exit 0
+fi
 
 if [ ! -f "$FINDINGS" ]; then
   echo '[]' > "$DEDUPED.tmp"

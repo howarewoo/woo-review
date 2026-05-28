@@ -114,6 +114,24 @@ expect "H: malformed LLM response keeps finding (fail-open)" \
 unset WOO_REVIEW_FAKE_LLM_DEDUP_JSON
 export WOO_REVIEW_DISABLE_LLM_TIEBREAK=1
 
+# ---- case I: enable_history_dedup=false in config → pass-through, no drops
+cat > "$OUT/findings.json" <<'JSON'
+[ {"angle":"bugs","file":"a.ts","line":10,"severity":"HIGH","blocking":true,
+   "title":"x","description":"y","fix_type":"prose","fix":"f","suggestion":null,
+   "rule_quote":null,"semantic_key":"bugs/null-deref-array-index","code_anchor":"aaa111bbb222"} ]
+JSON
+cat > "$OUT/prior-findings.json" <<'JSON'
+[ {"file":"a.ts","line":10,"title":"x","author":"bot","status":"open",
+   "semantic_key":"bugs/null-deref-array-index","code_anchor":"aaa111bbb222"} ]
+JSON
+echo '{"enable_history_dedup": false}' > "$OUT/config.json"
+bash "$SCRIPT"
+expect "I: config flag disabled keeps finding (would normally drop)" \
+  '[ "$(jq length "$OUT/findings.deduped.json")" -eq 1 ]'
+expect "I: metrics marks skipped=true" \
+  '[ "$(jq -r .skipped "$OUT/dedup-metrics.json")" = "true" ]'
+rm -f "$OUT/config.json"
+
 echo "----"
 echo "Results: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1

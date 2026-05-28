@@ -69,7 +69,7 @@ Each angle agent:
   `code_anchor` (first 12 hex chars of `shasum -a 1` over the trimmed
   concatenation of the 3 lines before + the finding line + the 3 lines
   after, taken from the post-PR diff). These two fields form the stable
-  identity used by `dedup-against-history.sh` (added in a later task).
+  identity used by `dedup-against-history.sh`.
   Drop a finding rather than fabricate either field.
 
 Stay within each angle's scope; do not let one angle flag issues that belong to another. `merge-findings.sh` (Phase 3) handles within-angle dedup across chunks.
