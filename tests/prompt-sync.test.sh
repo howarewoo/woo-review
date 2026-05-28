@@ -14,5 +14,20 @@ for f in anthropic openai google opencode; do
   done
 done
 
+ANGLES_DIR="$REPO_ROOT/skills/woo-review/prompts/angles"
+for ang in aeo api bugs conventions database deps design docs i18n \
+           infra observability react security seo tests types; do
+  P="$ANGLES_DIR/$ang.md"
+  if [ ! -f "$P" ]; then
+    echo "FAIL: angle file missing: $P"
+    fail=1
+    continue
+  fi
+  if ! grep -q '## `semantic_key` values' "$P"; then
+    echo "FAIL: $P missing 'semantic_key values' section"
+    fail=1
+  fi
+done
+
 [ "$fail" -eq 0 ] && echo "All prompt-sync tests passed."
 exit "$fail"
