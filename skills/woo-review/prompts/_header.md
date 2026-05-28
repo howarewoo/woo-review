@@ -156,52 +156,44 @@ ${STATUS_LINE}
 <!-- woo-review:sha=${HEAD_SHA} -->
 BODY_EOF
 
+# Before running this posting step, the orchestrator MUST first run
+# `bash $WOO_REVIEW_ACTION_PATH/scripts/dedup-against-history.sh` so
+# `/tmp/pr-review/findings.deduped.json` is populated. Legacy hosts that skip
+# this step will silently fall back to `findings.json` (with no history dedup
+# applied).
+
 # 2. Prepare the review payload with inline comments
 python3 -c '
 import json, sys, os, re
 
+# Read the deduped findings (output of dedup-against-history.sh).
+# Falls back to raw findings.json if the deduped file is missing — keeps
+# legacy hosts working when they have not yet wired the dedup step.
+deduped_path = "/tmp/pr-review/findings.deduped.json"
+fallback_path = "/tmp/pr-review/findings.json"
 try:
-    findings = json.load(open("/tmp/pr-review/findings.json"))
-except:
-    findings = []
+    findings = json.load(open(deduped_path))
+except Exception:
+    try:
+        findings = json.load(open(fallback_path))
+    except Exception:
+        findings = []
 
-# Prior unresolved threads (from prefetch, GraphQL reviewThreads). Used for:
-#   - event floor: ANY non-empty priors → minimum REQUEST_CHANGES (conservative
-#     "do not APPROVE while review threads are open" rule),
-#   - dedupe: drop a new finding whose (file, line, title-stem) matches a prior
-#     unresolved thread (already on the PR — re-posting would duplicate).
-# Priors have no per-entry blocking flag; the floor is a bool over the array.
+# Prior threads include resolved entries (status field). Event floor counts
+# OPEN threads only — resolved ones are dedup-signal only, not gate-signal.
 try:
     priors = json.load(open("/tmp/pr-review/prior-findings.json"))
-except:
+except Exception:
     priors = []
-
-def title_stem(s):
-    return re.sub(r"[^a-z0-9]+", "", (s or "").lower())[:40]
-
-prior_keys = {(p.get("file"), int(p.get("line") or 0), title_stem(p.get("title")))
-              for p in priors}
-
-filtered = []
-for f in findings:
-    key = (f.get("file"), int(f.get("line") or 0), title_stem(f.get("title")))
-    if key in prior_keys:
-        continue  # already on the PR as an unresolved thread
-    filtered.append(f)
-findings = filtered
 
 commit_id = os.environ.get("HEAD_SHA")
 pr_body = open("/tmp/pr_review_body.txt").read()
 
-# Event determination. Floor: any unresolved prior thread (regardless of its
-# original severity) forces REQUEST_CHANGES — conservative gate so a stale open
-# thread is never auto-resolved by a clean incremental pass. The full schema
-# rationale is in SKILL.md under "Incremental Mode".
 has_new_blocking = any(f.get("blocking", False) for f in findings)
-has_priors = len(priors) > 0
-if not findings and not has_priors:
+has_open_priors  = any(p.get("status") == "open" for p in priors)
+if not findings and not has_open_priors:
     event = "APPROVE"
-elif has_new_blocking or has_priors:
+elif has_new_blocking or has_open_priors:
     event = "REQUEST_CHANGES"
 else:
     event = "COMMENT"
