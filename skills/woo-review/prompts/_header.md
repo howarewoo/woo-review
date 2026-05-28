@@ -281,6 +281,9 @@ print(json.dumps(payload))
 # 3. Submit the review
 gh api "repos/${GITHUB_REPOSITORY}/pulls/$PR_NUMBER/reviews" \
   --method POST --input /tmp/pr_review_payload.json
+
+# 4. After review POST: record newly-resolved threads to sidecar.
+bash "$WOO_REVIEW_ACTION_PATH/scripts/sidecar-write.sh" || true
 ```
 
 ### Review Body Rules
