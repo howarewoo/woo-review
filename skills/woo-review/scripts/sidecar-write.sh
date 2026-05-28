@@ -92,7 +92,7 @@ if ! jq empty "$SIDECAR" 2>/dev/null; then
 fi
 
 MERGED=$(jq -n --argjson a "$(cat "$SIDECAR")" --argjson b "$NEW_ENTRIES" '
-  ($a + $b) | unique_by({pr_number, semantic_key, code_anchor})
+  ($a + $b) | unique_by({pr_number, file, line})
 ')
 printf '%s' "$MERGED" > "$SIDECAR"
 

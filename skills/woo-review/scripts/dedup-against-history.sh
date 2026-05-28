@@ -150,7 +150,7 @@ THRESHOLD="${WOO_REVIEW_RULES_THRESHOLD:-2}"
 
 CLUSTER_JSON="$(jq -s --argjson t "$THRESHOLD" '
   add
-  | map(select(.semantic_key))
+  | map(select(.semantic_key and .semantic_key != "unknown/unknown"))
   | group_by(.semantic_key)
   | map({key: .[0].semantic_key, count: length,
          examples: [.[0:3] | .[] | {file: .file, line: .line, title: (.title // "")}]})
