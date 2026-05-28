@@ -20,8 +20,13 @@ SIDECAR="$OUTDIR/sidecar-findings.json"
 DEDUPED="$OUTDIR/findings.deduped.json"
 METRICS="$OUTDIR/dedup-metrics.json"
 
-[ -f "$FINDINGS" ] || { echo '[]' > "$DEDUPED"; \
-  echo '{"det_drops":0,"llm_drops":0,"pair_count":0}' > "$METRICS"; exit 0; }
+if [ ! -f "$FINDINGS" ]; then
+  echo '[]' > "$DEDUPED.tmp"
+  echo '{"det_drops":0,"llm_drops":0,"pair_count":0}' > "$METRICS.tmp"
+  mv "$DEDUPED.tmp" "$DEDUPED"
+  mv "$METRICS.tmp" "$METRICS"
+  exit 0
+fi
 [ -f "$PRIORS"   ] || echo '[]' > "$PRIORS"
 [ -f "$SIDECAR"  ] || echo '[]' > "$SIDECAR"
 
@@ -51,6 +56,9 @@ prior_keys |= {key(s) for s in sidecar if s.get("file")}
 
 kept = []
 det_drops = 0
+# Both code_anchor and semantic_key must be non-empty on the finding
+# side before we trust a match — protects against partially-populated
+# priors (e.g. legacy sidecar entries) silently dropping valid findings.
 for f in findings:
     if key(f) in prior_keys and f.get("code_anchor") and f.get("semantic_key"):
         det_drops += 1
