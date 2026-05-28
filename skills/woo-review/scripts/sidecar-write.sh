@@ -47,8 +47,12 @@ if [ "${GITHUB_ACTIONS:-}" != "true" ]; then
   trap 'rm -f "$SENTINEL"' EXIT
   CTX_PATH=$(jq -r '.repo_path // empty' "$OUTDIR/review-context.json" 2>/dev/null || echo)
   TOPLEVEL=$(git rev-parse --show-toplevel 2>/dev/null || echo)
-  if [ -n "$CTX_PATH" ] && [ "$CTX_PATH" != "$TOPLEVEL" ]; then
-    echo "sidecar-write: cwd repo ($TOPLEVEL) != reviewed repo ($CTX_PATH); skipping"
+  # Safe default: only proceed when we can positively confirm the cwd repo IS
+  # the reviewed repo. An empty CTX_PATH (context file missing/partial, or a
+  # stale sentinel without a matching context) means we CANNOT confirm — skip
+  # rather than risk committing to whatever repo the Stop hook fired in.
+  if [ -z "$CTX_PATH" ] || [ "$CTX_PATH" != "$TOPLEVEL" ]; then
+    echo "sidecar-write: cannot confirm reviewed repo (ctx=$CTX_PATH, cwd=$TOPLEVEL); skipping"
     exit 0
   fi
 fi

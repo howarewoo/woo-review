@@ -213,6 +213,7 @@ When prefetch resolves a PR number AND finds an open PR, it produces the full ar
 | `raw_findings.json` | `merge-findings.sh` | validator passes | Merged, chunk-collapsed findings |
 | `findings.json` | `intersect-findings.sh` | Stage 5, dedup script | Final validated set |
 | `sidecar-findings.json` | `prefetch.sh` (from `.woo-review/dismissed.json`) | dedup Pass 1 | Committed dismissals from past PRs; see *History Dedup* above |
+| `review-context.json` | `prefetch.sh` | `sidecar-write.sh` (local Stop hook) | PR handoff: `{pr_number, head_sha, repo, repo_path}`; read by the post-session hook to re-hydrate state when session env is absent. Local hosts only. |
 | `findings.deduped.json` | `dedup-against-history.sh` | Stage 5 posting | `findings.json` with history-matched entries removed |
 | `dedup-metrics.json` | `dedup-against-history.sh` | observability | `det_drops`, `llm_drops`, `pair_count` counters |
 | `rule-recommendations.md` | `dedup-against-history.sh` (Sonnet call) | Stage 5 posting | Markdown bullets appended to review body when emitted; see *Rule Recommendations* above |

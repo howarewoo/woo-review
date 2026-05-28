@@ -30,6 +30,11 @@ mkdir -p "$OUTDIR"
 PR_NUMBER="${PR_NUMBER:-}"
 EVENT_NAME="${EVENT_NAME:-}"
 EVENT_ACTION="${EVENT_ACTION:-}"
+# GITHUB_REPOSITORY is set by CI but unset on local hosts. Resolve it once here
+# (via gh) so the later bare ${GITHUB_REPOSITORY} uses don't trip `set -u` and
+# abort a local /woo-review run with "GITHUB_REPOSITORY: unbound variable".
+GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo)}"
+export GITHUB_REPOSITORY
 # Hardcoded — not exposed as a knob. Fed into a jq test() regex below; allowing
 # external override would let a misconfigured caller inject arbitrary regex.
 BOT_NAME_PATTERN="claude|openai|gemini|opencode"

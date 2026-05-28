@@ -62,6 +62,21 @@ OUT="$WORK/out-b2"; mkdir -p "$OUT"; write_ctx "$OUT" "$(git -C "$REPO" rev-pars
 expect "B2: no sentinel → no write" \
   '[ "$(jq length "$REPO/.woo-review/dismissed.json" 2>/dev/null || echo 0)" -eq 0 ]'
 
+# ---- case E2: sentinel present but review-context.json absent → no write, sentinel consumed.
+# CTX_PATH resolves empty; the safe-default guard must NOT proceed to write in
+# whatever repo the hook fires in (a stale sentinel + missing context must not
+# defeat the repo-match guard).
+REPO="$WORK/e2"; setup_repo "$REPO"
+OUT="$WORK/out-e2"; mkdir -p "$OUT"
+echo '{"enable_sidecar_write": true}' > "$OUT/config.json"   # config present, context NOT written
+touch "$OUT/sidecar-pending"
+( cd "$REPO"
+  unset PR_NUMBER HEAD_SHA GITHUB_REPOSITORY GITHUB_ACTIONS 2>/dev/null || true
+  OUTDIR="$OUT" WOO_REVIEW_FAKE_RESOLVED_THREADS_JSON="$FAKE" bash "$SCRIPT" )
+expect "E2: missing context → no write" \
+  '[ "$(jq length "$REPO/.woo-review/dismissed.json" 2>/dev/null || echo 0)" -eq 0 ]'
+expect "E2: missing context consumes sentinel" '[ ! -f "$OUT/sidecar-pending" ]'
+
 # ---- case C: sentinel present but cwd repo != reviewed repo → no write, sentinel consumed
 REPO="$WORK/c"; setup_repo "$REPO"        # the repo we actually run in
 OTHER="$WORK/c-other"; setup_repo "$OTHER"  # the repo review-context points at

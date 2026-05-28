@@ -64,5 +64,32 @@ rm -rf "$WORK/.claude" "$WORK/.gitignore"
 expect "spaced install path is quoted in stored command" \
   '[ "$(jq -r ".hooks.Stop[-1].hooks[0].command" "$SETTINGS")" = "bash \"$SPACED/sidecar-write.sh\"" ]'
 
+# ---- malformed existing settings: fail loud, exit non-zero, do NOT clobber.
+rm -rf "$WORK/.claude" "$WORK/.gitignore"
+mkdir -p .claude
+printf 'not json' > "$SETTINGS"
+RC=0
+( cd "$WORK" && bash "$SCRIPT" >/dev/null 2>&1 ) || RC=$?
+expect "malformed settings → non-zero exit" '[ "$RC" -ne 0 ]'
+expect "malformed settings left untouched (not clobbered)" \
+  '[ "$(cat "$SETTINGS")" = "not json" ]'
+
+# ---- install path containing shell metacharacters must NOT inject on hook fire.
+# A path holding $(...) would, without escaping, be command-substituted when the
+# Stop-hook runner later evaluates the stored command string.
+rm -rf "$WORK/.claude" "$WORK/.gitignore"
+META_DIR="$WORK/d\$(touch $WORK/pwned)/scripts"
+mkdir -p "$META_DIR"
+cp "$REPO_ROOT/skills/woo-review/scripts/register-hook.sh" \
+   "$REPO_ROOT/skills/woo-review/scripts/sidecar-write.sh" "$META_DIR/"
+( cd "$WORK" && bash "$META_DIR/register-hook.sh" >/dev/null )
+STORED="$(jq -r '.hooks.Stop[-1].hooks[0].command' "$SETTINGS")"
+expect "metachar path is backslash-escaped in stored command" \
+  '[ "$STORED" = "bash \"$WORK/d\\\$(touch $WORK/pwned)/scripts/sidecar-write.sh\"" ]'
+# End-to-end: evaluating the stored command must not trigger the substitution.
+( eval "$STORED" >/dev/null 2>&1 || true )
+expect "evaluating stored command does not execute injected substitution" \
+  '[ ! -f "$WORK/pwned" ]'
+
 echo "----"; echo "Results: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1
