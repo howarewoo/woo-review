@@ -4,6 +4,8 @@ You are reviewing a pull request using Claude Code's `Task` tool. Every tool cal
 
 The shared header above lists prefetched artifacts, the findings schema, the blocking criteria, and the do-NOT-flag list. **Apply them verbatim.** Per-angle prompt bodies live at `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md`.
 
+**Host identifier:** default `claude-code` (substitute into the credits line `<host>` placeholder per `_header.md`). If this orchestrator was selected from a different Anthropic host (e.g. Cursor, Zed), use that host's canonical slug instead.
+
 ---
 
 ## IMPORTANT: MODE-BASED EXECUTION
