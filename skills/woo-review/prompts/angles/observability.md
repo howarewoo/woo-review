@@ -53,5 +53,5 @@ value following the same naming style):
 - `observability/missing-log`
 - `observability/missing-metric`
 - `observability/no-trace-id`
-- `observability/low-cardinality-tag-explosion`
+- `observability/high-cardinality-tags`
 - `observability/unknown` — fall-back when no enum value fits

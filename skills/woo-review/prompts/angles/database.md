@@ -62,7 +62,7 @@ value following the same naming style):
 
 - `database/missing-index`
 - `database/n-plus-one`
-- `database/sql-injection-risk`
+- `database/unsafe-query`
 - `database/missing-migration`
 - `database/transaction-missing`
 - `database/unknown` — fall-back when no enum value fits

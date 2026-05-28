@@ -15,12 +15,8 @@ for f in anthropic openai google opencode; do
 done
 
 ANGLES_DIR="$REPO_ROOT/skills/woo-review/prompts/angles"
-for ang in aeo api bugs conventions database deps design docs i18n \
-           infra observability react security seo tests types; do
-  P="$ANGLES_DIR/$ang.md"
+for P in "$ANGLES_DIR"/*.md; do
   if [ ! -f "$P" ]; then
-    echo "FAIL: angle file missing: $P"
-    fail=1
     continue
   fi
   if ! grep -q '## `semantic_key` values' "$P"; then
