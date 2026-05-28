@@ -47,6 +47,16 @@ on:
         type: string
         required: false
         default: 'auto'
+      enable_history_dedup:
+        description: 'Drop findings duplicating prior PR threads or sidecar dismissals.'
+        type: string
+        required: false
+        default: 'true'
+      enable_sidecar_write:
+        description: 'Commit newly-resolved threads to .woo-review/dismissed.json via bot.'
+        type: string
+        required: false
+        default: 'false'
     secrets:
       anthropic_token:
         required: false
@@ -152,8 +162,9 @@ jobs:
     if: always() && needs.detect.result == 'success' && needs.review.result != 'cancelled'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
+      issues: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Download base artifacts
@@ -204,6 +215,22 @@ jobs:
           max_turns: ${{ inputs.max_turns }}
           skip_labels: ${{ inputs.skip_labels }}
           prompt_override: ${{ inputs.prompt_override }}
+
+      - name: Merge action inputs into config.json
+        shell: bash
+        run: |
+          CFG=/tmp/pr-review/config.json
+          [ -f "$CFG" ] || echo '{}' > "$CFG"
+          ENABLE="${{ inputs.enable_sidecar_write == 'true' && 'true' || 'false' }}"
+          jq --argjson v "$ENABLE" \
+             '.enable_sidecar_write = $v' "$CFG" > "$CFG.tmp" && mv "$CFG.tmp" "$CFG"
+
+      - name: Dedup against history
+        if: ${{ inputs.enable_history_dedup == 'true' }}
+        shell: bash
+        run: bash skills/woo-review/scripts/dedup-against-history.sh
+        env:
+          OUTDIR: /tmp/pr-review
 
       - name: Validate (defender pass + intersect + post)
         uses: howarewoo/woo-review@v0.1.0
