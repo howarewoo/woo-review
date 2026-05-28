@@ -8,6 +8,22 @@ The companion GitHub Action is an **extension** of the skill: same prompts, same
 
 ---
 
+## Features
+
+- **Parallel angle swarm** — one sub-agent per detected angle (`bugs`, `security`, `seo`, `aeo`, `design`, `react`, `database`) runs concurrently against the same diff.
+- **Skeptical Validator** — adversarial prosecutor + defender pass, deterministic intersect, severity downgrade only (never upgrade).
+- **History dedup** — stable `(file, code_anchor, semantic_key)` identity survives line shifts; drops findings already posted on the PR or dismissed in the sidecar.
+- **LLM tiebreak** — Sonnet-class adjudicator handles ambiguous near-matches (`|Δline| ≤ 10`, one of anchor/sem_key matches), batched and cost-capped, fails open.
+- **Rule recommendations** — recurring `semantic_key` clusters become a "Suggested rules for AGENT.md / CLAUDE.md" section in the review body, so coding agents learn from repeated misses.
+- **Sidecar persistence** — newly-resolved threads land in `.woo-review/dismissed.json` via a bot commit, so dedup signal survives across PRs (opt-in via `enable_sidecar_write`).
+- **Host-agnostic** — the skill runs under Claude Code, Cursor, Gemini CLI, opencode, or any host that can spawn sub-agents.
+- **Multi-provider** — Anthropic, OpenAI, Google, and OpenRouter all work with the same prompts; provider auto-detected from the secret you supply.
+- **CI extension** — same prompts, same angles, same validator, packaged as a reusable GitHub Actions workflow.
+- **Batched native review** — one `pulls/<N>/reviews` POST per run; no comment spam, no PR title/description/label mutations.
+- **Knowledge aggregation** — calls established tools (`impeccable`, `react-doctor`, `openai/security-best-practices`, `supabase-postgres-best-practices`, `coreyhaines31` SEO/AEO rubrics) instead of re-implementing them.
+
+---
+
 ## Install (skill)
 
 ```bash
