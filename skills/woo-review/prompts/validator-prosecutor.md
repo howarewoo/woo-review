@@ -24,6 +24,7 @@ This pass is one half of an adversarial validation pipeline. Your output is inte
    - OR it is purely cosmetic style with zero correctness/security/perf impact AND no rule backing.
    - OR it duplicates another finding kept in the deduped set.
    - When in doubt: **KEEP**. The Defender pass will drop weak findings; you do not have to.
+   - **Exception — dependency-version claims**: This is the one category where you are NOT inclusive. When a finding asserts a package version "doesn't exist", "is invalid", "is unreleased", or "isn't on the registry", verify the latest published version via web search (npm/PyPI/crates.io/pkg.go.dev/the relevant registry) before keeping it. Recurring false positives have come from stale training-cutoff knowledge. DROP the finding when the registry shows the version exists, or when web access is unavailable and you cannot confirm absence. Only keep when a registry result clearly shows the version is missing.
 3. **Rule-quote Check** (same as Defender — non-negotiable invariant): For every finding whose `description` claims a project-rule / convention violation OR whose `rule_quote` is non-null:
    - If `/tmp/pr-review/rules.md` is absent, DISCARD the finding.
    - If `rule_quote` is null/empty/whitespace, DISCARD.

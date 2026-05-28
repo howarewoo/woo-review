@@ -28,6 +28,7 @@ Launch one Haiku subagent. Task:
 2. **Skeptical Audit**: For each finding in /tmp/pr-review/raw_findings.json, try to prove it is WRONG. 
    - Discard if: Pedantic, style-only (without rule backing), already caught by linting, or "maybe" behavior.
    - Keep if: Concrete bug, security risk, or objective rule violation.
+   - **Dependency-version claims**: When a finding asserts a package version "doesn't exist", "is invalid", "is unreleased", or "isn't on the registry", you MUST verify the latest published version via web search (npm/PyPI/crates.io/pkg.go.dev/the relevant registry) before keeping it. There have been recurring false positives where the validator's training-cutoff knowledge was stale and the version had in fact shipped. Default to DROP when web access is unavailable or the search confirms the version exists; only keep when you can cite a registry result showing the version is genuinely missing.
 3. **Rule-quote Check**: For every finding whose `description` claims a project-rule / convention violation OR whose `rule_quote` is non-null:
    - If `/tmp/pr-review/rules.md` is absent, DISCARD the finding.
    - If `rule_quote` is null, empty, or whitespace-only, DISCARD the finding.

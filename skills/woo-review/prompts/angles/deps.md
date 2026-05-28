@@ -35,6 +35,7 @@ tier: fast
 - Speculative CVE claims without a reference (defer to `security` angle and let it cite the OWASP rubric).
 - Pre-existing dependency issues not touched by this PR.
 - Style / ordering of `package.json` keys.
+- **Claims that a specific version "doesn't exist" / "isn't published"** — do NOT assert this from training-cutoff memory. New versions ship constantly and the validator has repeatedly produced false positives on this. Only raise a "version doesn't exist" finding when you can verify it via a web search of the relevant registry (npm/PyPI/crates.io/pkg.go.dev/etc.) within this run; otherwise leave it alone.
 
 **Severity rubric:**
 
