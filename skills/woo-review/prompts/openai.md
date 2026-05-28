@@ -4,6 +4,8 @@ Codex Action does not expose a subagent primitive. Run the review as a single ag
 
 The shared header above lists prefetched artifacts, findings schema, blocking criteria, and the do-NOT-flag list. **Apply them verbatim.** Per-angle prompt bodies live at `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md` in the bundled action repo.
 
+**Host identifier:** default `codex` (substitute into the credits line `<host>` placeholder per `_header.md`). If invoked from a different OpenAI host, use that host's canonical slug instead.
+
 ## Model selection
 
 Codex Action runs one model for the full job (set via `inputs.model`, default `gpt-5`). Per-call routing is not possible, so the `tier:` frontmatter on each angle prompt is **informational only** under this provider. Default to the `standard`-tier model (`gpt-5`) — it covers every angle safely. GPT-5 reasoning is a `reasoning_effort` parameter (`minimal`/`low`/`medium`/`high`), not a slug suffix; there is no `gpt-5-pro`. Pass it via `inputs.openai_effort` on this action (wired through to codex-action's `effort` input, available since codex-action v1.1). To trade some quality on `bugs`/`security`/`design`/`react`/`tests`/`api`/`infra` for cost on `seo`/`aeo`/`observability`/`types`/`i18n`/`docs`/`deps` runs, split the workflow into two jobs (e.g. one `gpt-5-mini` job for the fast-tier rubric angles, then one `gpt-5` job with `openai_effort: high` for the remaining angles + validator). The newer `gpt-5.5` family is resolved by Codex CLI (the action installs the latest stable `@openai/codex` by default), so `inputs.model: gpt-5.5` should work today — verify with a preview run before relying on it.

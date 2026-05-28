@@ -151,7 +151,7 @@ cat <<'BODY_EOF' > /tmp/pr_review_body.txt
 
 ---
 ${STATUS_LINE}
-*Audited by woo-review · Provider: <provider> · Model: <model>*
+*Audited by woo-review · Host: <host> · Provider: <provider> · Model: <model>*
 
 <!-- woo-review:sha=${HEAD_SHA} -->
 BODY_EOF
@@ -293,6 +293,14 @@ The `pr_review_body.txt` should contain:
 - Credits line (*Audited by woo-review...*).
 - A hidden HTML comment `<!-- woo-review:sha=${HEAD_SHA} -->` as the last line. This is the watermark the next run's prefetch step reads to enable incremental review.
 - **DO NOT** update the main PR description or title.
+
+### Credits line substitution
+
+The orchestrator agent fills `<host>`, `<provider>`, and `<model>` literally into the credits line before posting — they are not shell variables. Resolve them as follows:
+
+- **`<host>`** — canonical slug for the host agent invoking this skill. Use one of: `claude-code`, `cursor`, `gemini-cli`, `codex`, `opencode`, or another stable identifier the host advertises. When a sub-agent profile or persona is identifiable (e.g. opencode running the `mimo-v2.5` agent), append it in parentheses: `opencode (mimo-v2.5)`. Detection hints: `CLAUDECODE=1` → `claude-code`; `OPENCODE*` env vars → `opencode`; `GEMINI_*` → `gemini-cli`; `CODEX_HOME` → `codex`; `CURSOR*` → `cursor`. Each orchestrator prompt also declares a default host identifier near the top — prefer that if the orchestrator runtime can introspect its own identity more precisely. Fall back to `unknown` if nothing matches; never leave the placeholder literal in the posted body.
+- **`<provider>`** — `anthropic` / `openai` / `google` / `openrouter`, matching the orchestrator prompt loaded.
+- **`<model>`** — the resolved validator model slug (e.g. `claude-opus-4-7`, `gpt-5.1-codex`, `gemini-3-pro`, `openrouter/deepseek/deepseek-v4-pro`).
 
 ## Findings Schema (`/tmp/pr-review/findings.json`)
 

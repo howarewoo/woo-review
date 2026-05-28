@@ -4,6 +4,8 @@ You are reviewing a pull request using Gemini CLI's built-in `@generalist` subag
 
 The shared header above lists prefetched artifacts, the findings schema, the blocking criteria, and the do-NOT-flag list. **Apply them verbatim.** Per-angle prompt bodies live at `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md`.
 
+**Host identifier:** default `gemini-cli` (substitute into the credits line `<host>` placeholder per `_header.md`). If invoked from another Google host, use that host's canonical slug instead.
+
 ## Model selection
 
 Gemini CLI runs one model per session by default (set via `inputs.model`, default `gemini-3-5-flash`). The `@generalist` subagent inherits this model from the main session, so the `tier:` frontmatter on each angle prompt is **effectively informational** unless you override per-subagent in `~/.gemini/settings.json`:

@@ -4,6 +4,8 @@ OpenCode runs an agentic shell. Use its subagent system if available (`@subagent
 
 The shared header above lists prefetched artifacts, findings schema, blocking criteria, and the do-NOT-flag list. **Apply them verbatim.** Per-angle prompt bodies live at `$WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md` in the bundled action repo.
 
+**Host identifier:** default `opencode` (substitute into the credits line `<host>` placeholder per `_header.md`). When an OpenCode agent persona / subagent profile is identifiable (e.g. `mimo-v2.5`), append it in parentheses: `opencode (mimo-v2.5)`. Read the active profile from the OpenCode runtime when available; otherwise use the bare `opencode` slug.
+
 ## Model selection
 
 OpenCode + OpenRouter can route per-subagent if the OpenCode runtime supports it. When spawning each angle / validator subagent, read its `tier:` frontmatter and resolve via the **Model Tiers** table in `_header.md`:
