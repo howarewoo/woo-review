@@ -39,8 +39,6 @@ fi
 
 PR_NUMBER="${PR_NUMBER:-}"
 HEAD_SHA="${HEAD_SHA:-}"
-LAST_SHA=""
-[ -f "$OUTDIR/last_sha.txt" ] && LAST_SHA="$(tr -d '[:space:]' < "$OUTDIR/last_sha.txt")"
 
 if [ -z "$PR_NUMBER" ] || [ -z "$HEAD_SHA" ]; then
   echo "sidecar-write: PR_NUMBER or HEAD_SHA missing; skipping"
@@ -98,8 +96,8 @@ MERGED=$(jq -n --argjson a "$(cat "$SIDECAR")" --argjson b "$NEW_ENTRIES" '
 ')
 printf '%s' "$MERGED" > "$SIDECAR"
 
-git config user.name  "${WOO_REVIEW_BOT_NAME:-woo-review[bot]}"
-git config user.email "${WOO_REVIEW_BOT_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
+git config --local user.name  "${WOO_REVIEW_BOT_NAME:-woo-review[bot]}"
+git config --local user.email "${WOO_REVIEW_BOT_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
 
 if ! git add "$SIDECAR"; then
   echo "sidecar-write: git add failed; skipping"; exit 0; fi
