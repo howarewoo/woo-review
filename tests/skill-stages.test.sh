@@ -32,8 +32,9 @@ elif ! printf '%s\n' "$STAGE6" | grep -q 'scripts/sidecar-write.sh'; then
 fi
 
 # 3. Stage 6 must reference the enable_sidecar_write gate so readers know
-#    the script may exit early in default config.
-if ! printf '%s\n' "$STAGE6" | grep -q 'enable_sidecar_write'; then
+#    the script may exit early in default config. Skip when the section is
+#    absent — assertion 2 already reports that case, no need to double up.
+if [ -n "$STAGE6" ] && ! printf '%s\n' "$STAGE6" | grep -q 'enable_sidecar_write'; then
   echo "FAIL: Stage 6 body does not mention enable_sidecar_write gate"
   fail=1
 fi
