@@ -26,25 +26,17 @@
 set -euo pipefail
 
 OUTDIR="${OUTDIR:-/tmp/pr-review}"
-# `if … == null` (not `//`) because jq's alternative operator treats `false`
-# as "missing" — `false // true` evaluates to `true`, which would silently
-# enable writes for users who explicitly set the flag to `false`.
-ENABLE=$(jq -r 'if .enable_sidecar_write == null then true else .enable_sidecar_write end' \
-           "$OUTDIR/config.json" 2>/dev/null || echo false)
-if [ "$ENABLE" != "true" ]; then
-  echo "sidecar-write: disabled (.woo-review.yml: enable_sidecar_write != true)"
-  exit 0
-fi
-if [ "${WOO_REVIEW_DISABLE_GIT_WRITE:-0}" = "1" ]; then
-  echo "sidecar-write: disabled via WOO_REVIEW_DISABLE_GIT_WRITE"
-  exit 0
-fi
 
 # Non-CI guard (local post-session Stop hook). The hook fires at the end of
 # EVERY host session; act only when a local /woo-review run just posted a
 # review (sentinel) AND we are standing in the repo that was reviewed. CI runs
 # (GITHUB_ACTIONS=true) skip this entirely — the isolated job runs the script
 # unconditionally with env state, preserving #33 parity.
+#
+# IMPORTANT: this block must run BEFORE any ENABLE/DISABLE gate so that the
+# sentinel is consumed (trap registered) even when a later gate exits 0.
+# Without this ordering the sentinel leaks and every future session prints
+# "disabled" even when no review is pending.
 if [ "${GITHUB_ACTIONS:-}" != "true" ]; then
   SENTINEL="$OUTDIR/sidecar-pending"
   if [ ! -f "$SENTINEL" ]; then
@@ -59,6 +51,20 @@ if [ "${GITHUB_ACTIONS:-}" != "true" ]; then
     echo "sidecar-write: cwd repo ($TOPLEVEL) != reviewed repo ($CTX_PATH); skipping"
     exit 0
   fi
+fi
+
+# `if … == null` (not `//`) because jq's alternative operator treats `false`
+# as "missing" — `false // true` evaluates to `true`, which would silently
+# enable writes for users who explicitly set the flag to `false`.
+ENABLE=$(jq -r 'if .enable_sidecar_write == null then true else .enable_sidecar_write end' \
+           "$OUTDIR/config.json" 2>/dev/null || echo false)
+if [ "$ENABLE" != "true" ]; then
+  echo "sidecar-write: disabled (.woo-review.yml: enable_sidecar_write != true)"
+  exit 0
+fi
+if [ "${WOO_REVIEW_DISABLE_GIT_WRITE:-0}" = "1" ]; then
+  echo "sidecar-write: disabled via WOO_REVIEW_DISABLE_GIT_WRITE"
+  exit 0
 fi
 
 # State resolution: env wins (CI), else fall back to the handoff file the

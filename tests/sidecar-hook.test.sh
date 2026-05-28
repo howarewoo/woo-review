@@ -74,5 +74,19 @@ expect "C: repo mismatch → no write" \
   '[ "$(jq length "$REPO/.woo-review/dismissed.json" 2>/dev/null || echo 0)" -eq 0 ]'
 expect "C: mismatch consumes sentinel" '[ ! -f "$OUT/sidecar-pending" ]'
 
+# ---- case D: non-CI, sentinel present but enable_sidecar_write=false → no write, sentinel STILL consumed
+REPO="$WORK/d"; setup_repo "$REPO"
+OUT="$WORK/out-d"; mkdir -p "$OUT"
+echo '{"enable_sidecar_write": false}' > "$OUT/config.json"
+jq -n --arg p "$(git -C "$REPO" rev-parse --show-toplevel)" \
+  '{pr_number:42, head_sha:"abc", repo:"owner/repo", repo_path:$p}' > "$OUT/review-context.json"
+touch "$OUT/sidecar-pending"
+( cd "$REPO"
+  unset PR_NUMBER HEAD_SHA GITHUB_REPOSITORY GITHUB_ACTIONS 2>/dev/null || true
+  OUTDIR="$OUT" WOO_REVIEW_FAKE_RESOLVED_THREADS_JSON="$FAKE" bash "$SCRIPT" )
+expect "D: disabled → no write" \
+  '[ "$(jq length "$REPO/.woo-review/dismissed.json" 2>/dev/null || echo 0)" -eq 0 ]'
+expect "D: disabled still consumes sentinel (no leak)" '[ ! -f "$OUT/sidecar-pending" ]'
+
 echo "----"; echo "Results: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1
