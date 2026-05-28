@@ -9,7 +9,8 @@ trap 'rm -rf "$WORK"' EXIT
 
 export WOO_REVIEW_FAKE_LLM_RULES_MD='- Use `useEffect` cleanup for subscriptions.'
 
-# 3 findings share react/missing-cleanup → recommendation should fire.
+# 2 current findings + 1 sidecar entry share react/missing-cleanup
+# (cluster ≥2 across union → recommendation should fire).
 cat > "$OUTDIR/findings.json" <<'JSON'
 [ {"angle":"react","file":"a.tsx","line":1,"semantic_key":"react/missing-cleanup","code_anchor":"a000a000a000","title":"x","severity":"MED","blocking":false,"fix_type":"prose","fix":"f","description":"d","suggestion":null,"rule_quote":null},
   {"angle":"react","file":"b.tsx","line":1,"semantic_key":"react/missing-cleanup","code_anchor":"b000b000b000","title":"y","severity":"MED","blocking":false,"fix_type":"prose","fix":"f","description":"d","suggestion":null,"rule_quote":null} ]

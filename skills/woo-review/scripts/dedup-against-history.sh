@@ -162,6 +162,9 @@ if [ "$(printf '%s' "$CLUSTER_JSON" | jq length)" -eq 0 ]; then
   exit 0
 fi
 
+# Clear any stale recs from a prior run before either branch can write.
+rm -f "$RULES_OUT"
+
 if [ -n "${WOO_REVIEW_FAKE_LLM_RULES_MD:-}" ]; then
   printf '%s' "$WOO_REVIEW_FAKE_LLM_RULES_MD" > "$RULES_OUT"
 else
