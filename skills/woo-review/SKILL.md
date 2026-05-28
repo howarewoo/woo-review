@@ -367,18 +367,18 @@ Produces `/tmp/pr-review/findings.json` — the final validated set — and `/tm
 
 Only when invoked with a PR# (i.e. Stage 5 posted a review). Skipped for local-only invocations — nothing was posted, so nothing to record.
 
-Persists threads resolved during this run to `.woo-review/dismissed.json` so the next run dedups against them. Gated on `enable_sidecar_write` in `.woo-review.yml` (default `false` — the script logs and exits 0 when the flag is off).
+Persists threads resolved during this run to `.woo-review/dismissed.json` so the next run dedups against them. Gated on `enable_sidecar_write` in `.woo-review.yml` (default `true` — the script logs and exits 0 when the flag is set to `false`).
 
 ```bash
 PR_NUMBER="$PR_NUMBER" \
 HEAD_SHA="$HEAD_SHA" \
 GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
-bash "$WOO_REVIEW_ACTION_PATH/scripts/sidecar-write.sh"
+bash "$WOO_REVIEW_ACTION_PATH/scripts/sidecar-write.sh" || true
 ```
 
-`PR_NUMBER`, `HEAD_SHA`, and `GITHUB_REPOSITORY` were already exported by Stage 1 prefetch; the line above re-declares them only to make the contract explicit for host agents constructing the call from scratch.
+`PR_NUMBER`, `HEAD_SHA`, and `GITHUB_REPOSITORY` are already in scope from Stage 1 prefetch when Stage 6 runs in the same shell session; the line above forwards them explicitly so the contract stays clear for host agents that construct the call from a fresh subprocess.
 
-The script handles all error cases internally (missing perms, no resolved threads, malformed sidecar, push race) and exits 0 on every path. It MUST NOT fail the workflow — Stage 6 is best-effort persistence, not a gate.
+The script handles the recognised failure modes internally (missing perms on the GraphQL query, no resolved threads, malformed sidecar, push race) and exits 0 on each of those paths. Run Stage 6 with `|| true` (as `_header.md` step 4 already does) so any unguarded failure — e.g. `git config` rejected by a hardened sandbox — still cannot fail the overall workflow. Stage 6 is best-effort persistence, not a gate.
 
 ## Architecture
 
