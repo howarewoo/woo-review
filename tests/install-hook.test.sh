@@ -36,5 +36,22 @@ bash "$SCRIPT"
 expect "pre-existing hook preserved" \
   '[ "$(jq -r "[.hooks.Stop[]?.hooks[]?.command] | index(\"echo keep-me\") != null" "$SETTINGS")" = "true" ]'
 
+# ---- stale-path entry is replaced, not duplicated (reinstall scenario)
+rm -rf "$WORK/.claude" "$WORK/.gitignore"
+mkdir -p .claude
+cat > "$SETTINGS" <<JSON
+{"hooks":{"Stop":[
+  {"hooks":[{"type":"command","command":"bash /old/install/path/sidecar-write.sh"}]},
+  {"hooks":[{"type":"command","command":"echo keep-me"}]}
+]}}
+JSON
+bash "$SCRIPT"
+expect "stale sidecar-write entry removed" \
+  '[ "$(jq -r "[.hooks.Stop[]?.hooks[]?.command] | map(select(test(\"/sidecar-write.sh$\"))) | length" "$SETTINGS")" -eq 1 ]'
+expect "current command is the live path" \
+  '[ "$(jq -r --arg c "$HOOK_CMD" "[.hooks.Stop[]?.hooks[]?.command] | index(\$c) != null" "$SETTINGS")" = "true" ]'
+expect "unrelated keep-me hook survived dedup" \
+  '[ "$(jq -r "[.hooks.Stop[]?.hooks[]?.command] | index(\"echo keep-me\") != null" "$SETTINGS")" = "true" ]'
+
 echo "----"; echo "Results: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1

@@ -17,16 +17,19 @@ SETTINGS=".claude/settings.local.json"
 mkdir -p .claude
 [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
 
-if jq -e --arg c "$HOOK_CMD" '
-      [.hooks.Stop[]?.hooks[]?.command] | index($c) != null' "$SETTINGS" >/dev/null 2>&1; then
-  echo "✅ woo-review Stop hook already registered in $SETTINGS"
-else
-  TMP="$(mktemp)"
-  jq --arg c "$HOOK_CMD" '
-    .hooks.Stop = ((.hooks.Stop // []) + [{hooks: [{type: "command", command: $c}]}])
-  ' "$SETTINGS" > "$TMP" && mv "$TMP" "$SETTINGS"
-  echo "✅ Registered post-session sidecar Stop hook in $SETTINGS"
-fi
+# Dedup by sidecar-write.sh suffix so a reinstall to a new path removes the stale
+# old entry rather than appending a second broken one alongside the new one.
+TMP="$(mktemp)"
+jq --arg c "$HOOK_CMD" '
+  .hooks.Stop = (
+    [ (.hooks.Stop // [])[]
+      | .hooks = [ .hooks[]? | select((.command // "") | test("/sidecar-write\\.sh$") | not) ]
+      | select((.hooks | length) > 0)
+    ]
+    + [ { hooks: [ { type: "command", command: $c } ] } ]
+  )
+' "$SETTINGS" > "$TMP" && mv "$TMP" "$SETTINGS"
+echo "✅ Registered post-session sidecar Stop hook in $SETTINGS"
 
 # Per-developer settings must not be committed.
 if [ -f .gitignore ]; then
