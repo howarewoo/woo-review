@@ -296,11 +296,20 @@ The `pr_review_body.txt` should contain:
 
 ### Credits line substitution
 
-The orchestrator agent fills `<host>`, `<provider>`, and `<model>` literally into the credits line before posting — they are not shell variables. Resolve them as follows:
+The orchestrator agent fills `<host>`, `<provider>`, and `<model>` literally into the credits line before posting — they are not shell variables. **Each value reports what actually executed the review, not what the orchestrator prompt file defaults to.** A user running the `opencode.md` orchestrator under an OpenCode agent (e.g. `mimo-v2.5`) that routes to Anthropic + Sonnet must post `Provider: anthropic · Model: claude-sonnet-4-6`, not the `openrouter` / `deepseek` defaults declared in `opencode.md`.
 
-- **`<host>`** — canonical slug for the host agent invoking this skill. Use one of: `claude-code`, `cursor`, `gemini-cli`, `codex`, `opencode`, or another stable identifier the host advertises. When a sub-agent profile or persona is identifiable (e.g. opencode running the `mimo-v2.5` agent), append it in parentheses: `opencode (mimo-v2.5)`. Detection hints: `CLAUDECODE=1` → `claude-code`; `OPENCODE*` env vars → `opencode`; `GEMINI_*` → `gemini-cli`; `CODEX_HOME` → `codex`; `CURSOR*` → `cursor`. Each orchestrator prompt also declares a default host identifier near the top — prefer that if the orchestrator runtime can introspect its own identity more precisely. Fall back to `unknown` if nothing matches; never leave the placeholder literal in the posted body.
-- **`<provider>`** — `anthropic` / `openai` / `google` / `openrouter`, matching the orchestrator prompt loaded.
-- **`<model>`** — the resolved validator model slug (e.g. `claude-opus-4-7`, `gpt-5.1-codex`, `gemini-3-pro`, `openrouter/deepseek/deepseek-v4-pro`).
+Resolution order (highest precedence first):
+
+1. **Env-var override.** If `WOO_REVIEW_HOST`, `WOO_REVIEW_PROVIDER`, or `WOO_REVIEW_MODEL` is set, use that value verbatim. Hosts that already know their identity should set these before invoking the skill — it is the only fully reliable channel.
+2. **Runtime introspection.** Ask the host runtime for the active model / provider of the **validator step** (the deep-tier pass; if adversarial mode is on, the defender). Examples: OpenCode exposes the active model via its config/SDK; Claude Code's `Task` call uses the explicit `model:` arg you just passed; Gemini CLI prints the active model in `gemini --version`.
+3. **Orchestrator default.** Fall back to the validator slug declared in this orchestrator prompt (the `deep` row of the Model Tiers table).
+4. **`unknown`.** If none of the above resolves, write `unknown` rather than leaving the placeholder literal.
+
+Field-by-field:
+
+- **`<host>`** — canonical slug for the host agent invoking this skill. Use one of: `claude-code`, `cursor`, `gemini-cli`, `codex`, `opencode`, or another stable identifier the host advertises. When a sub-agent profile or persona is identifiable (e.g. opencode running the `mimo-v2.5` agent), append it in parentheses: `opencode (mimo-v2.5)`. Detection hints: `CLAUDECODE=1` → `claude-code`; `OPENCODE*` env vars → `opencode`; `GEMINI_*` → `gemini-cli`; `CODEX_HOME` → `codex`; `CURSOR*` → `cursor`. Each orchestrator prompt declares a default host identifier near the top — prefer that only after the precedence above is exhausted.
+- **`<provider>`** — `anthropic` / `openai` / `google` / `openrouter` / `bedrock` / `vertex` / etc. Whatever the host is *actually* routing through. `opencode.md` is loaded for any OpenRouter-style orchestration shape, but OpenCode can route to any provider — do NOT assume `openrouter` just because this file was selected.
+- **`<model>`** — the actual validator model slug as the host sees it (e.g. `claude-opus-4-7`, `claude-sonnet-4-6`, `gpt-5.1-codex`, `gemini-3-pro`, `openrouter/deepseek/deepseek-v4-pro`). When `inputs.model` or `models.<tier>` in `config.json` overrode the default, report the override value, not the table default.
 
 ## Findings Schema (`/tmp/pr-review/findings.json`)
 

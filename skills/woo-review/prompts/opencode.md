@@ -6,6 +6,8 @@ The shared header above lists prefetched artifacts, findings schema, blocking cr
 
 **Host identifier:** default `opencode` (substitute into the credits line `<host>` placeholder per `_header.md`). When an OpenCode agent persona / subagent profile is identifiable (e.g. `mimo-v2.5`), append it in parentheses: `opencode (mimo-v2.5)`. Read the active profile from the OpenCode runtime when available; otherwise use the bare `opencode` slug.
 
+**Provider / model accuracy.** This file's model table assumes OpenRouter + DeepSeek, but OpenCode can route to *any* provider/model (Anthropic, OpenAI, Google, local, …). For the credits line, follow `_header.md`'s precedence (`WOO_REVIEW_PROVIDER` / `WOO_REVIEW_MODEL` env vars > OpenCode runtime introspection > this file's default > `unknown`) and report what the validator step actually ran on. Do NOT hard-code `openrouter` / `deepseek-v4-pro` into the credits line unless that is genuinely the active route — if mimo-v2.5 is wired to `anthropic` + `claude-sonnet-4-6`, those are the correct values.
+
 ## Model selection
 
 OpenCode + OpenRouter can route per-subagent if the OpenCode runtime supports it. When spawning each angle / validator subagent, read its `tier:` frontmatter and resolve via the **Model Tiers** table in `_header.md`:
