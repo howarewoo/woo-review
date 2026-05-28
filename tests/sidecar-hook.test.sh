@@ -42,5 +42,37 @@ OUT="$WORK/out-a"; mkdir -p "$OUT"; write_ctx "$OUT" "$(git -C "$REPO" rev-parse
 expect "A: state read from review-context.json → entry written" \
   '[ "$(jq length "$REPO/.woo-review/dismissed.json" 2>/dev/null || echo 0)" -ge 1 ]'
 
+# ---- case B: local mode, sentinel present + repo matches → write, sentinel consumed
+REPO="$WORK/b"; setup_repo "$REPO"
+OUT="$WORK/out-b"; mkdir -p "$OUT"; write_ctx "$OUT" "$(git -C "$REPO" rev-parse --show-toplevel)"
+touch "$OUT/sidecar-pending"
+( cd "$REPO"
+  unset PR_NUMBER HEAD_SHA GITHUB_REPOSITORY GITHUB_ACTIONS 2>/dev/null || true
+  OUTDIR="$OUT" WOO_REVIEW_FAKE_RESOLVED_THREADS_JSON="$FAKE" bash "$SCRIPT" )
+expect "B: sentinel+match → entry written" \
+  '[ "$(jq length "$REPO/.woo-review/dismissed.json" 2>/dev/null || echo 0)" -ge 1 ]'
+expect "B: sentinel consumed" '[ ! -f "$OUT/sidecar-pending" ]'
+
+# ---- case B2: local mode, NO sentinel → no-op
+REPO="$WORK/b2"; setup_repo "$REPO"
+OUT="$WORK/out-b2"; mkdir -p "$OUT"; write_ctx "$OUT" "$(git -C "$REPO" rev-parse --show-toplevel)"
+( cd "$REPO"
+  unset PR_NUMBER HEAD_SHA GITHUB_REPOSITORY GITHUB_ACTIONS 2>/dev/null || true
+  OUTDIR="$OUT" WOO_REVIEW_FAKE_RESOLVED_THREADS_JSON="$FAKE" bash "$SCRIPT" )
+expect "B2: no sentinel → no write" \
+  '[ "$(jq length "$REPO/.woo-review/dismissed.json" 2>/dev/null || echo 0)" -eq 0 ]'
+
+# ---- case C: sentinel present but cwd repo != reviewed repo → no write, sentinel consumed
+REPO="$WORK/c"; setup_repo "$REPO"        # the repo we actually run in
+OTHER="$WORK/c-other"; setup_repo "$OTHER"  # the repo review-context points at
+OUT="$WORK/out-c"; mkdir -p "$OUT"; write_ctx "$OUT" "$(git -C "$OTHER" rev-parse --show-toplevel)"
+touch "$OUT/sidecar-pending"
+( cd "$REPO"
+  unset PR_NUMBER HEAD_SHA GITHUB_REPOSITORY GITHUB_ACTIONS 2>/dev/null || true
+  OUTDIR="$OUT" WOO_REVIEW_FAKE_RESOLVED_THREADS_JSON="$FAKE" bash "$SCRIPT" )
+expect "C: repo mismatch → no write" \
+  '[ "$(jq length "$REPO/.woo-review/dismissed.json" 2>/dev/null || echo 0)" -eq 0 ]'
+expect "C: mismatch consumes sentinel" '[ ! -f "$OUT/sidecar-pending" ]'
+
 echo "----"; echo "Results: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1

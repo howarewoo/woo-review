@@ -40,6 +40,27 @@ if [ "${WOO_REVIEW_DISABLE_GIT_WRITE:-0}" = "1" ]; then
   exit 0
 fi
 
+# Non-CI guard (local post-session Stop hook). The hook fires at the end of
+# EVERY host session; act only when a local /woo-review run just posted a
+# review (sentinel) AND we are standing in the repo that was reviewed. CI runs
+# (GITHUB_ACTIONS=true) skip this entirely — the isolated job runs the script
+# unconditionally with env state, preserving #33 parity.
+if [ "${GITHUB_ACTIONS:-}" != "true" ]; then
+  SENTINEL="$OUTDIR/sidecar-pending"
+  if [ ! -f "$SENTINEL" ]; then
+    echo "sidecar-write: no pending local review; skipping"
+    exit 0
+  fi
+  # Consume the sentinel on every exit path from here on.
+  trap 'rm -f "$SENTINEL"' EXIT
+  CTX_PATH=$(jq -r '.repo_path // empty' "$OUTDIR/review-context.json" 2>/dev/null || echo)
+  TOPLEVEL=$(git rev-parse --show-toplevel 2>/dev/null || echo)
+  if [ -n "$CTX_PATH" ] && [ "$CTX_PATH" != "$TOPLEVEL" ]; then
+    echo "sidecar-write: cwd repo ($TOPLEVEL) != reviewed repo ($CTX_PATH); skipping"
+    exit 0
+  fi
+fi
+
 # State resolution: env wins (CI), else fall back to the handoff file the
 # skill session left in $OUTDIR (local post-session Stop hook path).
 CTX="$OUTDIR/review-context.json"

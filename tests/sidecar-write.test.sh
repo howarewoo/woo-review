@@ -17,6 +17,9 @@ export OUTDIR="$WORK/pr-review"
 echo '{"enable_sidecar_write": true}' > "$OUTDIR/config.json"
 export PR_NUMBER=42
 export HEAD_SHA=abc
+# These cases exercise the CI/env path (PR_NUMBER/HEAD_SHA via env). Mark them
+# CI so the local-only sentinel guard (tests/sidecar-hook.test.sh covers it) is bypassed.
+export GITHUB_ACTIONS=true
 git init -q --bare "$WORK/remote.git"
 git remote add origin "$WORK/remote.git"
 
