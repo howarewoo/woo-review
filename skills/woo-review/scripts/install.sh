@@ -35,8 +35,10 @@ fi
 IMPECCABLE_VERSION="${IMPECCABLE_VERSION:-latest}"
 REACT_DOCTOR_VERSION="${REACT_DOCTOR_VERSION:-latest}"
 echo "📦 Pre-fetching Node tools (impeccable@${IMPECCABLE_VERSION}, react-doctor@${REACT_DOCTOR_VERSION})..."
-npx -y "impeccable@${IMPECCABLE_VERSION}" --version > /dev/null
-npx -y "react-doctor@${REACT_DOCTOR_VERSION}" --version > /dev/null
+npx -y "impeccable@${IMPECCABLE_VERSION}" --version > /dev/null \
+  || echo "⚠️  Could not pre-fetch impeccable@${IMPECCABLE_VERSION} (will fetch on first use)."
+npx -y "react-doctor@${REACT_DOCTOR_VERSION}" --version > /dev/null \
+  || echo "⚠️  Could not pre-fetch react-doctor@${REACT_DOCTOR_VERSION} (will fetch on first use)."
 
 # 5. Check for dependent AI skills
 echo "🤖 Checking for dependent AI skills..."
