@@ -62,6 +62,50 @@ When the incremental diff has no new commits (i.e. `LAST_SHA == HEAD_SHA`, e.g. 
 
 Marker semantics are state-light: the marker IS the state. There is no DB or workflow artifact retention beyond what GitHub already keeps in review history.
 
+## History Dedup & Rule Recommendations
+
+After the adversarial validator produces `findings.json`, a second dedup pass runs against cross-PR history to suppress findings that have already been surfaced. Implementation lives in `scripts/dedup-against-history.sh`; the JSON schema and field contracts live in `prompts/_header.md`.
+
+### What it does
+
+**Pass 1 — Deterministic drop.** Each finding is identified by a `(file, code_anchor, semantic_key)` triple. Any finding whose triple matches an entry in `prior-findings.json` (open or resolved threads from prior reviews) or `sidecar-findings.json` (committed dismissals from past PRs) is dropped without an LLM call.
+
+**Pass 2 — LLM tiebreak.** Ambiguous pairs — same file, `|Δline| ≤ 10`, exactly one of `(code_anchor, semantic_key)` matches — are sent to a fast-tier model call that decides whether the two findings refer to the same underlying issue. Deterministic drops always win over the LLM tiebreak.
+
+**Output:** `findings.deduped.json` (the deduplicated set consumed by Stage 5) and `dedup-metrics.json` (counters: `det_drops`, `llm_drops`, `pair_count`, etc.).
+
+### New required finding fields
+
+Workers MUST emit two additional fields on every finding (defined in the angle prompt's `semantic_key` enum and the `_header.md` schema):
+
+- **`semantic_key`** — kebab-case `<angle>/<issue-type>` string, ≤ 40 chars (e.g. `bugs/null-deref`, `security/sql-injection`). Sourced from the angle prompt's enum; workers must not free-form it.
+- **`code_anchor`** — first 12 hex chars of `shasum -a 1` of the ±3 source lines around the finding. Computed by the worker before writing `findings.<angle>.json`. Together with `semantic_key`, these form the dedup identity that persists across PR runs.
+
+### Sidecar lifecycle
+
+`prefetch.sh` loads `.woo-review/dismissed.json` from the consumer repo into `/tmp/pr-review/sidecar-findings.json` at the start of each run. This file accumulates resolved threads that authors have explicitly dismissed — it prevents re-surfacing issues the team has consciously accepted.
+
+After the review POST, `sidecar-write.sh` reads any threads that became resolved during this run, appends them to the sidecar, and commits the updated `.woo-review/dismissed.json` back to the consumer repo via the bot token. This write is gated on the `enable_sidecar_write` config flag (default `false` — off during the dogfood window).
+
+### Event-floor rule change
+
+The posting stage now uses `prior-findings.json` differently from earlier releases:
+
+- **Open** prior threads remain a gate signal — a non-empty set of open priors keeps the new review at minimum `REQUEST_CHANGES`.
+- **Resolved** prior threads are dedup signal only. They no longer force `REQUEST_CHANGES`; a clean incremental pass can `APPROVE` even when resolved threads exist in history.
+
+### Rule recommendations for AGENT.md / CLAUDE.md
+
+When `findings.deduped.json ∪ sidecar-findings.json` contains ≥ `WOO_REVIEW_RULES_THRESHOLD` entries sharing the same `semantic_key`, one short Sonnet (`fast`-tier) call drafts a markdown bullet list of project rules that would have prevented the cluster. The output is appended to the PR review body under the heading `### Suggested rules for AGENT.md / CLAUDE.md`. Authors can copy the bullets directly into their repo's `AGENTS.md` or `CLAUDE.md`; on the next PR the `conventions` angle will enforce them.
+
+### Config flags
+
+| Flag | Type | Default | Effect |
+|---|---|---|---|
+| `enable_history_dedup` | `.woo-review.yml` boolean | `true` | Gates `dedup-against-history.sh`. When `false`, Stage 5 consumes `findings.json` directly (legacy path). |
+| `enable_sidecar_write` | `.woo-review.yml` boolean | `false` | Gates `sidecar-write.sh`. Keep `false` until the dogfood window completes. |
+| `WOO_REVIEW_RULES_THRESHOLD` | env integer | `2` | Cluster size at which rule recommendations are drafted. Set to `0` to disable rule recs entirely. |
+
 ## Knowledge Aggregation
 
 woo-review wires in domain skills as tool calls inside specific angles, not as a runtime dependency:
@@ -153,7 +197,26 @@ export PR_NUMBER=<n>   # optional; prefetch.sh derives it from the branch when u
 bash "$WOO_REVIEW_ACTION_PATH/scripts/prefetch.sh"
 ```
 
-When prefetch resolves a PR number AND finds an open PR, it produces the full artifact tree (`diff.txt`, `meta.json`, `last_sha.txt`, `prior-findings.json`, `rules.md` when applicable). When no PR resolves, it emits `skip=true` — the host then falls back to local-diff mode below.
+When prefetch resolves a PR number AND finds an open PR, it produces the full artifact tree (`diff.txt`, `meta.json`, `last_sha.txt`, `prior-findings.json`, `rules.md` when applicable, `sidecar-findings.json` when `.woo-review/dismissed.json` exists in the consumer repo). When no PR resolves, it emits `skip=true` — the host then falls back to local-diff mode below.
+
+**Artifact reference.** All paths are under `$OUTDIR` (default `/tmp/pr-review/`):
+
+| Artifact | Written by | Consumed by | Notes |
+|---|---|---|---|
+| `diff.txt` | `prefetch.sh` | angle workers, `merge-findings.sh` | Full or incremental diff |
+| `meta.json` | `prefetch.sh` | all stages | PR metadata (title, files, SHA, author) |
+| `last_sha.txt` | `prefetch.sh` | Stage 5 watermark | Present only when a prior watermark was found |
+| `prior-findings.json` | `prefetch.sh` | dedup, event-floor gate | Unresolved + resolved prior review threads |
+| `rules.md` | `prefetch.sh` | `conventions` angle, validator | Concatenated project rule files; triggers `conventions` angle when present |
+| `angles.txt` | `detect-angles.sh` | Stage 3 orchestrator | One angle name per line |
+| `findings.<angle>.json` | angle workers | `merge-findings.sh` | Raw per-angle output |
+| `raw_findings.json` | `merge-findings.sh` | validator passes | Merged, chunk-collapsed findings |
+| `findings.json` | `intersect-findings.sh` | Stage 5, dedup script | Final validated set |
+| `sidecar-findings.json` | `prefetch.sh` (from `.woo-review/dismissed.json`) | dedup Pass 1 | Committed dismissals from past PRs; see *History Dedup* above |
+| `findings.deduped.json` | `dedup-against-history.sh` | Stage 5 posting | `findings.json` with history-matched entries removed |
+| `dedup-metrics.json` | `dedup-against-history.sh` | observability | `det_drops`, `llm_drops`, `pair_count` counters |
+| `rule-recommendations.md` | `dedup-against-history.sh` (Sonnet call) | Stage 5 posting | Markdown bullets appended to review body when emitted; see *Rule Recommendations* above |
+| `validator-metrics.json` | `intersect-findings.sh` | observability | `prosecutor_count`, `defender_count`, `kept_count`, `disagreement_count` |
 
 **If no PR number resolved (local mode):**
 
