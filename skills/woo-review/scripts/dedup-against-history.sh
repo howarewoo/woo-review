@@ -57,7 +57,9 @@ for f in findings:
            for p in file_priors):
         dropped += 1
         continue
-    ambiguous = False
+    # Look for an ambiguous (XOR) match: same file, |Δline|≤10, and exactly one
+    # of (code_anchor, semantic_key) matches. The finding is added to `pairs`
+    # for LLM tiebreak — but ALWAYS kept here. Pass 2 decides whether to drop.
     for p in file_priors:
         try: dline = abs(int(f.get("line") or 0) - int(p.get("line") or 0))
         except Exception: dline = 999
@@ -65,7 +67,6 @@ for f in findings:
         anc_match = (f.get("code_anchor") and f.get("code_anchor") == p.get("code_anchor"))
         sem_match = (f.get("semantic_key") and f.get("semantic_key") == p.get("semantic_key"))
         if anc_match ^ sem_match:
-            ambiguous = True
             pairs.append({
                 "id": f"{f.get('file')}:{f.get('line')}",
                 "new": {kk: f.get(kk) for kk in ("file","line","title","description","semantic_key","code_anchor")},
