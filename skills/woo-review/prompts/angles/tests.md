@@ -30,3 +30,14 @@ tier: standard
 - `LOW` + `blocking: false` — additional case worth adding, isolation improvement.
 
 **Output.** Write findings as a JSON array to `/tmp/pr-review/findings.tests.json` using the schema in `_header.md`. Each finding gets `"angle": "tests"` and MUST populate `title` (bold headline ≤60 chars), `description` (the gap or flaw only — no fix), `fix` (recommended test or change in prose), and `fix_type`. Set `fix_type: "suggestion"` only when a ≤10-line single-file drop-in replacement at `line` is safe — and populate `suggestion` accordingly. Otherwise set `fix_type: "prose"` with `suggestion: null`. See `_header.md` for the full rule.
+
+## `semantic_key` values
+
+Use one of these values when emitting findings (or coin a new kebab-case
+value following the same naming style):
+
+- `tests/missing-test`
+- `tests/brittle-assertion`
+- `tests/ignored-skipped-test`
+- `tests/missing-edge-case`
+- `tests/unknown` — fall-back when no enum value fits

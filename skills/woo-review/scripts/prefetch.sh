@@ -515,24 +515,44 @@ else
       }
     }' 2>/dev/null || echo '{}')
 fi
-# Each entry is informational only — used by the posting stage for (a) dedupe
-# against new findings at the same (file, line, title-stem) and (b) a single
-# event floor: ANY non-empty prior-findings list keeps the PR at minimum
-# REQUEST_CHANGES (per the conservative "no APPROVE while threads open" rule).
-# No per-entry `blocking` flag — the floor is bool over the whole array.
+# Each entry is informational only — used by the dedup + posting stage.
+# Includes resolved threads (status: "resolved") so dedup can suppress
+# re-raising them. Posting event-floor counts ONLY open threads.
 printf '%s' "$THREADS_JSON" | jq '
   [ .data.repository.pullRequest.reviewThreads.nodes[]?
-    | select(.isResolved == false)
     | select(.path != null)
     | { file: .path,
         line: (.line // 1),
         title: (((.comments.nodes[0].body // "") | split("\n")[0] | gsub("^\\*\\*|\\*\\*$"; ""))[0:60]),
-        author: (.comments.nodes[0].author.login // "")
+        author: (.comments.nodes[0].author.login // ""),
+        status: (if .isResolved then "resolved" else "open" end)
       }
   ]' > "$OUTDIR/prior-findings.json" 2>/dev/null || echo '[]' > "$OUTDIR/prior-findings.json"
 
 PRIOR_COUNT=$(jq 'length' "$OUTDIR/prior-findings.json" 2>/dev/null || echo 0)
-echo "Prior unresolved threads: $PRIOR_COUNT"
+echo "Prior review threads (open + resolved): $PRIOR_COUNT"
+
+# Repository dismissal sidecar — committed source of cross-PR dedup signal.
+# Missing file or malformed JSON falls back to []. Hard cap on size to keep
+# the pipeline responsive.
+SIDECAR_SRC="${GITHUB_WORKSPACE:-$(pwd)}/.woo-review/dismissed.json"
+SIDECAR_OUT="$OUTDIR/sidecar-findings.json"
+if [ -f "$SIDECAR_SRC" ]; then
+  SIZE=$(wc -c < "$SIDECAR_SRC")
+  if [ "$SIZE" -gt 5242880 ]; then
+    echo "Sidecar too large ($SIZE bytes); ignoring. Rotate .woo-review/dismissed.json."
+    echo '[]' > "$SIDECAR_OUT"
+  elif jq empty "$SIDECAR_SRC" 2>/dev/null; then
+    cp "$SIDECAR_SRC" "$SIDECAR_OUT"
+  else
+    echo "Sidecar parse error; ignoring. Not overwriting (may be user edit)."
+    echo '[]' > "$SIDECAR_OUT"
+  fi
+else
+  echo '[]' > "$SIDECAR_OUT"
+fi
+SIDECAR_COUNT=$(jq length "$SIDECAR_OUT" 2>/dev/null || echo 0)
+echo "Sidecar dismissed entries: $SIDECAR_COUNT"
 
 # Issue #14: split oversized diffs into chunks. Runs LAST so it sees the final
 # post-ignore diff (diff.filtered.txt when present). Under the threshold this

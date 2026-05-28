@@ -57,10 +57,11 @@ The 2026 architecture depends on a strict 3-stage pipeline (Detect -> Fan-out ->
 - **The Auditors (Sonnet 4.6)** should remain focused and optimistic. Do not bloat their scopes.
 - **Output**: Always use the native GitHub PR Review API (batched) for final feedback. Avoid posting individual comments outside of a review.
 
-### 7. Plan Documents
-All implementation plans — whether stored under `~/.claude/plans/`, attached to issues/PRs, or shared with the user for review — **MUST be authored as self-contained HTML**, not Markdown. This applies to every plan an agent writes while contributing to `woo-review`.
+### 7. Spec Documents
+**Design specs** — the brainstorming output that captures architecture, components, data flow, error handling, and testing for a feature — **MUST be authored as self-contained HTML**, not Markdown. This applies to every spec an agent writes while contributing to `woo-review`.
 - **Format**: a single `.html` file with inline CSS. No external dependencies (no CDNs, no remote fonts). The file must render correctly when opened directly from the filesystem.
-- **Structure**: include the standard plan sections (Context, Approach, Files modified, Verification) as `<h2>` headings. Use semantic HTML (`<section>`, `<table>`, `<pre><code>`) so the document is navigable.
-- **Visualization**: use inline SVG for pipeline / architecture / flow diagrams whenever the plan describes a multi-stage process, decision branch, or before-vs-after state. Tables are required for file-by-file change summaries.
-- **Filename**: the plan file extension MUST be `.html`. If the harness pre-creates a `.md` plan path, write the HTML alongside it and reference the HTML as the canonical artifact.
-- **Code-level docs are unaffected**: `SKILL.md`, `skills/woo-review/prompts/*.md`, `AGENTS.md`, `CLAUDE.md`, and other in-repo contracts remain Markdown. This mandate is scoped to *plan* documents only.
+- **Structure**: standard spec sections (Context, Goals, Architecture, Components, Data flow, Error handling, Testing, Rollout) as `<h2>` headings. Use semantic HTML (`<section>`, `<table>`, `<pre><code>`) so the document is navigable.
+- **Visualization**: use inline SVG for pipeline / architecture / flow diagrams whenever the spec describes a multi-stage process, decision branch, or before-vs-after state. Tables are required for file-by-file change summaries.
+- **Filename**: `.html`. Save under `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.html`.
+- **Plans are Markdown.** Implementation plans (the writing-plans output that decomposes a spec into TDD tasks) stay as `.md` under `docs/superpowers/plans/` — the executor needs checkbox tracking. Specs are HTML for visual review; plans are MD for executor consumption.
+- **Code-level docs are unaffected**: `SKILL.md`, `skills/woo-review/prompts/*.md`, `AGENTS.md`, `CLAUDE.md`, and other in-repo contracts remain Markdown. This mandate is scoped to *spec* documents only.

@@ -27,3 +27,14 @@ This angle runs **only** when `rules.md` exists. If it is absent, exit immediate
 **Rule-quote requirement.** Every finding MUST populate `rule_quote` with a verbatim substring of `rules.md` (the actual rule text — not a paraphrase, not the `## SOURCE:` header). The validator will discard any finding whose `rule_quote` is absent or not literally present in `rules.md`.
 
 **Output.** Write findings as a JSON array to `/tmp/pr-review/findings.conventions.json` using the schema in `_header.md`. Each finding gets `"angle": "conventions"` and MUST populate `title` (bold headline ≤60 chars), `description` (which rule is violated and where in the diff — no fix), `fix` (recommended change in prose), `rule_quote` (verbatim from `rules.md`), and `fix_type`. Set `fix_type: "suggestion"` only when a ≤10-line single-file drop-in replacement at `line` is safe — and populate `suggestion` accordingly. Otherwise set `fix_type: "prose"` with `suggestion: null`. See `_header.md` for the full rule.
+
+## `semantic_key` values
+
+Use one of these values when emitting findings (or coin a new kebab-case
+value following the same naming style):
+
+- `conventions/naming-violation`
+- `conventions/file-layout-violation`
+- `conventions/deprecated-pattern`
+- `conventions/missing-prefix`
+- `conventions/unknown` — fall-back when no enum value fits

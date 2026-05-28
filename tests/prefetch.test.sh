@@ -525,6 +525,54 @@ fi
 echo "ok   case17 non-GHA bypasses bot-comment gate"
 export GITHUB_ACTIONS="true"  # restore for subsequent cases (none currently)
 
+# --- Case 18: resolved threads included with `status` field ---
+# prior-findings.json must contain both open + resolved threads; the resolved
+# one must have status == "resolved".
+reset
+unset GITHUB_ACTIONS || true
+export WOO_REVIEW_FAKE_PRIOR_THREADS_JSON='{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
+  {"isResolved":false,"path":"src/app.ts","line":10,"comments":{"nodes":[{"body":"**Open finding**","author":{"login":"bot"}}]}},
+  {"isResolved":true,"path":"src/lib.ts","line":5,"comments":{"nodes":[{"body":"**Resolved finding**","author":{"login":"bot"}}]}}
+]}}}}}'
+bash "$SCRIPT" > "$WORK/stdout" 2>&1 || { echo "FAIL case18 (script error):"; sed 's/^/    /' "$WORK/stdout"; fail=1; }
+PRIOR_LEN=$(jq 'length' "$PREFETCH/prior-findings.json" 2>/dev/null || echo 0)
+assert_eq "case18 prior-findings length" "2" "$PRIOR_LEN"
+# The second node (index 1) is the resolved one (src/lib.ts).
+STATUS_1=$(jq -r '.[1].status' "$PREFETCH/prior-findings.json" 2>/dev/null || echo "missing")
+assert_eq "case18 resolved status field" "resolved" "$STATUS_1"
+STATUS_0=$(jq -r '.[0].status' "$PREFETCH/prior-findings.json" 2>/dev/null || echo "missing")
+assert_eq "case18 open status field" "open" "$STATUS_0"
+echo "ok   case18 resolved threads included with status field"
+
+# --- Case 19: sidecar loaded when .woo-review/dismissed.json exists ---
+reset
+unset GITHUB_ACTIONS || true
+SIDECAR_DIR="$GITHUB_WORKSPACE/.woo-review"
+mkdir -p "$SIDECAR_DIR"
+cat > "$SIDECAR_DIR/dismissed.json" <<'JSON'
+[{"file":"src/app.ts","line":1,"title":"Old finding","angle":"security"}]
+JSON
+bash "$SCRIPT" > "$WORK/stdout" 2>&1 || { echo "FAIL case19 (script error):"; sed 's/^/    /' "$WORK/stdout"; fail=1; }
+SIDECAR_LEN=$(jq 'length' "$PREFETCH/sidecar-findings.json" 2>/dev/null || echo "missing")
+assert_eq "case19 sidecar-findings.json length" "1" "$SIDECAR_LEN"
+SIDECAR_TITLE=$(jq -r '.[0].title' "$PREFETCH/sidecar-findings.json" 2>/dev/null || echo "missing")
+assert_eq "case19 sidecar entry title" "Old finding" "$SIDECAR_TITLE"
+rm -f "$SIDECAR_DIR/dismissed.json"
+echo "ok   case19 sidecar loaded when .woo-review/dismissed.json exists"
+
+# --- Case 20: sidecar missing -> empty array ---
+reset
+unset GITHUB_ACTIONS || true
+# Ensure the sidecar file does NOT exist (rm -f is defensive).
+rm -f "$GITHUB_WORKSPACE/.woo-review/dismissed.json"
+bash "$SCRIPT" > "$WORK/stdout" 2>&1 || { echo "FAIL case20 (script error):"; sed 's/^/    /' "$WORK/stdout"; fail=1; }
+if [ ! -f "$PREFETCH/sidecar-findings.json" ]; then
+  echo "FAIL case20: sidecar-findings.json not created when sidecar missing"; fail=1
+fi
+SIDECAR_CONTENT=$(cat "$PREFETCH/sidecar-findings.json" 2>/dev/null || echo "MISSING")
+assert_eq "case20 sidecar-findings.json is []" "[]" "$SIDECAR_CONTENT"
+echo "ok   case20 sidecar missing -> sidecar-findings.json is []"
+
 if [ "$fail" -ne 0 ]; then
   echo "prefetch tests FAILED"
   exit 1

@@ -102,6 +102,14 @@ inputs:
     description: 'Review scope: `auto` re-uses the prior review SHA marker (if any) and diffs only new commits; `off` forces a full re-review of the PR diff. A PR-comment trigger containing `--full` overrides to off.'
     required: false
     default: 'auto'
+  enable_history_dedup:
+    description: 'Drop findings duplicating prior PR threads or sidecar dismissals.'
+    required: false
+    default: 'true'
+  enable_sidecar_write:
+    description: 'Commit newly-resolved threads to .woo-review/dismissed.json via bot.'
+    required: false
+    default: 'false'
 
 runs:
   using: 'composite'

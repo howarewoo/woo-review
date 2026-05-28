@@ -64,6 +64,14 @@ Each angle agent:
 2. Executes the angle prompt against its assigned diff. For `react` run `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline`.
 3. Writes findings to `/tmp/pr-review/findings.<angle>.json` (or `findings.<angle>.<chunk_id>.json` in chunked mode) — JSON array per the schema in `_header.md`.
 
+- Every finding MUST include `semantic_key` (kebab-case
+  `<angle>/<issue-type>`, ≤40 chars, from the angle prompt's enum) and
+  `code_anchor` (first 12 hex chars of `shasum -a 1` over the trimmed
+  concatenation of the 3 lines before + the finding line + the 3 lines
+  after, taken from the post-PR diff). These two fields form the stable
+  identity used by `dedup-against-history.sh`.
+  Drop a finding rather than fabricate either field.
+
 Stay within each angle's scope; do not let one angle flag issues that belong to another. `merge-findings.sh` (Phase 3) handles within-angle dedup across chunks.
 
 **Retry-once recovery.** Subagents can die mid-run (stream errors, turn-limit interrupts) and leave no findings file. After Phase 2 reports done, before invoking `merge-findings.sh`, scan `/tmp/pr-review/angles.txt` (× `chunks.txt` when chunked) and check that each expected `findings.<angle>.json` (or `findings.<angle>.<chunk_id>.json`) exists and parses as a JSON array via `jq -e 'type == "array"'`. For any path that fails the check, re-spawn THAT `(angle, chunk)` subagent ONCE with the same brief and model slug. Cap is one retry total per pair — if the retry also fails, leave the file as-is and proceed to Phase 3. The merge step's recovery handles malformed JSON; missing files just mean the angle produced no findings.

@@ -29,6 +29,11 @@ Every artifact you write under `$OUTDIR/findings.*.json` (default `/tmp/pr-revie
 - **Per-repo config** (always present, defaults to `{}`): `/tmp/pr-review/config.json` — parsed from `.woo-review.yml` at the consumer repo root.
 - **Incremental base SHA** (always present, may be empty): `/tmp/pr-review/last_sha.txt` — non-empty means `diff.txt` covers only the new commits since the last woo-review pass. Treat findings as scoped to those commits.
 - **Prior unresolved review threads** (always present, may be `[]`): `/tmp/pr-review/prior-findings.json` — array of `{file, line, title, author}` for any unresolved thread on the PR. Consumed by the posting stage for event-floor + dedupe; angle workers MUST ignore this file. No per-entry `blocking` flag — any non-empty list floors the review event to `REQUEST_CHANGES` (conservative "do not APPROVE while threads open" rule).
+- **Repository dismissal sidecar** (always present, may be `[]`):
+  `/tmp/pr-review/sidecar-findings.json` — array of
+  `{file, line, title, semantic_key, code_anchor, resolved_at, pr_number}`
+  loaded from `.woo-review/dismissed.json` at the consumer repo root.
+  Consumed by `dedup-against-history.sh`; angle workers MUST ignore this file.
 - **Chunk manifest** (optional, present only when the diff exceeds `chunking.max_loc`): `/tmp/pr-review/chunks.txt` (one chunk id per line) and `/tmp/pr-review/chunks.json` (manifest: `[{id, files, loc, diff_path, boundary}]`). Each chunk also has its own diff at `/tmp/pr-review/diff.chunk-<id>.txt`. When a worker is dispatched with a chunk id (env `CHUNK` non-empty), it MUST read the chunk-specific diff and write findings to `/tmp/pr-review/findings.<angle>.<chunk>.json`. In the GitHub Action this swap happens transparently — `diff.txt` is replaced with the chunk's diff before the worker runs, and the worker's output is renamed afterwards. When `chunks.txt` is absent, chunking did not activate and the diff fits a single worker (no overhead).
 
 If `/tmp/pr-review/rules.md` exists, treat it as an additional rubric on top of the per-angle scope. Each section is prefixed by a `## SOURCE: <path>` header identifying its origin file (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.windsurfrules`, or `GEMINI.md`). Any finding that claims a project-rule violation MUST populate `rule_quote` with a verbatim substring of `rules.md` (the rule text itself, not the source header). The validator discards rule-cited findings whose `rule_quote` is missing or not literally present in `rules.md`.
@@ -151,52 +156,50 @@ ${STATUS_LINE}
 <!-- woo-review:sha=${HEAD_SHA} -->
 BODY_EOF
 
+# Append rule recommendations if any.
+if [ -s /tmp/pr-review/rule-recommendations.md ]; then
+  printf '\n\n### Suggested rules for AGENT.md / CLAUDE.md\n\n' >> /tmp/pr_review_body.txt
+  cat /tmp/pr-review/rule-recommendations.md >> /tmp/pr_review_body.txt
+fi
+
+# Before running this posting step, the orchestrator MUST first run
+# `bash $WOO_REVIEW_ACTION_PATH/scripts/dedup-against-history.sh` so
+# `/tmp/pr-review/findings.deduped.json` is populated. Legacy hosts that skip
+# this step will silently fall back to `findings.json` (with no history dedup
+# applied).
+
 # 2. Prepare the review payload with inline comments
 python3 -c '
 import json, sys, os, re
 
+# Read the deduped findings (output of dedup-against-history.sh).
+# Falls back to raw findings.json if the deduped file is missing — keeps
+# legacy hosts working when they have not yet wired the dedup step.
+deduped_path = "/tmp/pr-review/findings.deduped.json"
+fallback_path = "/tmp/pr-review/findings.json"
 try:
-    findings = json.load(open("/tmp/pr-review/findings.json"))
-except:
-    findings = []
+    findings = json.load(open(deduped_path))
+except Exception:
+    try:
+        findings = json.load(open(fallback_path))
+    except Exception:
+        findings = []
 
-# Prior unresolved threads (from prefetch, GraphQL reviewThreads). Used for:
-#   - event floor: ANY non-empty priors → minimum REQUEST_CHANGES (conservative
-#     "do not APPROVE while review threads are open" rule),
-#   - dedupe: drop a new finding whose (file, line, title-stem) matches a prior
-#     unresolved thread (already on the PR — re-posting would duplicate).
-# Priors have no per-entry blocking flag; the floor is a bool over the array.
+# Prior threads include resolved entries (status field). Event floor counts
+# OPEN threads only — resolved ones are dedup-signal only, not gate-signal.
 try:
     priors = json.load(open("/tmp/pr-review/prior-findings.json"))
-except:
+except Exception:
     priors = []
-
-def title_stem(s):
-    return re.sub(r"[^a-z0-9]+", "", (s or "").lower())[:40]
-
-prior_keys = {(p.get("file"), int(p.get("line") or 0), title_stem(p.get("title")))
-              for p in priors}
-
-filtered = []
-for f in findings:
-    key = (f.get("file"), int(f.get("line") or 0), title_stem(f.get("title")))
-    if key in prior_keys:
-        continue  # already on the PR as an unresolved thread
-    filtered.append(f)
-findings = filtered
 
 commit_id = os.environ.get("HEAD_SHA")
 pr_body = open("/tmp/pr_review_body.txt").read()
 
-# Event determination. Floor: any unresolved prior thread (regardless of its
-# original severity) forces REQUEST_CHANGES — conservative gate so a stale open
-# thread is never auto-resolved by a clean incremental pass. The full schema
-# rationale is in SKILL.md under "Incremental Mode".
 has_new_blocking = any(f.get("blocking", False) for f in findings)
-has_priors = len(priors) > 0
-if not findings and not has_priors:
+has_open_priors  = any(p.get("status") == "open" for p in priors)
+if not findings and not has_open_priors:
     event = "APPROVE"
-elif has_new_blocking or has_priors:
+elif has_new_blocking or has_open_priors:
     event = "REQUEST_CHANGES"
 else:
     event = "COMMENT"
@@ -278,6 +281,9 @@ print(json.dumps(payload))
 # 3. Submit the review
 gh api "repos/${GITHUB_REPOSITORY}/pulls/$PR_NUMBER/reviews" \
   --method POST --input /tmp/pr_review_payload.json
+
+# 4. After review POST: record newly-resolved threads to sidecar.
+bash "$WOO_REVIEW_ACTION_PATH/scripts/sidecar-write.sh" || true
 ```
 
 ### Review Body Rules
@@ -305,12 +311,34 @@ Every runner MUST write a final `findings.json` (for debugging + potential post-
     "fix_type": "suggestion",
     "fix": "Recommended change in prose (e.g. 'use `<=` instead of `<` so the boundary value is included').",
     "suggestion": "verbatim replacement code for the GitHub ```suggestion``` block — REQUIRED when fix_type == \"suggestion\", MUST be null when fix_type == \"prose\"",
-    "rule_quote": "exact quoted rule text if rule-based, else null"
+    "rule_quote": "exact quoted rule text if rule-based, else null",
+    "semantic_key": "bugs/off-by-one-loop-bound",
+    "code_anchor": "a1b2c3d4e5f6"
   }
 ]
 ```
 
 `angle` is one of `bugs | security | conventions | seo | aeo | design | react | database | tests | api | infra | observability | types | i18n | docs | deps`.
+
+### `semantic_key` and `code_anchor` (dedup keys)
+
+Every finding MUST set both fields. They form the stable identity used by
+`dedup-against-history.sh` to skip findings already on the PR or in the
+committed sidecar.
+
+- `semantic_key` — kebab-case `<angle>/<issue-type>`, max 40 chars. Each
+  angle prompt enumerates the valid values for that angle. Unknown issues
+  use `<angle>/unknown` (still dedupable by file + anchor alone).
+- `code_anchor` — SHA-1 (first 12 hex chars) of the trimmed concatenation
+  of the 3 lines before, the finding line, and the 3 lines after, from
+  the post-PR diff content. Compute via:
+
+  ```bash
+  printf '%s' "$context" | shasum -a 1 | cut -c1-12
+  ```
+
+  The anchor survives line shifts in unrelated code; the surrounding
+  context must change for the anchor to change.
 
 `line` MUST be the post-patch absolute file line — i.e. a line that exists on the RIGHT side of the diff (a `+` added line or a ` ` context line within a hunk for `file`). Lines that fall in a deletion-only region, or outside any hunk for the file, will be rejected by the GitHub API. Validate every line via `scripts/resolve-diff-line.sh` before writing the finding (see *Output Discipline* above); drop the finding when the helper returns `null`.
 

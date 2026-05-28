@@ -54,3 +54,15 @@ If a rule file does not exist, fall back to the general rubric below.
 - `LOW` + `blocking: false` — hardening suggestion (search_path, statement_timeout, prepared statements, query plan hint).
 
 **Output.** Write findings as a JSON array to `/tmp/pr-review/findings.database.json` using the schema in `_header.md`. Each finding gets `"angle": "database"` and MUST populate `title` (bold headline ≤60 chars), `description` (issue + concrete impact path, no fix), `fix` (mitigation in prose), and `fix_type`. Set `fix_type: "suggestion"` only when a ≤10-line single-file drop-in SQL or code replacement at `line` is safe — and populate `suggestion` accordingly. Otherwise set `fix_type: "prose"` with `suggestion: null`. See `_header.md` for the full rule. When citing a Supabase rule, quote its filename (e.g. `security-rls-basics.md`) in `rule_quote`.
+
+## `semantic_key` values
+
+Use one of these values when emitting findings (or coin a new kebab-case
+value following the same naming style):
+
+- `database/missing-index`
+- `database/n-plus-one`
+- `database/unsafe-query`
+- `database/missing-migration`
+- `database/transaction-missing`
+- `database/unknown` — fall-back when no enum value fits

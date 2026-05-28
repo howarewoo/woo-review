@@ -64,7 +64,20 @@ bash "$WOO_REVIEW_ACTION_PATH/scripts/intersect-findings.sh"
 
 Notes:
 - If `disable_adversarial: true` is set in `/tmp/pr-review/config.json`, OR if `findings.prosecutor.json` is missing/empty (e.g. the Prosecutor pass was not scheduled), the script copies your defender output verbatim to `findings.json` and tags the metrics as `mode: defender-only`. No special handling required from you.
-- After this step, `findings.json` is the single source of truth for Step 4. Do not re-read `findings.defender.json` for posting.
+- After this step, `findings.json` is the intersected set. Step 3b deduplicates it against prior PR/sidecar history; Step 4 reads the post-dedup `findings.json`. Do not re-read `findings.defender.json` for posting.
+
+### Step 3b — Dedup against prior PR/sidecar history
+
+Run the history dedup script. It reads `findings.json` (the intersected set from Step 3), drops any finding that already shipped on this PR as a prior bot thread (`prior-findings.json`) or as a dismissed sidecar entry (`sidecar-findings.json`), and writes the survivors to `findings.deduped.json`. Promote the deduped set to `findings.json` before Step 4 — the post step is the only authoritative consumer.
+
+```bash
+bash "$WOO_REVIEW_ACTION_PATH/scripts/dedup-against-history.sh"
+[ -f /tmp/pr-review/findings.deduped.json ] && mv /tmp/pr-review/findings.deduped.json /tmp/pr-review/findings.json
+```
+
+Notes:
+- Gated on `enable_history_dedup` in `/tmp/pr-review/config.json` (default `true`). When disabled, the script short-circuits: it copies `findings.json` verbatim to `findings.deduped.json` so the `mv` above is still safe.
+- Side outputs: `dedup-metrics.json` (det/llm drop counts) and `rule-recommendations.md` (clusters with `count ≥ WOO_REVIEW_RULES_THRESHOLD`, default 2). Both are non-fatal.
 
 ### Step 4 — Post Native PR Review
 Follow _header.md exactly. Compute BLOCKING_COUNT, NONBLOCKING_COUNT, HIGH_COUNT, MEDIUM_COUNT, LOW_COUNT. Build STATUS_LINE.

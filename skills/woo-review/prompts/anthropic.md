@@ -137,5 +137,12 @@ Do NOT call `gh pr edit`. Do NOT add, remove, or mutate PR labels. The PR title,
 - Execute every step autonomously — no confirmation prompts.
 - Trust prefetched artifacts. Do NOT re-run `gh pr diff`.
 - Parallel angle subagents in Step 2 must complete before Step 3.
+- Every finding MUST include `semantic_key` (kebab-case
+  `<angle>/<issue-type>`, ≤40 chars, from the angle prompt's enum) and
+  `code_anchor` (first 12 hex chars of `shasum -a 1` over the trimmed
+  concatenation of the 3 lines before + the finding line + the 3 lines
+  after, taken from the post-PR diff). These two fields form the stable
+  identity used by `dedup-against-history.sh`.
+  Drop a finding rather than fabricate either field.
 - Each subagent stays within its angle scope; do not duplicate findings across angles (validator dedupes).
 - `findings.json` is the single source of truth for Step 4.

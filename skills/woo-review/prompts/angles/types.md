@@ -46,3 +46,14 @@ tier: fast
 - `LOW` + `blocking: false` — tightening opportunity (narrower utility type, exhaustive switch hint).
 
 **Output.** Write findings as a JSON array to `/tmp/pr-review/findings.types.json` using the schema in `_header.md`. Each finding gets `"angle": "types"` and MUST populate `title` (bold headline ≤60 chars), `description` (the type hole + how it leaks at runtime, no fix), `fix` (tightening recommendation in prose), and `fix_type`. Set `fix_type: "suggestion"` only when a ≤10-line single-file drop-in replacement at `line` is safe — and populate `suggestion` accordingly. Otherwise set `fix_type: "prose"` with `suggestion: null`. See `_header.md` for the full rule.
+
+## `semantic_key` values
+
+Use one of these values when emitting findings (or coin a new kebab-case
+value following the same naming style):
+
+- `types/any-usage`
+- `types/missing-return-type`
+- `types/unsafe-cast`
+- `types/missing-discriminator`
+- `types/unknown` — fall-back when no enum value fits
