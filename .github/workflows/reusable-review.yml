@@ -164,7 +164,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      issues: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Download base artifacts
@@ -221,7 +220,7 @@ jobs:
         run: |
           CFG=/tmp/pr-review/config.json
           [ -f "$CFG" ] || echo '{}' > "$CFG"
-          ENABLE="${{ inputs.enable_sidecar_write == 'true' && 'true' || 'false' }}"
+          ENABLE="${{ inputs.enable_sidecar_write }}"
           jq --argjson v "$ENABLE" \
              '.enable_sidecar_write = $v' "$CFG" > "$CFG.tmp" && mv "$CFG.tmp" "$CFG"
 
