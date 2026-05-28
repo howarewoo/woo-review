@@ -215,6 +215,19 @@ fi
 gh pr view "$PR_NUMBER" --json headRefOid,baseRefName,title,body,files,author > "$OUTDIR/meta.json"
 HEAD_SHA=$(jq -r '.headRefOid' "$OUTDIR/meta.json")
 
+# Handoff state for the post-session sidecar Stop hook (local hosts). The hook
+# runs sidecar-write.sh in a fresh subprocess with NO session env, so persist
+# everything it needs. CI sets these via env and ignores this file.
+REVIEW_REPO_SLUG="${GITHUB_REPOSITORY:-$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo)}"
+REVIEW_REPO_PATH="$(git rev-parse --show-toplevel 2>/dev/null || echo)"
+jq -n \
+  --arg pr   "$PR_NUMBER" \
+  --arg sha  "$HEAD_SHA" \
+  --arg repo "$REVIEW_REPO_SLUG" \
+  --arg path "$REVIEW_REPO_PATH" \
+  '{pr_number: ($pr | tonumber), head_sha: $sha, repo: $repo, repo_path: $path}' \
+  > "$OUTDIR/review-context.json"
+
 # Load per-repo config early (issue #19) so the bot-author / release-rollup
 # skip checks can read user overrides BEFORE we pay for the diff fetch.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
