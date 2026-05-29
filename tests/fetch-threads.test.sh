@@ -46,4 +46,10 @@ ncomments=$(jq '.[0].comments | length' "$OUT")
 body2=$(jq -r '.[0].comments[1].body' "$OUT")
 [ "$body2" = "intentional fallback" ] || { echo "FAIL: comment body not preserved: $body2"; exit 1; }
 
+line=$(jq '.[0].line' "$OUT")
+[ "$line" = "17" ] || { echo "FAIL: line expected 17, got $line"; exit 1; }
+
+hunk_first=$(jq -r '.[0].diffHunk' "$OUT" | head -n1)
+[ "$hunk_first" = "@@ -10 +17 @@" ] || { echo "FAIL: diffHunk first line not preserved: $hunk_first"; exit 1; }
+
 echo "PASS fetch-threads.test.sh"

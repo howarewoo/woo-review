@@ -18,6 +18,7 @@ OUTDIR="${OUTDIR:-/tmp/pr-review}"
 mkdir -p "$OUTDIR"
 PR_NUMBER="${PR_NUMBER:?PR_NUMBER env var required}"
 GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo)}"
+[ -n "$GITHUB_REPOSITORY" ] || { echo "fetch-threads: cannot resolve GITHUB_REPOSITORY (set it or run inside a gh-authenticated repo)" >&2; exit 1; }
 TEST_MODE="${WOO_REVIEW_TEST_MODE:-}"
 
 # Refuse fake-data hooks inside GitHub Actions — same guard as prefetch.sh.
