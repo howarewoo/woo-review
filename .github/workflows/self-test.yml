@@ -65,6 +65,15 @@ jobs:
       - name: Run header-markers tests
         run: bash tests/header-markers.test.sh
 
+      - name: Run fetch-threads tests
+        run: bash tests/fetch-threads.test.sh
+
+      - name: Run resolve-thread tests
+        run: bash tests/resolve-thread.test.sh
+
+      - name: Run memory-append tests
+        run: bash tests/memory-append.test.sh
+
       - name: Smoke-test .woo-review/config.json end-to-end
         # Drops a fixture config into a synthetic workspace, runs the
         # loader directly, then runs detect-angles to confirm `force:` lands
