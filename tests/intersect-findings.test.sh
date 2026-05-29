@@ -215,6 +215,16 @@ JSON
 bash "$SCRIPT" >/dev/null 2>"$CASE/err.txt"
 assert_eq "fuzzy-different-files kept" "$(jq 'length' "$CASE/findings.json")" "0" && echo "ok   fuzzy-different-files-not-matched"
 
+# ---------- Case: fuzzy-window comments match LINE_WINDOW (issue #49) ----------
+# The fuzzy-match comments must say "<= 10" (LINE_WINDOW = 10), not the stale "<= 5".
+if grep -nE '\|line_?a? ?- ?line_?b?\| <= 5|line delta\| <= 5' "$SCRIPT" >/dev/null 2>&1; then
+  echo "FAIL fuzzy-window-comment: stale '<= 5' still present in $SCRIPT"
+  grep -nE '<= 5' "$SCRIPT" || true
+  fail=1
+else
+  echo "ok   fuzzy-window-comment"
+fi
+
 if [ $fail -ne 0 ]; then
   echo "TESTS FAILED"
   exit 1

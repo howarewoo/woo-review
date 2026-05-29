@@ -98,7 +98,7 @@ fi
 prosecutor_count="$(jq 'length' "$PROSECUTOR")"
 
 # Two-pass intersection. Pass 1 is exact (file, line, title_stem). Pass 2
-# attempts fuzzy match for the remainder: same file, |line_a - line_b| <= 5,
+# attempts fuzzy match for the remainder: same file, |line_a - line_b| <= 10,
 # title_stem prefix-20 matches, smallest line delta wins ties. A defender
 # finding can match at most one prosecutor finding; each match is consumed.
 python3 - "$PROSECUTOR" "$DEFENDER" "$FINAL" <<'PY'
@@ -177,7 +177,7 @@ for df in defender:
     kept.append(merged)
 
 # Pass 2: fuzzy fallback. For each unmatched defender finding, find the
-# closest unmatched prosecutor finding by same `file`, |line delta| <= 5,
+# closest unmatched prosecutor finding by same `file`, |line delta| <= 10,
 # prefix-20 title stem equal. Ties broken by smallest line delta.
 unmatched_pros = [pf for pf in prosecutor if id(pf) not in matched_pros_ids]
 
