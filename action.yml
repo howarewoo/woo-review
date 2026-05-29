@@ -174,8 +174,11 @@ runs:
         # Workflow guards already gate this job on enable_sidecar_write=true;
         # write a minimal config.json so the script's defense-in-depth check
         # passes without needing an artifact roundtrip.
-        jq -n --argjson ttl "${SIDECAR_TTL_DAYS:-180}" \
-          '{enable_sidecar_write: true, sidecar_ttl_days: $ttl}' \
+        # --arg (not --argjson) + tonumber? so non-numeric SIDECAR_TTL_DAYS
+        # (e.g. 'disabled') falls back to 180 instead of crashing jq before
+        # sidecar-write.sh's own numeric guard ever runs.
+        jq -n --arg ttl "${SIDECAR_TTL_DAYS:-180}" \
+          '{enable_sidecar_write: true, sidecar_ttl_days: ($ttl | tonumber? // 180)}' \
           > /tmp/pr-review/config.json
         bash "${{ github.action_path }}/skills/woo-review/scripts/sidecar-write.sh"
 

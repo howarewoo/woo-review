@@ -111,7 +111,12 @@ migrate_legacy() {
   jq -c '.[]' "$legacy" | while IFS= read -r LN; do
     [ -z "$LN" ] && continue
     F=$(printf '%s' "$LN" | jq -r '.file // empty')
-    [ -z "$F" ] && continue
+    if [ -z "$F" ]; then
+      # Surface dropped entries so operators can recover them from the
+      # legacy file (kept in git history) before it is `git rm`'d below.
+      echo "sidecar-write: migrate: skipping entry without file field: $LN" >&2
+      continue
+    fi
     SH=$(shard_for "$F")
     printf '%s\n' "$LN" >> ".woo-review/dismissed-$SH.jsonl"
   done

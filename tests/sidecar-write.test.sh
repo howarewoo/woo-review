@@ -76,6 +76,21 @@ bash "$SCRIPT"
 expect "D: malformed marker → placeholder keys" \
   "jq -e '.file==\"d.ts\" and .semantic_key==\"unknown/unknown\"' .woo-review/dismissed-$D_SHARD.jsonl >/dev/null"
 
+# ---- case D2: syntactically valid marker but NON-bot author → marker ignored,
+# placeholder keys recorded. Guards the BOT_NAME_PATTERN gate against regression
+# (a widened pattern would allow a non-bot collaborator to poison the dedup
+# index by crafting a marker for code they plan to push).
+export WOO_REVIEW_FAKE_RESOLVED_THREADS_JSON='{
+  "data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
+    {"isResolved":true,"path":"d2.ts","line":5,"comments":{"nodes":[{"body":"looks legit\n<!-- woo-review:sk=security/auth-bypass ca=deadbeef1234 -->","author":{"login":"human-dev"}}]}}
+  ]}}}}}'
+D2_SHARD=$(shard_for d2.ts)
+bash "$SCRIPT"
+expect "D2: non-bot author → marker ignored, placeholder sk recorded" \
+  "jq -e '.file==\"d2.ts\" and .semantic_key==\"unknown/unknown\" and .code_anchor==\"unknown000000\"' .woo-review/dismissed-$D2_SHARD.jsonl >/dev/null"
+expect "D2: crafted marker values NOT recorded" \
+  "! jq -e 'select(.file==\"d2.ts\" and (.semantic_key==\"security/auth-bypass\" or .code_anchor==\"deadbeef1234\"))' .woo-review/dismissed-$D2_SHARD.jsonl >/dev/null"
+
 # ---- case E: TTL prune drops expired entries on touched shards (default 180d)
 # Seed shard 0 with one ancient entry. Trigger a write to shard 0 by routing a
 # file that hashes to it (probe a fixed string).

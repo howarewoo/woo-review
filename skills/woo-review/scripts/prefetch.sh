@@ -572,10 +572,19 @@ if [ "$TOTAL" -gt 5242880 ]; then
   echo "Sidecar too large ($TOTAL bytes total); ignoring. Rotate .woo-review/dismissed*."
   echo '[]' > "$SIDECAR_OUT"
 else
+  # Per-shard validation so one corrupt/half-written shard cannot wipe the
+  # dedup signal from the other 15. jq -s over a single bad line in the
+  # combined stream exits non-zero and the `|| echo '[]'` fallback discards
+  # every entry. Validating each shard with `jq -s . >/dev/null` upfront
+  # isolates corruption to the offending file (mirrors the legacy guard).
   {
     for f in "${SHARD_GLOB[@]}"; do
       [ -f "$f" ] || continue
-      awk 'NF' "$f"
+      if awk 'NF' "$f" | jq -s '.' >/dev/null 2>&1; then
+        awk 'NF' "$f"
+      else
+        echo "Sidecar shard $f malformed; skipping" >&2
+      fi
     done
     if [ -f "$LEGACY" ] && jq empty "$LEGACY" 2>/dev/null; then
       jq -c '.[]' "$LEGACY"
