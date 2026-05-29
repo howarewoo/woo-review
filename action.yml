@@ -31,7 +31,7 @@ inputs:
     required: false
     default: ''
   mode:
-    description: 'Execution mode: full (sequential) | detect | review | validate-prosecutor | validate | sidecar-write. The adversarial validator runs as two passes: validate-prosecutor first (writes findings.prosecutor.json), then validate (writes findings.defender.json, runs intersect-findings.sh, and posts the review). `sidecar-write` is a permission-isolated post-step that commits newly-resolved threads to .woo-review/dismissed.json (issue #33).'
+    description: 'Execution mode: full (sequential) | detect | review | validate-prosecutor | validate | sidecar-write. The adversarial validator runs as two passes: validate-prosecutor first (writes findings.prosecutor.json), then validate (writes findings.defender.json, runs intersect-findings.sh, and posts the review). `sidecar-write` is a permission-isolated post-step that commits newly-resolved threads to the sharded `.woo-review/dismissed-<0-f>.jsonl` files (issue #33, #34).'
     required: false
     default: 'full'
   angle:
@@ -107,9 +107,13 @@ inputs:
     required: false
     default: 'true'
   enable_sidecar_write:
-    description: 'Commit newly-resolved threads to .woo-review/dismissed.json via bot.'
+    description: 'Commit newly-resolved threads to sharded `.woo-review/dismissed-<0-f>.jsonl` files via bot.'
     required: false
     default: 'true'
+  sidecar_ttl_days:
+    description: 'Age cap in days for sidecar entries; pruned opportunistically on touched shards. Set 0 to disable pruning.'
+    required: false
+    default: '180'
 
 runs:
   using: 'composite'
@@ -163,13 +167,16 @@ runs:
         GITHUB_REPOSITORY: ${{ github.repository }}
         PR_NUMBER: ${{ steps.pr.outputs.number }}
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        SIDECAR_TTL_DAYS: ${{ inputs.sidecar_ttl_days }}
       run: |
         set -euo pipefail
         mkdir -p /tmp/pr-review
         # Workflow guards already gate this job on enable_sidecar_write=true;
         # write a minimal config.json so the script's defense-in-depth check
         # passes without needing an artifact roundtrip.
-        echo '{"enable_sidecar_write": true}' > /tmp/pr-review/config.json
+        jq -n --argjson ttl "${SIDECAR_TTL_DAYS:-180}" \
+          '{enable_sidecar_write: true, sidecar_ttl_days: $ttl}' \
+          > /tmp/pr-review/config.json
         bash "${{ github.action_path }}/skills/woo-review/scripts/sidecar-write.sh"
 
     - name: Detect review angles

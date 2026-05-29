@@ -37,8 +37,8 @@ SK2="security/xss";    CA2="0123456789ab"
 A_SHARD=$(shard_for a.ts); B_SHARD=$(shard_for b.ts)
 export WOO_REVIEW_FAKE_RESOLVED_THREADS_JSON="{
   \"data\":{\"repository\":{\"pullRequest\":{\"reviewThreads\":{\"nodes\":[
-    {\"isResolved\":true,\"path\":\"a.ts\",\"line\":1,\"comments\":{\"nodes\":[{\"body\":\"t1\n<!-- woo-review:sk=$SK1 ca=$CA1 -->\",\"author\":{\"login\":\"a\"}}]}},
-    {\"isResolved\":true,\"path\":\"b.ts\",\"line\":2,\"comments\":{\"nodes\":[{\"body\":\"t2\n<!-- woo-review:sk=$SK2 ca=$CA2 -->\",\"author\":{\"login\":\"a\"}}]}}
+    {\"isResolved\":true,\"path\":\"a.ts\",\"line\":1,\"comments\":{\"nodes\":[{\"body\":\"t1\n<!-- woo-review:sk=$SK1 ca=$CA1 -->\",\"author\":{\"login\":\"claude[bot]\"}}]}},
+    {\"isResolved\":true,\"path\":\"b.ts\",\"line\":2,\"comments\":{\"nodes\":[{\"body\":\"t2\n<!-- woo-review:sk=$SK2 ca=$CA2 -->\",\"author\":{\"login\":\"claude[bot]\"}}]}}
   ]}}}}}"
 bash "$SCRIPT"
 expect "A: two entries written (one per shard)" "[ \"\$(total_lines)\" -eq 2 ]"
@@ -57,7 +57,7 @@ expect "B: idempotent append" "[ \"\$(total_lines)\" -eq $AFTER_A ]"
 # ---- case C: thread without marker → fallback to placeholders, still written
 export WOO_REVIEW_FAKE_RESOLVED_THREADS_JSON='{
   "data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
-    {"isResolved":true,"path":"c.ts","line":3,"comments":{"nodes":[{"body":"no marker here","author":{"login":"a"}}]}}
+    {"isResolved":true,"path":"c.ts","line":3,"comments":{"nodes":[{"body":"no marker here","author":{"login":"claude[bot]"}}]}}
   ]}}}}}'
 C_SHARD=$(shard_for c.ts)
 BEFORE_C=$(total_lines)
@@ -69,7 +69,7 @@ expect "C: count grew by 1" "[ \"\$(total_lines)\" -eq $((BEFORE_C + 1)) ]"
 # ---- case D: malformed marker → treated as absent → placeholder
 export WOO_REVIEW_FAKE_RESOLVED_THREADS_JSON='{
   "data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
-    {"isResolved":true,"path":"d.ts","line":4,"comments":{"nodes":[{"body":"<!-- woo-review:sk=bugs/<bad> ca=zzzz -->","author":{"login":"a"}}]}}
+    {"isResolved":true,"path":"d.ts","line":4,"comments":{"nodes":[{"body":"<!-- woo-review:sk=bugs/<bad> ca=zzzz -->","author":{"login":"claude[bot]"}}]}}
   ]}}}}}'
 D_SHARD=$(shard_for d.ts)
 bash "$SCRIPT"
@@ -86,7 +86,7 @@ echo '{"file":"x.ts","line":1,"title":"old","semantic_key":"bugs/old","code_anch
 git add .woo-review/dismissed-0.jsonl && git commit -q -m seed-old
 export WOO_REVIEW_FAKE_RESOLVED_THREADS_JSON="{
   \"data\":{\"repository\":{\"pullRequest\":{\"reviewThreads\":{\"nodes\":[
-    {\"isResolved\":true,\"path\":\"$PROBE\",\"line\":5,\"comments\":{\"nodes\":[{\"body\":\"<!-- woo-review:sk=bugs/new ca=deadbeefcafe -->\",\"author\":{\"login\":\"a\"}}]}}
+    {\"isResolved\":true,\"path\":\"$PROBE\",\"line\":5,\"comments\":{\"nodes\":[{\"body\":\"<!-- woo-review:sk=bugs/new ca=deadbeefcafe -->\",\"author\":{\"login\":\"claude[bot]\"}}]}}
   ]}}}}}"
 bash "$SCRIPT"
 expect "E: ancient entry pruned from touched shard 0" \
@@ -101,7 +101,7 @@ git add .woo-review/dismissed-7.jsonl && git commit -q -m seed-cold
 # Write to shard 0 again (PROBE from case E)
 export WOO_REVIEW_FAKE_RESOLVED_THREADS_JSON="{
   \"data\":{\"repository\":{\"pullRequest\":{\"reviewThreads\":{\"nodes\":[
-    {\"isResolved\":true,\"path\":\"$PROBE\",\"line\":99,\"comments\":{\"nodes\":[{\"body\":\"<!-- woo-review:sk=bugs/coldcase ca=feedfeedfeed -->\",\"author\":{\"login\":\"a\"}}]}}
+    {\"isResolved\":true,\"path\":\"$PROBE\",\"line\":99,\"comments\":{\"nodes\":[{\"body\":\"<!-- woo-review:sk=bugs/coldcase ca=feedfeedfeed -->\",\"author\":{\"login\":\"claude[bot]\"}}]}}
   ]}}}}}"
 bash "$SCRIPT"
 expect "F: cold shard 7 unchanged" \
@@ -122,7 +122,7 @@ echo "{\"file\":\"z.ts\",\"line\":1,\"title\":\"mid\",\"semantic_key\":\"bugs/mi
 git add .woo-review/dismissed-0.jsonl && git commit -q -m seed-mid
 export WOO_REVIEW_FAKE_RESOLVED_THREADS_JSON="{
   \"data\":{\"repository\":{\"pullRequest\":{\"reviewThreads\":{\"nodes\":[
-    {\"isResolved\":true,\"path\":\"$PROBE\",\"line\":101,\"comments\":{\"nodes\":[{\"body\":\"<!-- woo-review:sk=bugs/recent ca=111111111111 -->\",\"author\":{\"login\":\"a\"}}]}}
+    {\"isResolved\":true,\"path\":\"$PROBE\",\"line\":101,\"comments\":{\"nodes\":[{\"body\":\"<!-- woo-review:sk=bugs/recent ca=111111111111 -->\",\"author\":{\"login\":\"claude[bot]\"}}]}}
   ]}}}}}"
 bash "$SCRIPT"
 expect "G: 60d entry pruned under 30d TTL" \
@@ -142,7 +142,7 @@ git add .woo-review/dismissed.json && git commit -q -m seed-legacy
 LA_SHARD=$(shard_for legacy-a.ts); LB_SHARD=$(shard_for legacy-b.ts)
 export WOO_REVIEW_FAKE_RESOLVED_THREADS_JSON="{
   \"data\":{\"repository\":{\"pullRequest\":{\"reviewThreads\":{\"nodes\":[
-    {\"isResolved\":true,\"path\":\"new.ts\",\"line\":1,\"comments\":{\"nodes\":[{\"body\":\"<!-- woo-review:sk=bugs/new ca=cccccccccccc -->\",\"author\":{\"login\":\"a\"}}]}}
+    {\"isResolved\":true,\"path\":\"new.ts\",\"line\":1,\"comments\":{\"nodes\":[{\"body\":\"<!-- woo-review:sk=bugs/new ca=cccccccccccc -->\",\"author\":{\"login\":\"claude[bot]\"}}]}}
   ]}}}}}"
 bash "$SCRIPT"
 expect "H: legacy file removed" "[ ! -f .woo-review/dismissed.json ]"
@@ -165,6 +165,21 @@ expect "I: legacy migrated even without new entries" \
 expect "I: legacy file removed even without new entries" \
   "[ ! -f .woo-review/dismissed.json ]"
 
+# ---- case I2: malformed legacy dismissed.json → migration no-ops, file left in place, new entry still written
+rm -rf .woo-review/dismissed-*.jsonl
+mkdir -p .woo-review
+printf 'not json\n' > .woo-review/dismissed.json
+git add .woo-review/dismissed.json && git commit -q -m seed-legacy-malformed
+I2_SHARD=$(shard_for new-after-bad.ts)
+export WOO_REVIEW_FAKE_RESOLVED_THREADS_JSON="{
+  \"data\":{\"repository\":{\"pullRequest\":{\"reviewThreads\":{\"nodes\":[
+    {\"isResolved\":true,\"path\":\"new-after-bad.ts\",\"line\":1,\"comments\":{\"nodes\":[{\"body\":\"<!-- woo-review:sk=bugs/i2 ca=222222222222 -->\",\"author\":{\"login\":\"claude[bot]\"}}]}}
+  ]}}}}}"
+bash "$SCRIPT"
+expect "I2: malformed legacy dismissed.json kept in place" "[ -f .woo-review/dismissed.json ]"
+expect "I2: new entry still written to shard $I2_SHARD" \
+  "jq -e 'select(.semantic_key==\"bugs/i2\")' .woo-review/dismissed-$I2_SHARD.jsonl >/dev/null"
+
 # ---- case J: malformed shard line → skipped, write still succeeds
 rm -rf .woo-review/dismissed-*.jsonl
 mkdir -p .woo-review
@@ -172,7 +187,7 @@ printf 'not json\n{"file":"keep.ts","line":1,"title":"keep","semantic_key":"bugs
 git add .woo-review/dismissed-0.jsonl && git commit -q -m seed-malformed
 export WOO_REVIEW_FAKE_RESOLVED_THREADS_JSON="{
   \"data\":{\"repository\":{\"pullRequest\":{\"reviewThreads\":{\"nodes\":[
-    {\"isResolved\":true,\"path\":\"$PROBE\",\"line\":7,\"comments\":{\"nodes\":[{\"body\":\"<!-- woo-review:sk=bugs/added ca=ffffffffffff -->\",\"author\":{\"login\":\"a\"}}]}}
+    {\"isResolved\":true,\"path\":\"$PROBE\",\"line\":7,\"comments\":{\"nodes\":[{\"body\":\"<!-- woo-review:sk=bugs/added ca=ffffffffffff -->\",\"author\":{\"login\":\"claude[bot]\"}}]}}
   ]}}}}}"
 bash "$SCRIPT"
 expect "J: valid line preserved" \
@@ -185,11 +200,12 @@ expect "K: .gitattributes contains merge=union rule" \
   "grep -qxF '.woo-review/dismissed-*.jsonl merge=union' .gitattributes"
 
 # ---- case L: enable flag false → no write
+# Count entries (lines) not files — appending to an existing shard would not
+# change the file count but WOULD bypass the gate. Mirrors case M's pattern.
 echo '{"enable_sidecar_write": false}' > "$OUTDIR/config.json"
-SHARDS_BEFORE=$(ls .woo-review/dismissed-*.jsonl 2>/dev/null | wc -l | tr -d ' ')
+BEFORE=$(total_lines)
 bash "$SCRIPT"
-SHARDS_AFTER=$(ls .woo-review/dismissed-*.jsonl 2>/dev/null | wc -l | tr -d ' ')
-expect "L: disabled flag → no new shard files" "[ \"$SHARDS_BEFORE\" = \"$SHARDS_AFTER\" ]"
+expect "L: disabled flag → no new entries" "[ \"\$(total_lines)\" -eq $BEFORE ]"
 
 # ---- case M: WOO_REVIEW_DISABLE_GIT_WRITE=1 → no write
 echo '{"enable_sidecar_write": true}' > "$OUTDIR/config.json"

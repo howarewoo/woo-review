@@ -166,6 +166,7 @@ angles:
   force: [database]            # always run, even if not auto-detected
   skip:  [seo]                 # never run (bugs/security cannot be skipped)
 severity_floor: medium         # one of: low | medium | high; drops findings below the floor
+sidecar_ttl_days: 180          # age cap in days for sidecar entries; set 0 to disable pruning
 ignore:                        # fnmatch globs; ignored paths skip angle triggers + diff body
   - "**/*.generated.ts"
   - "migrations/*.sql"

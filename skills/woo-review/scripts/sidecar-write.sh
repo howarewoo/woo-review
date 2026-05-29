@@ -145,7 +145,14 @@ else
 fi
 
 NOW=$(date -u +%FT%TZ)
-NEW_ENTRIES=$(printf '%s' "$RESOLVED" | jq -c --arg pr "$PR_NUMBER" --arg now "$NOW" '
+# Mirror prefetch.sh's BOT_NAME_PATTERN. The marker is only honoured when the
+# comment that carries it was authored by a recognised bot — a non-bot
+# collaborator could otherwise pre-compute a `code_anchor` for code they plan
+# to push, post a crafted marker on an unrelated thread, resolve it, and
+# silently poison the dedup index for a future PR.
+BOT_NAME_PATTERN="${WOO_REVIEW_BOT_NAME_PATTERN:-claude|openai|gemini|opencode|woo-review|github-actions}"
+NEW_ENTRIES=$(printf '%s' "$RESOLVED" | jq -c \
+  --arg pr "$PR_NUMBER" --arg now "$NOW" --arg botpat "$BOT_NAME_PATTERN" '
   # Marker format: <!-- woo-review:sk=<sk> ca=<ca> -->
   # sk whitelist: [a-z0-9/_-]{1,40}; ca whitelist: [a-f0-9]{12}.
   # Both must match in a single capture — partial/malformed → drop the marker
@@ -161,7 +168,9 @@ NEW_ENTRIES=$(printf '%s' "$RESOLVED" | jq -c --arg pr "$PR_NUMBER" --arg now "$
     | select(.isResolved == true)
     | select(.path != null)
     | (.comments.nodes[0].body // "") as $b
-    | (parse_marker($b)) as $m
+    | (.comments.nodes[0].author.login // "") as $author
+    | (if ($author | test("^(" + $botpat + ")"; "i")) then parse_marker($b)
+       else {sk: "unknown/unknown", ca: "unknown000000"} end) as $m
     | { file: .path,
         line: (.line // 1),
         title: (($b | split("\n")[0])[0:60]),
@@ -177,7 +186,11 @@ migrate_legacy
 if [ "$NEW_COUNT" -eq 0 ]; then
   echo "sidecar-write: no newly-resolved threads"
   # Migration may have produced changes even with zero new entries — flush.
-  if ! git diff --quiet -- .woo-review/ 2>/dev/null; then
+  # Check BOTH unstaged (new shards written to worktree) and staged (legacy
+  # `git rm` of an empty `[]` dismissed.json produces no JSONL files but does
+  # stage a deletion). Unstaged-only would skip the commit on staged-only diffs.
+  if ! git diff --quiet -- .woo-review/ 2>/dev/null \
+     || ! git diff --cached --quiet -- .woo-review/ 2>/dev/null; then
     SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
     bash "$SCRIPT_DIR/install-gitattributes.sh" || echo "sidecar-write: .gitattributes install failed; continuing"
     git config --local user.name  "${WOO_REVIEW_BOT_NAME:-woo-review[bot]}"
@@ -211,16 +224,27 @@ for SH in $SHARDS; do
 
     # Dedup: skip if (pr, sk, ca) matches an existing line, or — for legacy
     # placeholder rows where sk/ca are both "unknown*" — fall back to
-    # (pr, file, line).
+    # (pr, file, line). The fallback fires only when AT LEAST ONE of the two
+    # rows carries placeholder keys; otherwise two distinct findings anchored
+    # to the same (file, line) (e.g. `bugs/null-deref` and `security/xss` both
+    # on line 42) would silently drop the second one.
     KEY=$(printf '%s'    "$ENTRY" | jq -c '[.pr_number,.semantic_key,.code_anchor]')
     KEY_FB=$(printf '%s' "$ENTRY" | jq -c '[.pr_number,.file,.line]')
+    ENTRY_PLACEHOLDER=$(printf '%s' "$ENTRY" \
+      | jq -r 'if .semantic_key=="unknown/unknown" and .code_anchor=="unknown000000" then "1" else "" end')
 
     HIT=""
     while IFS= read -r LN; do
       [ -z "$LN" ] && continue
-      VK=$(printf '%s'   "$LN" | jq -c '[.pr_number,.semantic_key,.code_anchor]' 2>/dev/null) || continue
-      VKFB=$(printf '%s' "$LN" | jq -c '[.pr_number,.file,.line]'                2>/dev/null) || continue
-      if [ "$VK" = "$KEY" ] || [ "$VKFB" = "$KEY_FB" ]; then HIT=1; break; fi
+      VK=$(printf '%s' "$LN" | jq -c '[.pr_number,.semantic_key,.code_anchor]' 2>/dev/null) || continue
+      if [ "$VK" = "$KEY" ]; then HIT=1; break; fi
+      LN_PLACEHOLDER=$(printf '%s' "$LN" \
+        | jq -r 'if .semantic_key=="unknown/unknown" and .code_anchor=="unknown000000" then "1" else "" end' 2>/dev/null) \
+        || LN_PLACEHOLDER=""
+      if [ -n "$ENTRY_PLACEHOLDER" ] || [ -n "$LN_PLACEHOLDER" ]; then
+        VKFB=$(printf '%s' "$LN" | jq -c '[.pr_number,.file,.line]' 2>/dev/null) || continue
+        if [ "$VKFB" = "$KEY_FB" ]; then HIT=1; break; fi
+      fi
     done < "$SHARD_FILE"
     [ -n "$HIT" ] && continue
 
