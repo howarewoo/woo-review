@@ -18,7 +18,7 @@ echo "$out" | grep -q "DRYRUN resolve PRRT_xyz" \
   || { echo "FAIL case1: resolve not built: $out"; exit 1; }
 
 # --- Case 2: reply fails (simulated) — must still resolve ---
-out=$(THREAD_ID="PRRT_fail" REPLY_BODY="hi" WOO_REVIEW_FAKE_REPLY_FAIL=1 bash "$SCRIPT")
+out=$(THREAD_ID="PRRT_fail" REPLY_BODY="hi" WOO_REVIEW_FAKE_REPLY_FAIL=1 bash "$SCRIPT" 2>&1)
 echo "$out" | grep -q "reply failed" \
   || { echo "FAIL case2: reply failure not logged: $out"; exit 1; }
 echo "$out" | grep -q "DRYRUN resolve PRRT_fail" \
@@ -30,6 +30,15 @@ echo "$out" | grep -q "DRYRUN reply PRRT_open" \
   || { echo "FAIL case3: reply not built: $out"; exit 1; }
 if echo "$out" | grep -q "DRYRUN resolve"; then
   echo "FAIL case3: resolved despite RESOLVE=0: $out"; exit 1
+fi
+
+
+# --- Case 4: RESOLVE=0 + reply fails — warn, and still NO resolve ---
+out=$(THREAD_ID="PRRT_c4" REPLY_BODY="q" RESOLVE=0 WOO_REVIEW_FAKE_REPLY_FAIL=1 bash "$SCRIPT" 2>&1)
+echo "$out" | grep -q "reply failed" \
+  || { echo "FAIL case4: reply failure not logged: $out"; exit 1; }
+if echo "$out" | grep -q "DRYRUN resolve"; then
+  echo "FAIL case4: resolved despite RESOLVE=0: $out"; exit 1
 fi
 
 echo "PASS resolve-thread.test.sh"

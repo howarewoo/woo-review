@@ -21,13 +21,20 @@ REPLY_BODY="${REPLY_BODY:?REPLY_BODY env var required}"
 RESOLVE="${RESOLVE:-1}"
 TEST_MODE="${WOO_REVIEW_TEST_MODE:-}"
 
+# Refuse fake/dry-run hooks inside GitHub Actions — same guard as the sibling
+# scripts. The address verb is local-only; never let CI silently no-op.
+if [ "$TEST_MODE" = "1" ] && [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+  echo "::error::WOO_REVIEW_TEST_MODE refused in GitHub Actions" >&2
+  exit 1
+fi
+
 reply() {
   if [ "$TEST_MODE" = "1" ]; then
     if [ "${WOO_REVIEW_FAKE_REPLY_FAIL:-}" = "1" ]; then return 1; fi
     echo "DRYRUN reply $THREAD_ID :: $REPLY_BODY"
     return 0
   fi
-  gh api graphql -F tid="$THREAD_ID" -F body="$REPLY_BODY" -f query='
+  gh api graphql -F tid="$THREAD_ID" -f body="$REPLY_BODY" -f query='
     mutation($tid: ID!, $body: String!) {
       addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $tid, body: $body}) {
         comment { id }
