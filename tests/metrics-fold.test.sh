@@ -86,6 +86,12 @@ mk_run "$OUT" 9 9 0 0 0 0; run_fold
 assert_eq "off no rolling" "$( [ -f "$(ROLLING)" ] && echo yes || echo no )" "no"
 teardown
 
+# Case 8: metrics on but no per-run file => no-op (spec-stated guard)
+setup
+run_fold
+assert_eq "no-input no rolling" "$( [ -f "$(ROLLING)" ] && echo yes || echo no )" "no"
+teardown
+
 # Case 7: defender-only nulls fold as zero
 setup
 cat > "$OUT/findings.metrics.json" <<'EOF'

@@ -109,9 +109,14 @@ for angle, rec in (run.get("angles") or {}).items():
     for s in SEVS:
         slot["severity_total"][s] += num(sev.get(s))
 
-with open(rolling_p, "w") as fh:
+# Atomic write: a mid-write crash leaves the prior aggregate intact rather
+# than a truncated file (the reseed path would recover either way, but this
+# avoids losing accumulated history to a single interrupted run).
+tmp_p = rolling_p + ".tmp"
+with open(tmp_p, "w") as fh:
     json.dump(agg, fh, indent=2, sort_keys=True)
     fh.write("\n")
+os.replace(tmp_p, rolling_p)
 
 print("metrics-fold: folded run -> {} ({} runs total)".format(rolling_p, agg["runs"]))
 PY
