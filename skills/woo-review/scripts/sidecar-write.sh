@@ -63,6 +63,33 @@ if [ "${WOO_REVIEW_DISABLE_GIT_WRITE:-0}" = "1" ]; then
   exit 0
 fi
 
+# TTL is read from .woo-review.yml via the same config.json that prefetch.sh
+# already loads. 0 (or null) → pruning disabled. Default 180 days.
+TTL_DAYS=$(jq -r 'if .sidecar_ttl_days == null then 180 else .sidecar_ttl_days end' \
+            "$OUTDIR/config.json" 2>/dev/null || echo 180)
+case "$TTL_DAYS" in ''|*[!0-9]*) TTL_DAYS=180 ;; esac
+
+ttl_cutoff() {
+  local days="$1"
+  # GNU date first, then BSD; on failure, echo empty so caller skips prune.
+  date -u -d "$days days ago" +%FT%TZ 2>/dev/null \
+    || date -u -v-"${days}"d +%FT%TZ 2>/dev/null \
+    || true
+}
+
+prune_shard() {
+  local shard_file="$1" cutoff="$2"
+  [ -z "$cutoff" ] && return 0
+  [ -f "$shard_file" ] || return 0
+  local tmp="$shard_file.tmp.$$"
+  # Keep only lines that parse AND are >= cutoff. Drop malformed lines silently.
+  awk 'NF' "$shard_file" | while IFS= read -r LN; do
+    KEEP=$(printf '%s' "$LN" | jq -r --arg c "$cutoff" 'if .resolved_at >= $c then "k" else "" end' 2>/dev/null) || continue
+    [ "$KEEP" = "k" ] && printf '%s\n' "$LN"
+  done > "$tmp"
+  mv "$tmp" "$shard_file"
+}
+
 # State resolution: env wins (CI), else fall back to the handoff file the
 # skill session left in $OUTDIR (local post-session Stop hook path).
 CTX="$OUTDIR/review-context.json"
@@ -170,6 +197,18 @@ for SH in $SHARDS; do
     WRITTEN=$((WRITTEN + 1))
   done < <(printf '%s' "$NEW_ENTRIES" | jq -c '.[]')
 done
+
+# Opportunistic TTL prune — only on shards we wrote to. Cold shards untouched.
+if [ "$TTL_DAYS" -gt 0 ]; then
+  CUTOFF=$(ttl_cutoff "$TTL_DAYS")
+  if [ -n "$CUTOFF" ]; then
+    for SH in $SHARDS; do
+      prune_shard ".woo-review/dismissed-$SH.jsonl" "$CUTOFF"
+    done
+  else
+    echo "sidecar-write: TTL date arithmetic unavailable; skipping prune"
+  fi
+fi
 
 if [ "$WRITTEN" -eq 0 ]; then
   echo "sidecar-write: all $NEW_COUNT entries already present"; exit 0

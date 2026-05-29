@@ -112,6 +112,9 @@ cat > .woo-review.yml <<EOF
 enable_sidecar_write: true
 sidecar_ttl_days: 30
 EOF
+# config.json is what the script reads (prefetch.sh maps .woo-review.yml → config.json
+# in real runs; in tests we set it directly).
+echo '{"enable_sidecar_write": true, "sidecar_ttl_days": 30}' > "$OUTDIR/config.json"
 # Re-run with a 60-day-old entry on shard 0 → should be pruned at 30d.
 THIRTY=$(date -u -v-60d +%FT%TZ 2>/dev/null || date -u -d '60 days ago' +%FT%TZ)
 mkdir -p .woo-review
@@ -125,6 +128,7 @@ bash "$SCRIPT"
 expect "G: 60d entry pruned under 30d TTL" \
   "! jq -e 'select(.semantic_key==\"bugs/mid\")' .woo-review/dismissed-0.jsonl >/dev/null"
 rm .woo-review.yml
+echo '{"enable_sidecar_write": true}' > "$OUTDIR/config.json"
 
 # ---- case H: migrate legacy dismissed.json on first write
 rm -rf .woo-review/dismissed-*.jsonl
