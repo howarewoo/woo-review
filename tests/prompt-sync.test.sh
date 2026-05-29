@@ -47,5 +47,16 @@ for f in "$V" "$VP"; do
 done
 grep -q 'WOO_REVIEW_FRESH' "$REPO_ROOT/skills/woo-review/scripts/prefetch.sh" || { echo "FAIL: prefetch.sh missing WOO_REVIEW_FRESH guard (#48)"; fail=1; }
 
+# --- Orchestrator-owned intersect contract (issue #46 regression guard) ---
+# Every provider orchestrator must run intersect-findings.sh itself, NOT
+# delegate it to the gated defender subagent.
+for prov in anthropic openai google opencode; do
+  grep -q 'intersect-findings.sh' "$PROMPTS_DIR/$prov.md" || { echo "FAIL: $prov.md missing orchestrator-level intersect-findings.sh (#46)"; fail=1; }
+done
+# anthropic.md / google.md must NOT tell the defender subagent to post or to run intersect itself.
+for prov in anthropic google; do
+  grep -qiE 'defender subagent continues into step 4|defender (subagent|@generalist|pass)[^.]*then runs[^.]*intersect|it then runs[^.]*intersect' "$PROMPTS_DIR/$prov.md" && { echo "FAIL: $prov.md still delegates post to defender subagent (#46)"; fail=1; }
+done
+
 [ "$fail" -eq 0 ] && echo "All prompt-sync tests passed."
 exit "$fail"

@@ -94,7 +94,7 @@ If the OpenCode runtime supports per-call routing, spawn a `deep`-tier subagent 
 
 ### Phase 3b — Defender pass
 
-Spawn another `deep`-tier subagent (or continue the main loop) with `$WOO_REVIEW_ACTION_PATH/prompts/validator.md`. Bias: defense attorney — drop pedantic / lint-catchable / "maybe" findings, enforce comment-shape + `fix_type` rules. Write surviving findings to `/tmp/pr-review/findings.defender.json`.
+Spawn another `deep`-tier subagent (or continue the main loop) with `$WOO_REVIEW_ACTION_PATH/prompts/validator.md`. Bias: defense attorney — drop pedantic / lint-catchable / "maybe" findings, enforce comment-shape + `fix_type` rules. Write surviving findings to `/tmp/pr-review/findings.defender.json`. Apply only `validator.md`'s validation/filter rules (its Steps 1–2) to produce `findings.defender.json`; IGNORE validator.md's Step 3/3b/4 and its STOP-GATE — the orchestrator runs the intersect itself in the next phase.
 
 ### Phase 3c — Intersect
 
