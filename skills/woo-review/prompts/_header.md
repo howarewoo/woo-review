@@ -26,17 +26,15 @@ Every artifact you write under `$OUTDIR/findings.*.json` (default `/tmp/pr-revie
 - **PR metadata** (title, body, headRefOid, baseRefName, files, author): `/tmp/pr-review/meta.json`
 - **Enabled angles** (one per line): `/tmp/pr-review/angles.txt`
 - **Project rules** (optional, present only if discovered): `/tmp/pr-review/rules.md`
-- **Per-repo config** (always present, defaults to `{}`): `/tmp/pr-review/config.json` — parsed from `.woo-review.yml` at the consumer repo root.
+- **Per-repo config** (always present, defaults to `{"severity_floor":"high"}`): `/tmp/pr-review/config.json` — parsed from `.woo-review/config.yml` in the consumer repo.
 - **Incremental base SHA** (always present, may be empty): `/tmp/pr-review/last_sha.txt` — non-empty means `diff.txt` covers only the new commits since the last woo-review pass. Treat findings as scoped to those commits.
-- **Prior unresolved review threads** (always present, may be `[]`): `/tmp/pr-review/prior-findings.json` — array of `{file, line, title, author}` for any unresolved thread on the PR. Consumed by the posting stage for event-floor + dedupe; angle workers MUST ignore this file. No per-entry `blocking` flag — any non-empty list floors the review event to `REQUEST_CHANGES` (conservative "do not APPROVE while threads open" rule).
-- **Repository dismissal sidecar** (always present, may be `[]`):
-  `/tmp/pr-review/sidecar-findings.json` — array of
-  `{file, line, title, semantic_key, code_anchor, resolved_at, pr_number}`
-  merged from `.woo-review/dismissed-<0-f>.jsonl` shards (legacy `dismissed.json` still read during migration).
-  Consumed by `dedup-against-history.sh`; angle workers MUST ignore this file.
+- **Prior unresolved review threads** (always present, may be `[]`): `/tmp/pr-review/prior-findings.json` — array of `{file, line, title, author}` for any unresolved thread on the PR. Consumed by the posting stage for the event-floor gate; angle workers MUST ignore this file. No per-entry `blocking` flag — any non-empty list floors the review event to `REQUEST_CHANGES` (conservative "do not APPROVE while threads open" rule).
+- **Cross-PR memory** (optional, present only if the consumer repo has `.woo-review/memory.md`): `/tmp/pr-review/memory.md` — a plain-markdown list of gotchas and previously-accepted issues the team curates. Treat it as additional rubric: do NOT re-flag an issue the memory file already records as known/accepted. See *Cross-PR memory* below.
 - **Chunk manifest** (optional, present only when the diff exceeds `chunking.max_loc`): `/tmp/pr-review/chunks.txt` (one chunk id per line) and `/tmp/pr-review/chunks.json` (manifest: `[{id, files, loc, diff_path, boundary}]`). Each chunk also has its own diff at `/tmp/pr-review/diff.chunk-<id>.txt`. When a worker is dispatched with a chunk id (env `CHUNK` non-empty), it MUST read the chunk-specific diff and write findings to `/tmp/pr-review/findings.<angle>.<chunk>.json`. In the GitHub Action this swap happens transparently — `diff.txt` is replaced with the chunk's diff before the worker runs, and the worker's output is renamed afterwards. When `chunks.txt` is absent, chunking did not activate and the diff fits a single worker (no overhead).
 
 If `/tmp/pr-review/rules.md` exists, treat it as an additional rubric on top of the per-angle scope. Each section is prefixed by a `## SOURCE: <path>` header identifying its origin file (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.windsurfrules`, or `GEMINI.md`). Any finding that claims a project-rule violation MUST populate `rule_quote` with a verbatim substring of `rules.md` (the rule text itself, not the source header). The validator discards rule-cited findings whose `rule_quote` is missing or not literally present in `rules.md`.
+
+If `/tmp/pr-review/memory.md` exists, read it before reporting. It is the team's cross-PR memory — gotchas, intentional design choices, and issues a prior review already surfaced and the team consciously accepted. If a finding you would report is already described there as known/accepted/wontfix, DROP it. Memory is advisory context, not a rule source: do not cite it in `rule_quote`.
 
 Set `PR_NUMBER` and `HEAD_SHA` as shell variables before posting anything:
 
@@ -73,11 +71,11 @@ Each angle prompt and the validator declare a `tier:` in frontmatter — `fast`,
 - **Single model per session** (Codex Action, Gemini CLI): pin the whole run to the `standard` tier model. You lose `fast`-tier savings on rubric angles, but `standard` is the safe default that handles every angle. If `inputs.model` is set explicitly, honor that and ignore tiers.
 - **Override**: `inputs.model` (action.yml) or a runner-specific override always wins over the tier resolution.
 
-**Per-repo tier overrides (`.woo-review.yml`):** before resolving any `tier:` to a model slug, read `/tmp/pr-review/config.json`. If `models.<tier>` is set, use that slug INSTEAD of the table entry above. Example: `jq -r '.models.deep // empty' /tmp/pr-review/config.json` — empty means use the table default. `inputs.model` (action.yml) still wins over the per-repo override.
+**Per-repo tier overrides (`.woo-review/config.yml`):** before resolving any `tier:` to a model slug, read `/tmp/pr-review/config.json`. If `models.<tier>` is set, use that slug INSTEAD of the table entry above. Example: `jq -r '.models.deep // empty' /tmp/pr-review/config.json` — empty means use the table default. `inputs.model` (action.yml) still wins over the per-repo override.
 
 ## Per-repo Config (`/tmp/pr-review/config.json`)
 
-The prefetch step parses an optional `.woo-review.yml` at the consumer repo root and writes a canonical JSON copy to `/tmp/pr-review/config.json`. Missing file = `{}` (no-op). The full schema is documented in `SKILL.md`; runners only need to know which keys are consumed at which stage:
+The prefetch step parses an optional `.woo-review/config.yml` in the consumer repo and writes a canonical JSON copy to `/tmp/pr-review/config.json`. Missing file = `{"severity_floor":"high"}` (the noise-control default). The full schema is documented in `SKILL.md`; runners only need to know which keys are consumed at which stage:
 
 | Key | Consumed by | When |
 |---|---|---|
@@ -86,7 +84,7 @@ The prefetch step parses an optional `.woo-review.yml` at the consumer repo root
 | `project_rules` | `prefetch.sh` (appends to `rules.md`) | Stage 1 |
 | `authors_skip` | `prefetch.sh` (skips + posts one-line comment; default list applied when absent — issue #19) | Stage 1 |
 | `release_rollup_pattern` | `prefetch.sh` (skips + posts one-line comment when PR title matches; default `^(staging\|release\|chore\(release\))` applied when absent — issue #19) | Stage 1 |
-| `severity_floor` | validator | Stage 3 |
+| `severity_floor` | validator | Stage 3 — **defaults to `high`** (only high-priority findings surface); set `low`/`medium` to widen |
 | `models.fast` / `.standard` / `.deep` | orchestrator prompts (tier resolution) | Stage 2 |
 | `fix_commands` | persisted only; consumed by `--loop` mode (#15) | n/a |
 | `chunking.max_loc` | `chunk-diff.sh` (split oversized diff into chunks; default 4000) | Stage 1 |
@@ -168,12 +166,6 @@ ${STATUS_LINE}
 <!-- woo-review:sha=${HEAD_SHA} -->
 BODY_EOF
 
-# Append rule recommendations if any.
-if [ -s /tmp/pr-review/rule-recommendations.md ]; then
-  printf '\n\n### Suggested rules for AGENT.md / CLAUDE.md\n\n' >> /tmp/pr_review_body.txt
-  cat /tmp/pr-review/rule-recommendations.md >> /tmp/pr_review_body.txt
-fi
-
 # Surface a degraded adversarial pass (issue #47). When intersect-findings.sh
 # fell back to defender-only WHILE adversarial was enabled (degraded:true), tell
 # the author the findings are lower-confidence rather than silently shipping a
@@ -183,31 +175,18 @@ if [ -f /tmp/pr-review/validator-metrics.json ] && \
   printf '\n\n> ⚠️ **Adversarial prosecutor pass was unavailable** — these findings are *defender-only* (a single validation pass, lower confidence than the usual two-pass review).\n' >> /tmp/pr_review_body.txt
 fi
 
-# Before running this posting step, the orchestrator MUST first run
-# `bash $WOO_REVIEW_ACTION_PATH/scripts/dedup-against-history.sh` so
-# `/tmp/pr-review/findings.deduped.json` is populated. Legacy hosts that skip
-# this step will silently fall back to `findings.json` (with no history dedup
-# applied).
-
 # 2. Prepare the review payload with inline comments
 python3 -c '
 import json, sys, os, re
 
-# Read the deduped findings (output of dedup-against-history.sh).
-# Falls back to raw findings.json if the deduped file is missing — keeps
-# legacy hosts working when they have not yet wired the dedup step.
-deduped_path = "/tmp/pr-review/findings.deduped.json"
-fallback_path = "/tmp/pr-review/findings.json"
+# Read the final validated findings (output of intersect-findings.sh).
 try:
-    findings = json.load(open(deduped_path))
+    findings = json.load(open("/tmp/pr-review/findings.json"))
 except Exception:
-    try:
-        findings = json.load(open(fallback_path))
-    except Exception:
-        findings = []
+    findings = []
 
 # Prior threads include resolved entries (status field). Event floor counts
-# OPEN threads only — resolved ones are dedup-signal only, not gate-signal.
+# OPEN threads only — resolved ones do not gate the review event.
 try:
     priors = json.load(open("/tmp/pr-review/prior-findings.json"))
 except Exception:
@@ -283,16 +262,6 @@ for f in findings:
     if footer_parts:
         body += "\n\n<sub>— " + " · ".join(footer_parts) + "</sub>"
 
-    # Sidecar marker — appended so sidecar-write.sh can parse the original
-    # semantic_key/code_anchor out of the comment body via GraphQL on the next
-    # run. Whitelist-validated: malformed/missing fields → marker omitted, no
-    # injection surface. Falls back to the existing placeholder behavior in
-    # sidecar-write.sh (unknown/unknown, unknown000000) when the marker is absent.
-    sk = (f.get("semantic_key") or "").strip()
-    ca = (f.get("code_anchor")  or "").strip()
-    if sk and ca and re.fullmatch(r"[a-z0-9/_-]{1,40}", sk) and re.fullmatch(r"[a-f0-9]{12}", ca):
-        body += f"\n<!-- woo-review:sk={sk} ca={ca} -->"
-
     comments.append({
         "path": f["file"],
         "line": int(f["line"]),
@@ -312,20 +281,7 @@ print(json.dumps(payload))
 # 3. Submit the review
 gh api "repos/${GITHUB_REPOSITORY}/pulls/$PR_NUMBER/reviews" \
   --method POST --input /tmp/pr_review_payload.json
-
-# 4. Local hosts only: mark the sidecar pending so the post-session Stop hook
-#    runs sidecar-write.sh. No-op in CI (the isolated job handles writes there).
-[ "${GITHUB_ACTIONS:-}" != "true" ] && touch "${OUTDIR:-/tmp/pr-review}/sidecar-pending" || true
 ```
-
-Sidecar writes (`.woo-review/dismissed-<0-f>.jsonl` shards) run *outside* the LLM step. The
-CI action invokes `sidecar-write.sh` from a separate job with `contents: write`
-(gated on `enable_sidecar_write`); the validator/LLM job holds only
-`contents: read`. Local hosts MUST NOT invoke the script from the model's tool
-scope. Instead, the session drops a `sidecar-pending` sentinel after the POST
-(step 4 above), and a host-level post-session hook — registered by
-`woo-review install` — runs `sidecar-write.sh` once the session ends. The LLM
-step itself MUST NOT have repo-write capability (PR #33).
 
 ### Review Body Rules
 The `pr_review_body.txt` should contain:
@@ -369,34 +325,12 @@ Every runner MUST write a final `findings.json` (for debugging + potential post-
     "fix_type": "suggestion",
     "fix": "Recommended change in prose (e.g. 'use `<=` instead of `<` so the boundary value is included').",
     "suggestion": "verbatim replacement code for the GitHub ```suggestion``` block — REQUIRED when fix_type == \"suggestion\", MUST be null when fix_type == \"prose\"",
-    "rule_quote": "exact quoted rule text if rule-based, else null",
-    "semantic_key": "bugs/off-by-one-loop-bound",
-    "code_anchor": "a1b2c3d4e5f6"
+    "rule_quote": "exact quoted rule text if rule-based, else null"
   }
 ]
 ```
 
 `angle` is one of `bugs | security | conventions | seo | aeo | design | react | database | tests | api | infra | observability | types | i18n | docs | deps`.
-
-### `semantic_key` and `code_anchor` (dedup keys)
-
-Every finding MUST set both fields. They form the stable identity used by
-`dedup-against-history.sh` to skip findings already on the PR or in the
-committed sidecar.
-
-- `semantic_key` — kebab-case `<angle>/<issue-type>`, max 40 chars. Each
-  angle prompt enumerates the valid values for that angle. Unknown issues
-  use `<angle>/unknown` (still dedupable by file + anchor alone).
-- `code_anchor` — SHA-1 (first 12 hex chars) of the trimmed concatenation
-  of the 3 lines before, the finding line, and the 3 lines after, from
-  the post-PR diff content. Compute via:
-
-  ```bash
-  printf '%s' "$context" | shasum -a 1 | cut -c1-12
-  ```
-
-  The anchor survives line shifts in unrelated code; the surrounding
-  context must change for the anchor to change.
 
 `line` MUST be the post-patch absolute file line — i.e. a line that exists on the RIGHT side of the diff (a `+` added line or a ` ` context line within a hunk for `file`). Lines that fall in a deletion-only region, or outside any hunk for the file, will be rejected by the GitHub API. Validate every line via `scripts/resolve-diff-line.sh` before writing the finding (see *Output Discipline* above); drop the finding when the helper returns `null`.
 

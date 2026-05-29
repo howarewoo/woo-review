@@ -67,13 +67,3 @@ gh api repos/coreyhaines31/marketingskills/contents/skills/ai-seo/references/con
 
 **Output.** Write findings as a JSON array to `/tmp/pr-review/findings.aeo.json` using the schema in `_header.md`. Each finding gets `"angle": "aeo"` and MUST populate `title` (bold headline ≤60 chars), `description` (the issue only — no fix), `fix` (recommended change in prose), and `fix_type`. Set `fix_type: "suggestion"` only when a ≤10-line single-file drop-in replacement at `line` is safe — and populate `suggestion` accordingly. Otherwise set `fix_type: "prose"` with `suggestion: null`. See `_header.md` for the full rule.
 
-## `semantic_key` values
-
-Use one of these values when emitting findings (or coin a new kebab-case
-value following the same naming style):
-
-- `aeo/missing-faq`
-- `aeo/missing-summary-snippet`
-- `aeo/thin-answer-content`
-- `aeo/no-structured-data`
-- `aeo/unknown` — fall-back when no enum value fits

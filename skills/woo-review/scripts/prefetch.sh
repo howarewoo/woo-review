@@ -232,19 +232,6 @@ fi
 gh pr view "$PR_NUMBER" --json headRefOid,baseRefName,title,body,files,author > "$OUTDIR/meta.json"
 HEAD_SHA=$(jq -r '.headRefOid' "$OUTDIR/meta.json")
 
-# Handoff state for the post-session sidecar Stop hook (local hosts). The hook
-# runs sidecar-write.sh in a fresh subprocess with NO session env, so persist
-# everything it needs. CI sets these via env and ignores this file.
-REVIEW_REPO_SLUG="${GITHUB_REPOSITORY:-$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo)}"
-REVIEW_REPO_PATH="$(git rev-parse --show-toplevel 2>/dev/null || echo)"
-jq -n \
-  --arg pr   "$PR_NUMBER" \
-  --arg sha  "$HEAD_SHA" \
-  --arg repo "$REVIEW_REPO_SLUG" \
-  --arg path "$REVIEW_REPO_PATH" \
-  '{pr_number: ($pr | tonumber? // null), head_sha: $sha, repo: $repo, repo_path: $path}' \
-  > "$OUTDIR/review-context.json"
-
 # Load per-repo config early (issue #19) so the bot-author / release-rollup
 # skip checks can read user overrides BEFORE we pay for the diff fetch.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -562,50 +549,26 @@ printf '%s' "$THREADS_JSON" | jq '
 PRIOR_COUNT=$(jq 'length' "$OUTDIR/prior-findings.json" 2>/dev/null || echo 0)
 echo "Prior review threads (open + resolved): $PRIOR_COUNT"
 
-# Repository dismissal sidecar — committed source of cross-PR dedup signal.
-# New layout: 16 hash-sharded JSONL files .woo-review/dismissed-<0-f>.jsonl,
-# with merge=union for conflict-free concurrent appends. Legacy single-file
-# .woo-review/dismissed.json is still read during the migration window —
-# sidecar-write.sh removes it on first run.
-SIDECAR_ROOT="${GITHUB_WORKSPACE:-$(pwd)}/.woo-review"
-SIDECAR_OUT="$OUTDIR/sidecar-findings.json"
-SHARD_GLOB=("$SIDECAR_ROOT"/dismissed-*.jsonl)
-LEGACY="$SIDECAR_ROOT/dismissed.json"
-
-# Combined-size cap (sharded files + legacy file). Mirrors the prior 5 MB cap
-# but applied to the sum so a single hot shard cannot starve the prefetch.
-TOTAL=0
-for f in "${SHARD_GLOB[@]}" "$LEGACY"; do
-  [ -f "$f" ] || continue
-  SIZE=$(wc -c < "$f" 2>/dev/null || echo 0)
-  TOTAL=$((TOTAL + SIZE))
-done
-if [ "$TOTAL" -gt 5242880 ]; then
-  echo "Sidecar too large ($TOTAL bytes total); ignoring. Rotate .woo-review/dismissed*."
-  echo '[]' > "$SIDECAR_OUT"
+# Cross-PR memory — a plain-markdown file of gotchas / accepted issues the team
+# curates (and the local skill appends to). Surfaced to every angle + the
+# validator as additional context so already-known issues are not re-flagged.
+# Missing file => no memory context (normal for fresh repos).
+MEMORY_SRC="${GITHUB_WORKSPACE:-$(pwd)}/.woo-review/memory.md"
+MEMORY_OUT="$OUTDIR/memory.md"
+if [ -f "$MEMORY_SRC" ]; then
+  MEM_SIZE=$(wc -c < "$MEMORY_SRC" 2>/dev/null || echo 0)
+  if [ "$MEM_SIZE" -gt 102400 ]; then
+    # 100KB cap (same as rules.md) — truncate rather than skip so recent
+    # entries still land. Memory is append-mostly; the head is the oldest.
+    tail -c 102400 "$MEMORY_SRC" > "$MEMORY_OUT"
+    echo "Memory file large (${MEM_SIZE}B); truncated to last 100KB."
+  else
+    cp "$MEMORY_SRC" "$MEMORY_OUT"
+  fi
+  echo "Loaded cross-PR memory: $MEMORY_SRC (${MEM_SIZE}B)"
 else
-  # Per-shard validation so one corrupt/half-written shard cannot wipe the
-  # dedup signal from the other 15. jq -s over a single bad line in the
-  # combined stream exits non-zero and the `|| echo '[]'` fallback discards
-  # every entry. Validating each shard with `jq -s . >/dev/null` upfront
-  # isolates corruption to the offending file (mirrors the legacy guard).
-  {
-    for f in "${SHARD_GLOB[@]}"; do
-      [ -f "$f" ] || continue
-      if awk 'NF' "$f" | jq -s '.' >/dev/null 2>&1; then
-        awk 'NF' "$f"
-      else
-        echo "Sidecar shard $f malformed; skipping" >&2
-      fi
-    done
-    if [ -f "$LEGACY" ] && jq empty "$LEGACY" 2>/dev/null; then
-      jq -c '.[]' "$LEGACY"
-    fi
-  } | jq -s '.' > "$SIDECAR_OUT" 2>/dev/null || echo '[]' > "$SIDECAR_OUT"
+  rm -f "$MEMORY_OUT"
 fi
-
-SIDECAR_COUNT=$(jq length "$SIDECAR_OUT" 2>/dev/null || echo 0)
-echo "Sidecar dismissed entries: $SIDECAR_COUNT"
 
 # Issue #14: split oversized diffs into chunks. Runs LAST so it sees the final
 # post-ignore diff (diff.filtered.txt when present). Under the threshold this

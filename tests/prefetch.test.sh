@@ -133,7 +133,7 @@ fail=0
 reset() {
   : > "$OUTPUT_FILE"
   rm -f "$PREFETCH"/* 2>/dev/null || true
-  rm -f "$GITHUB_WORKSPACE/.woo-review.yml" 2>/dev/null || true
+  rm -rf "$GITHUB_WORKSPACE/.woo-review" 2>/dev/null || true
   # Non-GHA baseline. These cases drive prefetch.sh via the WOO_REVIEW_FAKE_*
   # hooks, which prefetch.sh refuses when GITHUB_ACTIONS=true (local-only test
   # hooks). The CI runner exports GITHUB_ACTIONS=true, so without this unset the
@@ -173,15 +173,6 @@ assert_eq "case1 no-marker last_sha" "" "$LAST_SHA"
 if ! diff -q "$PREFETCH/diff.txt" "$FULL_DIFF_FIXTURE" >/dev/null 2>&1; then
   echo "FAIL case1: diff.txt != full diff fixture"; fail=1
 fi
-# review-context.json handoff for the post-session sidecar hook
-assert_eq "ctx pr_number" "42" "$(jq -r '.pr_number' "$PREFETCH/review-context.json" 2>/dev/null)"
-assert_eq "ctx repo"      "owner/repo" "$(jq -r '.repo' "$PREFETCH/review-context.json" 2>/dev/null)"
-# head_sha drives sidecar-write's commit message + reviewed-SHA identity;
-# repo_path drives the post-session repo-match guard. Regressions in either
-# would otherwise pass undetected. repo_path = prefetch's cwd toplevel (the
-# script does not cd into GITHUB_WORKSPACE), so compare against this repo's.
-assert_eq "ctx head_sha"  "newhead123" "$(jq -r '.head_sha' "$PREFETCH/review-context.json" 2>/dev/null)"
-assert_eq "ctx repo_path" "$(git rev-parse --show-toplevel)" "$(jq -r '.repo_path' "$PREFETCH/review-context.json" 2>/dev/null)"
 echo "ok   case1 no-marker -> full diff"
 
 # --- Case 2: valid marker -> incremental path via env-hook diff
@@ -444,7 +435,8 @@ echo "ok   case13 release_rollup_pattern match -> skip + comment"
 # --- Case 14: explicit authors_skip: [] opts out of default bot skip ---
 reset
 export WOO_REVIEW_TEST_META_FIXTURE="$BOT_META"
-cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+mkdir -p "$GITHUB_WORKSPACE/.woo-review"
+cat > "$GITHUB_WORKSPACE/.woo-review/config.yml" <<'YAML'
 authors_skip: []
 release_rollup_pattern: ''
 YAML
@@ -559,97 +551,32 @@ STATUS_0=$(jq -r '.[0].status' "$PREFETCH/prior-findings.json" 2>/dev/null || ec
 assert_eq "case18 open status field" "open" "$STATUS_0"
 echo "ok   case18 resolved threads included with status field"
 
-# --- Case 19: sidecar loaded when .woo-review/dismissed.json exists ---
+# --- Case 19: cross-PR memory loaded when .woo-review/memory.md exists ---
 reset
 unset GITHUB_ACTIONS || true
-SIDECAR_DIR="$GITHUB_WORKSPACE/.woo-review"
-mkdir -p "$SIDECAR_DIR"
-cat > "$SIDECAR_DIR/dismissed.json" <<'JSON'
-[{"file":"src/app.ts","line":1,"title":"Old finding","angle":"security"}]
-JSON
+mkdir -p "$GITHUB_WORKSPACE/.woo-review"
+cat > "$GITHUB_WORKSPACE/.woo-review/memory.md" <<'MD'
+# Review memory
+- The `legacyAuth()` shim is intentional until Q3 — do not flag it.
+MD
 bash "$SCRIPT" > "$WORK/stdout" 2>&1 || { echo "FAIL case19 (script error):"; sed 's/^/    /' "$WORK/stdout"; fail=1; }
-SIDECAR_LEN=$(jq 'length' "$PREFETCH/sidecar-findings.json" 2>/dev/null || echo "missing")
-assert_eq "case19 sidecar-findings.json length" "1" "$SIDECAR_LEN"
-SIDECAR_TITLE=$(jq -r '.[0].title' "$PREFETCH/sidecar-findings.json" 2>/dev/null || echo "missing")
-assert_eq "case19 sidecar entry title" "Old finding" "$SIDECAR_TITLE"
-rm -f "$SIDECAR_DIR/dismissed.json"
-echo "ok   case19 sidecar loaded when .woo-review/dismissed.json exists"
-
-# --- Case 20: sidecar missing -> empty array ---
-reset
-unset GITHUB_ACTIONS || true
-# Ensure the sidecar file does NOT exist (rm -f is defensive).
-rm -f "$GITHUB_WORKSPACE/.woo-review/dismissed.json"
-bash "$SCRIPT" > "$WORK/stdout" 2>&1 || { echo "FAIL case20 (script error):"; sed 's/^/    /' "$WORK/stdout"; fail=1; }
-if [ ! -f "$PREFETCH/sidecar-findings.json" ]; then
-  echo "FAIL case20: sidecar-findings.json not created when sidecar missing"; fail=1
+if [ ! -f "$PREFETCH/memory.md" ]; then
+  echo "FAIL case19: memory.md not copied into OUTDIR"; fail=1
 fi
-SIDECAR_CONTENT=$(cat "$PREFETCH/sidecar-findings.json" 2>/dev/null || echo "MISSING")
-assert_eq "case20 sidecar-findings.json is []" "[]" "$SIDECAR_CONTENT"
-echo "ok   case20 sidecar missing -> sidecar-findings.json is []"
+if ! grep -q 'legacyAuth' "$PREFETCH/memory.md" 2>/dev/null; then
+  echo "FAIL case19: memory.md content not preserved"; fail=1
+fi
+echo "ok   case19 memory loaded when .woo-review/memory.md exists"
 
-# ---- SHARD_A: legacy-only — read dismissed.json as before
+# --- Case 20: memory absent -> no OUTDIR/memory.md ---
 reset
 unset GITHUB_ACTIONS || true
 rm -rf "$GITHUB_WORKSPACE/.woo-review"
-mkdir -p "$GITHUB_WORKSPACE/.woo-review"
-echo '[{"file":"a.ts","line":1,"semantic_key":"bugs/x","code_anchor":"a1b2c3d4e5f6","pr_number":1,"resolved_at":"2026-05-01T00:00:00Z","title":"t"}]' \
-  > "$GITHUB_WORKSPACE/.woo-review/dismissed.json"
-bash "$SCRIPT" > "$WORK/stdout" 2>&1 || { echo "FAIL SHARD_A (script error):"; sed 's/^/    /' "$WORK/stdout"; fail=1; }
-SHARD_A_LEN=$(jq -e 'length' "$PREFETCH/sidecar-findings.json" 2>/dev/null || echo "missing")
-assert_eq "SHARD_A: legacy entry present in sidecar-findings.json (length)" "1" "$SHARD_A_LEN"
-SHARD_A_KEY=$(jq -r '.[0].semantic_key' "$PREFETCH/sidecar-findings.json" 2>/dev/null || echo "missing")
-assert_eq "SHARD_A: legacy entry semantic_key" "bugs/x" "$SHARD_A_KEY"
-echo "ok   SHARD_A: legacy entry present in sidecar-findings.json"
-
-# ---- SHARD_B: shards-only — read all dismissed-<hex>.jsonl
-reset
-unset GITHUB_ACTIONS || true
-rm -rf "$GITHUB_WORKSPACE/.woo-review"
-mkdir -p "$GITHUB_WORKSPACE/.woo-review"
-echo '{"file":"a.ts","line":1,"semantic_key":"bugs/sa","code_anchor":"111111111111","pr_number":2,"resolved_at":"2026-05-02T00:00:00Z","title":"sa"}' \
-  > "$GITHUB_WORKSPACE/.woo-review/dismissed-3.jsonl"
-echo '{"file":"b.ts","line":2,"semantic_key":"bugs/sb","code_anchor":"222222222222","pr_number":3,"resolved_at":"2026-05-03T00:00:00Z","title":"sb"}' \
-  > "$GITHUB_WORKSPACE/.woo-review/dismissed-9.jsonl"
-bash "$SCRIPT" > "$WORK/stdout" 2>&1 || { echo "FAIL SHARD_B (script error):"; sed 's/^/    /' "$WORK/stdout"; fail=1; }
-SHARD_B_LEN=$(jq -e 'length' "$PREFETCH/sidecar-findings.json" 2>/dev/null || echo "missing")
-assert_eq "SHARD_B: both shard entries merged" "2" "$SHARD_B_LEN"
-echo "ok   SHARD_B: both shard entries merged"
-
-# ---- SHARD_C: mixed — shards + legacy file both contribute
-reset
-unset GITHUB_ACTIONS || true
-rm -rf "$GITHUB_WORKSPACE/.woo-review"
-mkdir -p "$GITHUB_WORKSPACE/.woo-review"
-echo '{"file":"a.ts","line":1,"semantic_key":"bugs/sa","code_anchor":"111111111111","pr_number":2,"resolved_at":"2026-05-02T00:00:00Z","title":"sa"}' \
-  > "$GITHUB_WORKSPACE/.woo-review/dismissed-3.jsonl"
-echo '{"file":"b.ts","line":2,"semantic_key":"bugs/sb","code_anchor":"222222222222","pr_number":3,"resolved_at":"2026-05-03T00:00:00Z","title":"sb"}' \
-  > "$GITHUB_WORKSPACE/.woo-review/dismissed-9.jsonl"
-echo '[{"file":"c.ts","line":3,"semantic_key":"bugs/lg","code_anchor":"333333333333","pr_number":4,"resolved_at":"2026-05-04T00:00:00Z","title":"lg"}]' \
-  > "$GITHUB_WORKSPACE/.woo-review/dismissed.json"
-bash "$SCRIPT" > "$WORK/stdout" 2>&1 || { echo "FAIL SHARD_C (script error):"; sed 's/^/    /' "$WORK/stdout"; fail=1; }
-SHARD_C_LEN=$(jq -e 'length' "$PREFETCH/sidecar-findings.json" 2>/dev/null || echo "missing")
-assert_eq "SHARD_C: legacy + shards merged" "3" "$SHARD_C_LEN"
-echo "ok   SHARD_C: legacy + shards merged"
-
-# ---- SHARD_D: combined size cap respected
-reset
-unset GITHUB_ACTIONS || true
-rm -rf "$GITHUB_WORKSPACE/.woo-review"
-mkdir -p "$GITHUB_WORKSPACE/.woo-review"
-export W="$GITHUB_WORKSPACE"
-python3 -c '
-import json, os
-e = {"file":"big.ts","line":1,"semantic_key":"bugs/big","code_anchor":"bbbbbbbbbbbb","pr_number":99,"resolved_at":"2026-05-01T00:00:00Z","title":"big"}
-line = json.dumps(e) + "\n"
-target = 5 * 1024 * 1024 + 1024
-with open(os.environ["W"] + "/.woo-review/dismissed-0.jsonl","w") as f:
-    while f.tell() < target: f.write(line)
-'
-bash "$SCRIPT" > "$WORK/stdout" 2>&1 || { echo "FAIL SHARD_D (script error):"; sed 's/^/    /' "$WORK/stdout"; fail=1; }
-SHARD_D_LEN=$(jq -e 'length' "$PREFETCH/sidecar-findings.json" 2>/dev/null || echo "missing")
-assert_eq "SHARD_D: oversized combined shards -> empty sidecar" "0" "$SHARD_D_LEN"
-echo "ok   SHARD_D: oversized combined shards -> empty sidecar"
+bash "$SCRIPT" > "$WORK/stdout" 2>&1 || { echo "FAIL case20 (script error):"; sed 's/^/    /' "$WORK/stdout"; fail=1; }
+if [ -f "$PREFETCH/memory.md" ]; then
+  echo "FAIL case20: memory.md present in OUTDIR when source absent"; fail=1
+fi
+echo "ok   case20 memory absent -> no OUTDIR/memory.md"
 
 # ---------- Guard: in-flight findings.* block the rm -rf wipe (issue #48) ----------
 # The guard runs at the very top of prefetch.sh (before any gh/PR work), so a

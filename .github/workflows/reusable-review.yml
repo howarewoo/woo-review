@@ -47,16 +47,6 @@ on:
         type: string
         required: false
         default: 'auto'
-      enable_history_dedup:
-        description: 'Drop findings duplicating prior PR threads or sidecar dismissals.'
-        type: string
-        required: false
-        default: 'true'
-      enable_sidecar_write:
-        description: 'Commit newly-resolved threads to .woo-review/dismissed.json via bot.'
-        type: string
-        required: false
-        default: 'true'
     secrets:
       anthropic_token:
         required: false
@@ -161,9 +151,9 @@ jobs:
     # Only skip if detection failed/cancelled or the whole run was cancelled.
     if: always() && needs.detect.result == 'success' && needs.review.result != 'cancelled'
     runs-on: ubuntu-latest
-    # `contents: read` is sufficient — sidecar commit/push moved to the
-    # `sidecar-write` job below (issue #33), so the validator (which runs the
-    # LLM step against untrusted PR content) never sees `contents: write`.
+    # `contents: read` is sufficient — the validator runs the LLM step against
+    # untrusted PR content and never writes the repo. It only needs to post the
+    # review (`pull-requests: write`).
     permissions:
       contents: read
       pull-requests: write
@@ -189,7 +179,7 @@ jobs:
       # findings.prosecutor.json (inclusive bias), defender pass writes
       # findings.defender.json (exclusive bias) + runs intersect-findings.sh
       # to produce the final findings.json, then posts the review.
-      # `disable_adversarial: true` in .woo-review.yml short-circuits the
+      # `disable_adversarial: true` in .woo-review/config.yml short-circuits the
       # prosecutor step (the intersect script then falls back to defender-only).
       - name: Read disable_adversarial flag
         id: adv
@@ -221,22 +211,6 @@ jobs:
           skip_labels: ${{ inputs.skip_labels }}
           prompt_override: ${{ inputs.prompt_override }}
 
-      - name: Merge action inputs into config.json
-        shell: bash
-        env:
-          ENABLE_SIDECAR: ${{ inputs.enable_sidecar_write }}
-          ENABLE_DEDUP: ${{ inputs.enable_history_dedup }}
-        run: |
-          CFG=/tmp/pr-review/config.json
-          [ -f "$CFG" ] || echo '{}' > "$CFG"
-          jq --argjson sw "$ENABLE_SIDECAR" --argjson hd "$ENABLE_DEDUP" \
-             '.enable_sidecar_write = $sw | .enable_history_dedup = $hd' \
-             "$CFG" > "$CFG.tmp" && mv "$CFG.tmp" "$CFG"
-
-      # History dedup is invoked inside the validator (Step 3b in validator.md),
-      # after intersect-findings.sh writes findings.json and before the post step.
-      # Running it here would be a no-op because findings.json does not yet exist.
-
       - name: Validate (defender pass + intersect + post)
         uses: howarewoo/woo-review@v0.1.0
         with:
@@ -262,29 +236,3 @@ jobs:
           path: /tmp/pr-review/validator-metrics.json
           retention-days: 7
           if-no-files-found: ignore
-
-  # Sidecar write is its own job (issue #33) so `contents: write` does not
-  # leak to the validator step (which runs an LLM against untrusted PR
-  # content). Gated on `inputs.enable_sidecar_write` — when the flag is off
-  # this job is skipped entirely and no elevated permission is granted.
-  sidecar-write:
-    needs: [detect, validate]
-    if: inputs.enable_sidecar_write == 'true' && needs.validate.result == 'success'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: read
-    env:
-      PR_NUMBER: ${{ github.event.pull_request.number }}
-      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-    steps:
-      # Check out the PR head branch into the default workspace — the script
-      # commits .woo-review/dismissed.json and pushes back to that branch.
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-      - uses: howarewoo/woo-review@v0.1.0
-        with:
-          mode: sidecar-write
-          enable_sidecar_write: ${{ inputs.enable_sidecar_write }}

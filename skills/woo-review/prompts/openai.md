@@ -55,14 +55,6 @@ For each angle listed in `/tmp/pr-review/angles.txt`, in order (× each chunk wh
 2. Execute the angle prompt against the angle's diff (full or chunk-specific). For `react` run `npx -y react-doctor@$REACT_DOCTOR_VERSION --diff $BASE_REF --offline`.
 3. Write the angle's findings to `/tmp/pr-review/findings.<angle>.json` (or `findings.<angle>.<chunk_id>.json` in chunked mode) — JSON array conforming to the schema in `_header.md`.
 
-- Every finding MUST include `semantic_key` (kebab-case
-  `<angle>/<issue-type>`, ≤40 chars, from the angle prompt's enum) and
-  `code_anchor` (first 12 hex chars of `shasum -a 1` over the trimmed
-  concatenation of the 3 lines before + the finding line + the 3 lines
-  after, taken from the post-PR diff). These two fields form the stable
-  identity used by `dedup-against-history.sh`.
-  Drop a finding rather than fabricate either field.
-
 Stay within each angle's scope; do not let `bugs` flag a design issue or vice versa. `merge-findings.sh` (Phase 3) handles within-angle dedup across chunks.
 
 **Retry-once recovery.** Angle iterations can be cut short by tool-stream errors or turn-limit interrupts and leave no findings file. After the loop finishes, scan `/tmp/pr-review/angles.txt` (× `chunks.txt` when chunked) and check that each expected `findings.<angle>.json` (or `findings.<angle>.<chunk_id>.json`) exists and parses as a JSON array via `jq -e 'type == "array"'`. For any path that fails the check, re-run THAT angle iteration ONCE. Cap is one retry per `(angle, chunk)` pair; if the retry also fails, leave the file as-is and proceed to Phase 3 — the merge step recovers malformed JSON, and missing files just mean the angle produced no findings.

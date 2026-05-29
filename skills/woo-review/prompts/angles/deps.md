@@ -45,13 +45,3 @@ tier: fast
 
 **Output.** Write findings as a JSON array to `/tmp/pr-review/findings.deps.json` using the schema in `_header.md`. Each finding gets `"angle": "deps"` and MUST populate `title` (bold headline ≤60 chars), `description` (the drift / risk + concrete signal from the diff, no fix), `fix` (pin / remove / move / verify recommendation in prose), and `fix_type`. Set `fix_type: "suggestion"` only when a ≤10-line single-file drop-in replacement at `line` is safe — and populate `suggestion` accordingly. Otherwise set `fix_type: "prose"` with `suggestion: null`. See `_header.md` for the full rule.
 
-## `semantic_key` values
-
-Use one of these values when emitting findings (or coin a new kebab-case
-value following the same naming style):
-
-- `deps/unpinned-version`
-- `deps/supply-chain-risk`
-- `deps/license-conflict`
-- `deps/abandoned-package`
-- `deps/unknown` — fall-back when no enum value fits

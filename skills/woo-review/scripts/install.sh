@@ -46,9 +46,4 @@ echo "🤖 Checking for dependent AI skills..."
 # we simply suggest the user ensures they are installed.
 echo "Tip: Ensure you have run 'npx skills add pbakaus/impeccable' and 'npx skills add coreyhaines31/seo-audit'."
 
-# 6. Register the post-session sidecar Stop hook (runs outside the LLM scope).
-echo "🪝 Registering post-session sidecar write hook..."
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-bash "$SCRIPT_DIR/register-hook.sh"
-
 echo "🎉 All dependencies are ready!"

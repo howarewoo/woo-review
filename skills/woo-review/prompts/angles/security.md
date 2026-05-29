@@ -49,16 +49,3 @@ Filename pattern: `<language>-<framework>-<stack>-security.md`, with `<language>
 
 **Output.** Write findings as a JSON array to `/tmp/pr-review/findings.security.json` using the schema in `_header.md`. Each finding gets `"angle": "security"` and MUST populate `title` (bold headline ≤60 chars), `description` (issue + exploit path, no fix), `fix` (mitigation in prose), and `fix_type`. Set `fix_type: "suggestion"` only when a ≤10-line single-file drop-in replacement at `line` is safe — and populate `suggestion` accordingly. Otherwise set `fix_type: "prose"` with `suggestion: null`. See `_header.md` for the full rule.
 
-## `semantic_key` values
-
-Use one of these values when emitting findings (or coin a new kebab-case
-value following the same naming style):
-
-- `security/sql-injection-string-concat`
-- `security/xss-unescaped-output`
-- `security/ssrf-unsafe-url`
-- `security/auth-bypass`
-- `security/weak-crypto`
-- `security/secret-in-code`
-- `security/csrf-missing-token`
-- `security/unknown` — fall-back when no enum value fits

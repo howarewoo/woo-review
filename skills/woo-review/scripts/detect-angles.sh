@@ -73,7 +73,7 @@ if [ ! -f "$META" ] || [ ! -f "$DIFF" ]; then
   exit 1
 fi
 
-# Prefer ignore-filtered artifacts when prefetch.sh produced them (.woo-review.yml
+# Prefer ignore-filtered artifacts when prefetch.sh produced them (.woo-review/config.yml
 # ignore[] was set). Falls back to the unfiltered originals.
 if [ -f "$OUTDIR/diff.filtered.txt" ]; then
   DIFF="$OUTDIR/diff.filtered.txt"

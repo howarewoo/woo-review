@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# Loads .woo-review.yml from the consumer repo root and emits canonical JSON
-# to /tmp/pr-review/config.json. Missing file -> empty {} (no regression).
+# Loads .woo-review/config.yml from the consumer repo and emits canonical JSON
+# to /tmp/pr-review/config.json. Missing file -> defaults (severity_floor=high).
 # Invalid YAML or invalid schema -> loud GitHub-style ::error annotation and
 # non-zero exit (per issue #11 acceptance bullet 4).
+#
+# Noise control: severity_floor defaults to "high" so only high-priority
+# findings surface unless the consumer widens it (low | medium) in config.yml.
 #
 # Schema (all keys optional):
 #   angles.force        list[str] subset of angle enum
@@ -37,11 +40,11 @@ OUTDIR="${OUTDIR:-/tmp/pr-review}"
 mkdir -p "$OUTDIR"
 
 ROOT="${GITHUB_WORKSPACE:-$(pwd)}"
-CFG_PATH="$ROOT/.woo-review.yml"
+CFG_PATH="$ROOT/.woo-review/config.yml"
 
 if [ ! -f "$CFG_PATH" ]; then
-  echo '{}' > "$OUTDIR/config.json"
-  echo "load-config: no .woo-review.yml at $CFG_PATH, using defaults"
+  echo '{"severity_floor":"high"}' > "$OUTDIR/config.json"
+  echo "load-config: no .woo-review/config.yml at $CFG_PATH, using defaults (severity_floor=high)"
   exit 0
 fi
 
@@ -57,7 +60,7 @@ try:
     import yaml
 except ImportError as exc:
     sys.stderr.write(
-        "::error file=.woo-review.yml::PyYAML not installed in this environment "
+        "::error file=.woo-review/config.yml::PyYAML not installed in this environment "
         "(pip install pyyaml). Cannot parse config: {}\n".format(exc)
     )
     sys.exit(2)
@@ -80,10 +83,10 @@ def loud(msg, mark=None):
         line = getattr(mark, "line", 0) + 1
         col = getattr(mark, "column", 0) + 1
         sys.stderr.write(
-            "::error file=.woo-review.yml,line={},col={}::{}\n".format(line, col, msg)
+            "::error file=.woo-review/config.yml,line={},col={}::{}\n".format(line, col, msg)
         )
     else:
-        sys.stderr.write("::error file=.woo-review.yml::{}\n".format(msg))
+        sys.stderr.write("::error file=.woo-review/config.yml::{}\n".format(msg))
     sys.exit(1)
 
 
@@ -107,8 +110,8 @@ except yaml.YAMLError as exc:
 if raw is None:
     # Empty file is equivalent to defaults.
     with open(dst, "w") as fh:
-        json.dump({}, fh)
-    print("load-config: .woo-review.yml is empty, using defaults")
+        json.dump({"severity_floor": "high"}, fh)
+    print("load-config: .woo-review/config.yml is empty, using defaults (severity_floor=high)")
     sys.exit(0)
 
 if not isinstance(raw, dict):
@@ -199,9 +202,13 @@ if "models" in raw:
             loud("models.{} must be a non-empty string".format(tier))
     out["models"] = {k: v.strip() for k, v in models.items()}
 
+# Noise control default: only high-priority findings surface unless the
+# consumer explicitly widens the floor in config.yml.
+out.setdefault("severity_floor", "high")
+
 with open(dst, "w") as fh:
     json.dump(out, fh, indent=2, sort_keys=True)
     fh.write("\n")
 
-print("load-config: parsed .woo-review.yml -> {} keys: {}".format(len(out), ", ".join(sorted(out.keys())) or "(empty)"))
+print("load-config: parsed .woo-review/config.yml -> {} keys: {}".format(len(out), ", ".join(sorted(out.keys())) or "(empty)"))
 PY
