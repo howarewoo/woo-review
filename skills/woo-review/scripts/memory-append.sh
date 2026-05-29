@@ -26,13 +26,13 @@ mkdir -p "$(dirname "$MEMORY_FILE")"
 touch "$MEMORY_FILE"
 
 # Skip if an existing bullet normalizes to the same text.
-while IFS= read -r line; do
+while IFS= read -r line || [ -n "$line" ]; do
   case "$line" in
     "- "*) existing="${line#- }" ;;
     *) continue ;;
   esac
   if [ "$(norm "$existing")" = "$NEW_NORM" ]; then
-    echo "memory-append: already present, skipping"
+    echo "memory-append: already present, skipping" >&2
     exit 0
   fi
 done < "$MEMORY_FILE"

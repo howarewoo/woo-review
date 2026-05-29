@@ -28,4 +28,14 @@ LEARNING="Generated *.pb.go files are intentional; do not flag their style" bash
 total=$(grep -c '^- ' .woo-review/memory.md)
 [ "$total" = "2" ] || { echo "FAIL: expected 2 bullets, got $total"; exit 1; }
 
+# --- Whitespace-normalized dedup: extra spaces must still dedup ---
+LEARNING="Per-call env-threshold parse  intentionally falls back  to a default; do not flag the missing guard" bash "$SCRIPT"
+total_ws=$(grep -c '^- ' .woo-review/memory.md)
+[ "$total_ws" = "2" ] || { echo "FAIL: whitespace-norm dedup added a bullet, total=$total_ws"; exit 1; }
+
+# --- MEMORY_FILE override: writes to a custom path + creates parent dir ---
+LEARNING="custom path learning" MEMORY_FILE="$WORK/nested/custom-mem.md" bash "$SCRIPT"
+[ -f "$WORK/nested/custom-mem.md" ] || { echo "FAIL: MEMORY_FILE override did not create file"; exit 1; }
+grep -qF "custom path learning" "$WORK/nested/custom-mem.md" || { echo "FAIL: learning not written to custom path"; exit 1; }
+
 echo "PASS memory-append.test.sh"
