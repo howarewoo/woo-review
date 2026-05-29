@@ -100,6 +100,24 @@ export GITHUB_REPOSITORY
 
 shard_for() { printf '%s' "$1" | shasum -a 1 | cut -c1; }
 
+migrate_legacy() {
+  local legacy=".woo-review/dismissed.json"
+  [ -f "$legacy" ] || return 0
+  if ! jq empty "$legacy" 2>/dev/null; then
+    echo "sidecar-write: legacy $legacy malformed; leaving in place"
+    return 0
+  fi
+  echo "sidecar-write: migrating $legacy → sharded JSONL"
+  jq -c '.[]' "$legacy" | while IFS= read -r LN; do
+    [ -z "$LN" ] && continue
+    F=$(printf '%s' "$LN" | jq -r '.file // empty')
+    [ -z "$F" ] && continue
+    SH=$(shard_for "$F")
+    printf '%s\n' "$LN" >> ".woo-review/dismissed-$SH.jsonl"
+  done
+  git rm -q "$legacy" 2>/dev/null || rm -f "$legacy"
+}
+
 if [ -z "$PR_NUMBER" ] || [ -z "$HEAD_SHA" ]; then
   echo "sidecar-write: PR_NUMBER or HEAD_SHA missing; skipping"
   exit 0
@@ -154,11 +172,24 @@ NEW_ENTRIES=$(printf '%s' "$RESOLVED" | jq -c --arg pr "$PR_NUMBER" --arg now "$
       } ]')
 
 NEW_COUNT=$(printf '%s' "$NEW_ENTRIES" | jq length)
-if [ "$NEW_COUNT" -eq 0 ]; then
-  echo "sidecar-write: no newly-resolved threads"; exit 0
-fi
-
 mkdir -p .woo-review
+migrate_legacy
+if [ "$NEW_COUNT" -eq 0 ]; then
+  echo "sidecar-write: no newly-resolved threads"
+  # Migration may have produced changes even with zero new entries — flush.
+  if ! git diff --quiet -- .woo-review/ 2>/dev/null; then
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    bash "$SCRIPT_DIR/install-gitattributes.sh" || echo "sidecar-write: .gitattributes install failed; continuing"
+    git config --local user.name  "${WOO_REVIEW_BOT_NAME:-woo-review[bot]}"
+    git config --local user.email "${WOO_REVIEW_BOT_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
+    git add .gitattributes 2>/dev/null || true
+    git add .woo-review/ || true
+    git commit -m "chore(woo-review): migrate legacy sidecar to sharded JSONL" \
+      && (git push || (git pull --rebase && git push) || echo "sidecar-write: migration push failed; skipping") \
+      || echo "sidecar-write: migration commit failed; skipping"
+  fi
+  exit 0
+fi
 
 # --- group by shard and append (with in-shard dedup) ----------------------
 WRITTEN=0
@@ -218,6 +249,9 @@ fi
 git config --local user.name  "${WOO_REVIEW_BOT_NAME:-woo-review[bot]}"
 git config --local user.email "${WOO_REVIEW_BOT_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+bash "$SCRIPT_DIR/install-gitattributes.sh" || echo "sidecar-write: .gitattributes install failed; continuing"
+git add .gitattributes 2>/dev/null || true
 git add .woo-review/dismissed-*.jsonl || { echo "sidecar-write: git add failed; skipping"; exit 0; }
 if git diff --cached --quiet; then
   echo "sidecar-write: nothing new to commit"; exit 0
