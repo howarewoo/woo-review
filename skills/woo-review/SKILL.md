@@ -400,7 +400,7 @@ ensures that path is gitignored — the aggregate is local data, never committed
 (cross-host aggregation is the job of the opt-in central sink, a separate feature).
 
 ```bash
-bash scripts/metrics-fold.sh
+bash "$WOO_REVIEW_ACTION_PATH/scripts/metrics-fold.sh"
 ```
 
 This is a no-op when `metrics` is off or no per-run record exists. As with memory, the
