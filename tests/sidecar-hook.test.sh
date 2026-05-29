@@ -103,5 +103,19 @@ expect "D: disabled → no write" \
   '[ "$(jq length "$REPO/.woo-review/dismissed.json" 2>/dev/null || echo 0)" -eq 0 ]'
 expect "D: disabled still consumes sentinel (no leak)" '[ ! -f "$OUT/sidecar-pending" ]'
 
+# ---- case D-local: non-CI, sentinel present + repo matches + WOO_REVIEW_DISABLE_GIT_WRITE=1
+# → no write, sentinel STILL consumed. The local trap (registered before the gate)
+# must consume the sentinel even when the env kill-switch short-circuits the write.
+# case D covers the config flag; this covers the env flag on the same local path.
+REPO="$WORK/d-local"; setup_repo "$REPO"
+OUT="$WORK/out-d-local"; mkdir -p "$OUT"; write_ctx "$OUT" "$(git -C "$REPO" rev-parse --show-toplevel)"
+touch "$OUT/sidecar-pending"
+( cd "$REPO"
+  unset PR_NUMBER HEAD_SHA GITHUB_REPOSITORY GITHUB_ACTIONS 2>/dev/null || true
+  OUTDIR="$OUT" WOO_REVIEW_DISABLE_GIT_WRITE=1 WOO_REVIEW_FAKE_RESOLVED_THREADS_JSON="$FAKE" bash "$SCRIPT" )
+expect "D-local: env-disabled → no write" \
+  '[ "$(jq length "$REPO/.woo-review/dismissed.json" 2>/dev/null || echo 0)" -eq 0 ]'
+expect "D-local: env-disabled still consumes sentinel (no leak)" '[ ! -f "$OUT/sidecar-pending" ]'
+
 echo "----"; echo "Results: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1

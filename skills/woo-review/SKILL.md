@@ -87,6 +87,23 @@ Workers MUST emit two additional fields on every finding (defined in the angle p
 
 After the review POST, `sidecar-write.sh` reads any threads that became resolved during this run, appends them to the sidecar, and commits the updated `.woo-review/dismissed.json` back to the consumer repo via the bot token. This write is gated on the `enable_sidecar_write` config flag (default `true`). In the CI extension the script runs in a *separate, permission-isolated* job that holds `contents: write` — the validator job (which runs the LLM against untrusted PR content) only holds `contents: read`, so an LLM compromise cannot pivot to repo-write capability. On local hosts the same isolation holds: the skill session never calls `sidecar-write.sh` itself. Instead it drops a `sidecar-pending` sentinel after the review POST, and a host-level **post-session hook** — registered in `.claude/settings.local.json` by `woo-review install` — runs the script once the session ends. The hook no-ops unless the sentinel is present and the current repo matches the reviewed one (`review-context.json:repo_path`).
 
+#### Host-specific hook setup
+
+`woo-review install` auto-registers the post-session hook only on **Claude Code** (it writes a `Stop` hook to `.claude/settings.local.json`). On other hosts it prints the command to wire manually instead of registering it. To complete local-sidecar setup on a non-Claude host, register this command as a **post-session / post-task hook** using your host's mechanism:
+
+```bash
+bash "$WOO_REVIEW_ACTION_PATH/scripts/sidecar-write.sh"
+```
+
+| Host | Where to register |
+|---|---|
+| **Claude Code** | Automatic — `Stop` hook in `.claude/settings.local.json` (run `woo-review install` once per repo). |
+| **Cursor** | A background-agent post-task hook; the exact mechanism depends on Cursor's extension/agent API. |
+| **opencode** | A session-end hook in the OpenCode runtime's hook configuration. |
+| **Gemini CLI** | A post-run shell step (Gemini CLI has no native session-end hook today — wire it into your invoking wrapper/script). |
+
+The hook is safe to run after every session: it no-ops unless the `sidecar-pending` sentinel is present **and** the current repo matches `review-context.json:repo_path`. Running the LLM step never touches repo-write — only this out-of-band hook does (PR #33 contract).
+
 ### Event-floor rule change
 
 The posting stage now uses `prior-findings.json` differently from earlier releases:
