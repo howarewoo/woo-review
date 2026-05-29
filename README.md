@@ -59,7 +59,13 @@ flowchart TD
     C -->|*.tsx/css/vue/svelte| D4[design]
     C -->|*.tsx/jsx + react dep| D6[react]
     C -->|*.sql, migrations/, SQL DDL/RLS tokens| D7[database]
-    D1 & D2 & D3 & D3a & D4 & D6 & D7 --> E[Parallel sub-agents<br/>one per angle]
+    D1 --> E[Parallel sub-agents<br/>one per angle]
+    D2 --> E
+    D3 --> E
+    D3a --> E
+    D4 --> E
+    D6 --> E
+    D7 --> E
     E --> F[Skeptical Validator<br/>merge duplicate findings · defense-attorney · severity downgrade only]
     F --> F2[Memory filter<br/>drop findings already recorded as<br/>known/accepted in .woo-review/memory.md]
     F2 --> G{PR# given?}
@@ -146,7 +152,8 @@ The CI pipeline mirrors the skill's swarm 1:1 — detection job → matrix of an
 | `mode` | `full` | `full`, `detect`, `review`, `validate`. Reusable workflow handles wiring. |
 | `disable_angles` | `""` | CSV of optional angles to skip (e.g. `seo,aeo,design,react,database`). `bugs` and `security` are non-negotiable. |
 | `max_turns` | `30` | Agent loop cap (Anthropic; other providers use their equivalent). |
-| `severity_floor` | `high` | Minimum severity to surface. Set to `low` or `medium` in `.woo-review/config.yml` to widen the net. |
+
+> Review tuning that is **not** an action input — `severity_floor`, `angles.force`/`skip`, `ignore`, `authors_skip`, `disable_adversarial`, `chunking`, per-tier `models` — lives in the consumer repo's `.woo-review/config.yml`, not here. See the [Per-repo Configuration](skills/woo-review/SKILL.md#per-repo-configuration-woo-reviewconfigyml) section of the skill for the full schema.
 
 ---
 
