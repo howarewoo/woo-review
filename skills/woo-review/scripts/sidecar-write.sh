@@ -101,14 +101,27 @@ fi
 
 NOW=$(date -u +%FT%TZ)
 NEW_ENTRIES=$(printf '%s' "$RESOLVED" | jq -c --arg pr "$PR_NUMBER" --arg now "$NOW" '
+  # Marker format: <!-- woo-review:sk=<sk> ca=<ca> -->
+  # sk whitelist: [a-z0-9/_-]{1,40}; ca whitelist: [a-f0-9]{12}.
+  # Both must match in a single capture — partial/malformed → drop the marker
+  # entirely so we fall through to placeholder values. Mirrors the renderer in
+  # prompts/_header.md, which also validates as a single unit.
+  # capture returns a single object on first match, errors on no-match. `?`
+  # swallows the error → null; the `// {…}` fallback supplies the placeholder pair.
+  def parse_marker(body):
+    ((body // "")
+     | capture("<!-- woo-review:sk=(?<sk>[a-z0-9/_-]{1,40}) ca=(?<ca>[a-f0-9]{12}) -->")?)
+    // {sk: "unknown/unknown", ca: "unknown000000"};
   [ .data.repository.pullRequest.reviewThreads.nodes[]?
     | select(.isResolved == true)
     | select(.path != null)
+    | (.comments.nodes[0].body // "") as $b
+    | (parse_marker($b)) as $m
     | { file: .path,
         line: (.line // 1),
-        title: (((.comments.nodes[0].body // "") | split("\n")[0])[0:60]),
-        semantic_key: "unknown/unknown",
-        code_anchor: "unknown000000",
+        title: (($b | split("\n")[0])[0:60]),
+        semantic_key: ($m.sk // "unknown/unknown"),
+        code_anchor:  ($m.ca // "unknown000000"),
         resolved_at: $now,
         pr_number: ($pr | tonumber)
       } ]')
