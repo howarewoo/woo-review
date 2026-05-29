@@ -656,19 +656,19 @@ OUTDIR="$GUARD_OUT" PR_NUMBER="" GITHUB_ACTIONS="true" bash "$SCRIPT" >/dev/null
 if [ -f "$GUARD_OUT/findings.bugs.json" ]; then
   echo "ok   guard-preserves-inflight"
 else
-  echo "FAIL guard-preserves-inflight: findings.bugs.json was wiped"; exit 1
+  echo "FAIL guard-preserves-inflight: findings.bugs.json was wiped"; fail=1
 fi
 if grep -qE "refusing.*rm -rf|in-flight findings" "$GUARD_ERR"; then
   echo "ok   guard-warns"
 else
-  echo "FAIL guard-warns: no warning emitted"; exit 1
+  echo "FAIL guard-warns: no warning emitted"; fail=1
 fi
 
 # NOTE: relies on the preserve-test above having left findings.bugs.json in
 # $GUARD_OUT — this proves WOO_REVIEW_FRESH=1 wipes a populated dir. Keep ordered.
 WOO_REVIEW_FRESH=1 OUTDIR="$GUARD_OUT" PR_NUMBER="" GITHUB_ACTIONS="true" bash "$SCRIPT" >/dev/null 2>/dev/null || true
 if [ -f "$GUARD_OUT/findings.bugs.json" ]; then
-  echo "FAIL guard-fresh-force: file survived WOO_REVIEW_FRESH=1"; exit 1
+  echo "FAIL guard-fresh-force: file survived WOO_REVIEW_FRESH=1"; fail=1
 else
   echo "ok   guard-fresh-force"
 fi
