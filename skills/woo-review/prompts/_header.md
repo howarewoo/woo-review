@@ -262,6 +262,17 @@ for f in findings:
     if footer_parts:
         body += "\n\n<sub>— " + " · ".join(footer_parts) + "</sub>"
 
+    # Hidden dedup marker. sidecar-write.sh recovers semantic_key/code_anchor
+    # from this when an author later resolves the thread — the original
+    # findings.<angle>.json is gone by then, so the comment body is the only
+    # durable carrier of the dedup identity (issue #39). Embed only when both
+    # values match their safe shapes (sk = kebab <angle>/<type>, ca = hex) so a
+    # malformed field cannot break out of the HTML comment or inject markup.
+    sk = (f.get("semantic_key") or "").strip()
+    ca = (f.get("code_anchor") or "").strip()
+    if re.match(r"^[a-z0-9][a-z0-9/_-]{0,39}$", sk) and re.match(r"^[0-9a-f]{6,40}$", ca):
+        body += f"\n\n<!-- woo-review:sk={sk} ca={ca} -->"
+
     comments.append({
         "path": f["file"],
         "line": int(f["line"]),

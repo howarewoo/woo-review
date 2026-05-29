@@ -74,6 +74,33 @@ expect "E: env disable → no entries written" \
   '[ "$(jq length .woo-review/dismissed.json)" -eq 0 ]'
 unset WOO_REVIEW_DISABLE_GIT_WRITE
 
+# ---- case F: marker in comment body → real sk/ca extracted (issue #39)
+echo '[]' > .woo-review/dismissed.json
+git add .woo-review/dismissed.json && git commit -q --allow-empty -m reset-f
+echo '{"enable_sidecar_write": true}' > "$OUTDIR/config.json"
+export WOO_REVIEW_FAKE_RESOLVED_THREADS_JSON='{
+  "data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
+    {"isResolved":true,"path":"c.ts","line":3,"comments":{"nodes":[{"body":"**Null deref**\n\nfoo\n\n<!-- woo-review:sk=bugs/null-deref ca=a1b2c3d4e5f6 -->","author":{"login":"a"}}]}}
+  ]}}}}}'
+bash "$SCRIPT"
+expect "F: semantic_key parsed from marker" \
+  '[ "$(jq -r ".[] | select(.file==\"c.ts\") | .semantic_key" .woo-review/dismissed.json)" = "bugs/null-deref" ]'
+expect "F: code_anchor parsed from marker" \
+  '[ "$(jq -r ".[] | select(.file==\"c.ts\") | .code_anchor" .woo-review/dismissed.json)" = "a1b2c3d4e5f6" ]'
+expect "F: title still the first body line (not the marker)" \
+  '[ "$(jq -r ".[] | select(.file==\"c.ts\") | .title" .woo-review/dismissed.json)" = "**Null deref**" ]'
+
+# ---- case G: no marker → placeholder fallback (back-compat with old comments)
+export WOO_REVIEW_FAKE_RESOLVED_THREADS_JSON='{
+  "data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
+    {"isResolved":true,"path":"d.ts","line":4,"comments":{"nodes":[{"body":"old comment no marker","author":{"login":"a"}}]}}
+  ]}}}}}'
+bash "$SCRIPT"
+expect "G: fallback placeholder when no marker (semantic_key)" \
+  '[ "$(jq -r ".[] | select(.file==\"d.ts\") | .semantic_key" .woo-review/dismissed.json)" = "unknown/unknown" ]'
+expect "G: fallback placeholder when no marker (code_anchor)" \
+  '[ "$(jq -r ".[] | select(.file==\"d.ts\") | .code_anchor" .woo-review/dismissed.json)" = "unknown000000" ]'
+
 echo "----"
 echo "Results: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1

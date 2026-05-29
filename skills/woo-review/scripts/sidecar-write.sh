@@ -11,17 +11,15 @@
 #
 # Failures (no perm, push race, malformed) → log + exit 0. Never fail the run.
 #
-# NOTE: semantic_key and code_anchor are written as placeholder values
-# ("unknown/unknown" and "unknown000000") because the GitHub reviewThreads
-# GraphQL query only surfaces file + line + comment body — not the original
-# finding's semantic_key/code_anchor. A future improvement would parse those
-# out of the bot review body, where they are embedded as
-# <!-- woo-review:sk=<key> --> / <!-- woo-review:ca=<anchor> --> inline
-# markers (similar to how prefetch.sh reads the <!-- woo-review:sha=... -->
-# watermark). prefetch.sh currently also doesn't extract those markers from
-# prior-findings.json entries, so this limitation is shared across the board.
-# The dedup step still benefits from these entries via the (file, line, title)
-# tuple even when the dedup keys are placeholders.
+# semantic_key and code_anchor are recovered from the hidden
+# <!-- woo-review:sk=<key> ca=<anchor> --> marker the body builder embeds in
+# each inline comment (see prompts/_header.md). The reviewThreads GraphQL query
+# only surfaces file + line + comment body, and by the time this hook runs the
+# original findings.<angle>.json is gone — so the comment body is the only
+# durable carrier of the dedup identity. Comments posted before markers existed
+# fall back to the legacy placeholders ("unknown/unknown" / "unknown000000"),
+# which still dedup via the (file, line) tuple. prefetch.sh does not yet read
+# these markers off prior-findings.json entries (tracked separately).
 
 set -euo pipefail
 
@@ -109,11 +107,18 @@ NEW_ENTRIES=$(printf '%s' "$RESOLVED" | jq --arg pr "$PR_NUMBER" --arg now "$(da
   [ .data.repository.pullRequest.reviewThreads.nodes[]?
     | select(.isResolved == true)
     | select(.path != null)
+    # Recover the dedup keys from the hidden marker the body builder embeds in
+    # each inline comment (<!-- woo-review:sk=<key> ca=<anchor> -->). The marker
+    # is the durable carrier: by the time this hook runs the original
+    # findings.<angle>.json is long gone. Comments posted before markers existed
+    # have no match → fall back to the legacy placeholders.
+    | (.comments.nodes[0].body // "") as $body
+    | (($body | capture("woo-review:sk=(?<sk>[a-z0-9][a-z0-9/_-]*)\\s+ca=(?<ca>[0-9a-f]+)"))? // {}) as $m
     | { file: .path,
         line: (.line // 1),
-        title: (((.comments.nodes[0].body // "") | split("\n")[0])[0:60]),
-        semantic_key: "unknown/unknown",
-        code_anchor: "unknown000000",
+        title: (($body | split("\n")[0])[0:60]),
+        semantic_key: ($m.sk // "unknown/unknown"),
+        code_anchor: ($m.ca // "unknown000000"),
         resolved_at: $now,
         pr_number: ($pr | tonumber)
       } ]')
