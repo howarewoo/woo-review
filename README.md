@@ -15,7 +15,7 @@ The companion GitHub Action is an **extension** of the skill: same prompts, same
 - **History dedup** — stable `(file, code_anchor, semantic_key)` identity survives line shifts; drops findings already posted on the PR or dismissed in the sidecar.
 - **LLM tiebreak** — Sonnet-class adjudicator handles ambiguous near-matches (`|Δline| ≤ 10`, one of anchor/sem_key matches), batched and cost-capped, fails open.
 - **Rule recommendations** — recurring `semantic_key` clusters become a "Suggested rules for AGENT.md / CLAUDE.md" section in the review body, so coding agents learn from repeated misses.
-- **Sidecar persistence** — newly-resolved threads land in `.woo-review/dismissed.json` via a bot commit, so dedup signal survives across PRs.
+- **Sidecar persistence** — newly-resolved threads land in 16 hash-sharded `.woo-review/dismissed-<0-f>.jsonl` files via a bot commit, so dedup signal survives across PRs. `merge=union` and TTL pruning keep concurrent appends conflict-free.
 - **Host-agnostic** — the skill runs under Claude Code, Cursor, Gemini CLI, opencode, or any host that can spawn sub-agents.
 - **Multi-provider** — Anthropic, OpenAI, Google, and OpenRouter all work with the same prompts; provider auto-detected from the secret you supply.
 - **CI extension** — same prompts, same angles, same validator, packaged as a reusable GitHub Actions workflow.
@@ -48,7 +48,7 @@ When you invoke `/woo-review` the host agent:
 3. **Spawns one sub-agent per angle in parallel** (Claude Code Task, Cursor subagents, Gemini CLI sequential loop fallback — host-agnostic). Each finding carries `semantic_key` + `code_anchor` for stable identity across runs.
 4. **Validates** all findings through a Skeptical Validator pass (dedupe, defense-attorney audit, severity downgrade only).
 5. **Dedupes against history** — drops findings whose `(file, code_anchor, semantic_key)` matches a prior thread or sidecar entry; LLM tiebreak handles ambiguous near-matches. Recurring `semantic_key` clusters trigger a short "Suggested rules for AGENT.md / CLAUDE.md" section in the review body.
-6. **Reports** locally OR posts one batched GitHub Review when a PR# was given. After posting, newly-resolved threads are recorded to `.woo-review/dismissed.json` (when `enable_sidecar_write` is on).
+6. **Reports** locally OR posts one batched GitHub Review when a PR# was given. After posting, newly-resolved threads are recorded to the sharded `.woo-review/dismissed-<0-f>.jsonl` files (when `enable_sidecar_write` is on). A legacy `.woo-review/dismissed.json`, if present, is migrated into the shards on first write.
 
 ```mermaid
 flowchart TD
@@ -67,7 +67,7 @@ flowchart TD
     F2 --> G{PR# given?}
     G -->|no| H[Local report]
     G -->|yes| I[Batched GitHub Review<br/>event=REQUEST_CHANGES when blocking<br/>+ Suggested rules for AGENT.md / CLAUDE.md]
-    I --> J[Sidecar write<br/>append newly-resolved threads<br/>to .woo-review/dismissed.json<br/>via bot commit]
+    I --> J[Sidecar write<br/>append newly-resolved threads<br/>to .woo-review/dismissed-&lt;0-f&gt;.jsonl shards<br/>via bot commit]
 ```
 
 See [`skills/woo-review/SKILL.md`](./skills/woo-review/SKILL.md) for the full workflow contract.
@@ -150,7 +150,8 @@ The CI pipeline mirrors the skill's swarm 1:1 — detection job → matrix of an
 | `disable_angles` | `""` | CSV of optional angles to skip (e.g. `seo,aeo,design,react,database`). `bugs` and `security` are non-negotiable. |
 | `max_turns` | `30` | Agent loop cap (Anthropic; other providers use their equivalent). |
 | `enable_history_dedup` | `true` | Run `dedup-against-history.sh` between validator and posting. Set `false` to fall back to legacy `findings.json` consumption. |
-| `enable_sidecar_write` | `true` | After review POST, append newly-resolved threads to `.woo-review/dismissed.json` and commit via bot. Requires `contents: write`. |
+| `enable_sidecar_write` | `true` | After review POST, append newly-resolved threads to sharded `.woo-review/dismissed-<0-f>.jsonl` files and commit via bot. Requires `contents: write`. |
+| `sidecar_ttl_days` | `180` | Age cap in days for sidecar entries. Pruned opportunistically on shards a write touches; set `0` to disable. |
 
 ---
 
@@ -177,7 +178,7 @@ Every finding emits two fields used for stable identity across runs:
 - **Pass 1 (deterministic)** — drop any new finding whose `(file, code_anchor, semantic_key)` triple matches a prior PR thread or sidecar entry.
 - **Pass 2 (LLM tiebreak)** — for ambiguous cases (same file, |Δline| ≤ 10, exactly one of anchor/sem_key matches), one Sonnet call returns a keep/drop verdict. Batched 20 pairs/call, hard-capped at 10 calls/run. Fails open on any error.
 
-When `enable_sidecar_write: true`, the script also writes newly-resolved threads to `.woo-review/dismissed.json` via a bot commit so dedup signal survives across PRs. See [`skills/woo-review/SKILL.md`](./skills/woo-review/SKILL.md) under "History Dedup & Rule Recommendations" for the artifact lifecycle.
+When `enable_sidecar_write: true`, the script also writes newly-resolved threads to the sharded `.woo-review/dismissed-<0-f>.jsonl` files via a bot commit so dedup signal survives across PRs. Entries older than `sidecar_ttl_days` (default 180) are pruned opportunistically on shards a write touches. See [`skills/woo-review/SKILL.md`](./skills/woo-review/SKILL.md) under "History Dedup & Rule Recommendations" for the artifact lifecycle.
 
 ---
 

@@ -32,7 +32,7 @@ Every artifact you write under `$OUTDIR/findings.*.json` (default `/tmp/pr-revie
 - **Repository dismissal sidecar** (always present, may be `[]`):
   `/tmp/pr-review/sidecar-findings.json` — array of
   `{file, line, title, semantic_key, code_anchor, resolved_at, pr_number}`
-  loaded from `.woo-review/dismissed.json` at the consumer repo root.
+  merged from `.woo-review/dismissed-<0-f>.jsonl` shards (legacy `dismissed.json` still read during migration).
   Consumed by `dedup-against-history.sh`; angle workers MUST ignore this file.
 - **Chunk manifest** (optional, present only when the diff exceeds `chunking.max_loc`): `/tmp/pr-review/chunks.txt` (one chunk id per line) and `/tmp/pr-review/chunks.json` (manifest: `[{id, files, loc, diff_path, boundary}]`). Each chunk also has its own diff at `/tmp/pr-review/diff.chunk-<id>.txt`. When a worker is dispatched with a chunk id (env `CHUNK` non-empty), it MUST read the chunk-specific diff and write findings to `/tmp/pr-review/findings.<angle>.<chunk>.json`. In the GitHub Action this swap happens transparently — `diff.txt` is replaced with the chunk's diff before the worker runs, and the worker's output is renamed afterwards. When `chunks.txt` is absent, chunking did not activate and the diff fits a single worker (no overhead).
 
@@ -262,6 +262,16 @@ for f in findings:
     if footer_parts:
         body += "\n\n<sub>— " + " · ".join(footer_parts) + "</sub>"
 
+    # Sidecar marker — appended so sidecar-write.sh can parse the original
+    # semantic_key/code_anchor out of the comment body via GraphQL on the next
+    # run. Whitelist-validated: malformed/missing fields → marker omitted, no
+    # injection surface. Falls back to the existing placeholder behavior in
+    # sidecar-write.sh (unknown/unknown, unknown000000) when the marker is absent.
+    sk = (f.get("semantic_key") or "").strip()
+    ca = (f.get("code_anchor")  or "").strip()
+    if sk and ca and re.fullmatch(r"[a-z0-9/_-]{1,40}", sk) and re.fullmatch(r"[a-f0-9]{12}", ca):
+        body += f"\n<!-- woo-review:sk={sk} ca={ca} -->"
+
     comments.append({
         "path": f["file"],
         "line": int(f["line"]),
@@ -287,7 +297,7 @@ gh api "repos/${GITHUB_REPOSITORY}/pulls/$PR_NUMBER/reviews" \
 [ "${GITHUB_ACTIONS:-}" != "true" ] && touch "${OUTDIR:-/tmp/pr-review}/sidecar-pending" || true
 ```
 
-Sidecar writes (`.woo-review/dismissed.json`) run *outside* the LLM step. The
+Sidecar writes (`.woo-review/dismissed-<0-f>.jsonl` shards) run *outside* the LLM step. The
 CI action invokes `sidecar-write.sh` from a separate job with `contents: write`
 (gated on `enable_sidecar_write`); the validator/LLM job holds only
 `contents: read`. Local hosts MUST NOT invoke the script from the model's tool

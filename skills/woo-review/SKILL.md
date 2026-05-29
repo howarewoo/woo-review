@@ -83,9 +83,22 @@ Workers MUST emit two additional fields on every finding (defined in the angle p
 
 ### Sidecar lifecycle
 
-`prefetch.sh` loads `.woo-review/dismissed.json` from the consumer repo into `/tmp/pr-review/sidecar-findings.json` at the start of each run. This file accumulates resolved threads that authors have explicitly dismissed — it prevents re-surfacing issues the team has consciously accepted.
+`prefetch.sh` loads the sidecar from the consumer repo into `/tmp/pr-review/sidecar-findings.json` at the start of each run. This file accumulates resolved threads that authors have explicitly dismissed — it prevents re-surfacing issues the team has consciously accepted.
 
-After the review POST, `sidecar-write.sh` reads any threads that became resolved during this run, appends them to the sidecar, and commits the updated `.woo-review/dismissed.json` back to the consumer repo via the bot token. This write is gated on the `enable_sidecar_write` config flag (default `true`). In the CI extension the script runs in a *separate, permission-isolated* job that holds `contents: write` — the validator job (which runs the LLM against untrusted PR content) only holds `contents: read`, so an LLM compromise cannot pivot to repo-write capability. On local hosts the same isolation holds: the skill session never calls `sidecar-write.sh` itself. Instead it drops a `sidecar-pending` sentinel after the review POST, and a host-level **post-session hook** — registered in `.claude/settings.local.json` by `woo-review install` — runs the script once the session ends. The hook no-ops unless the sentinel is present and the current repo matches the reviewed one (`review-context.json:repo_path`).
+After the review POST, `sidecar-write.sh` reads any threads that became
+resolved on the PR and appends them — one JSON object per line — to one of
+16 hash-sharded files at `.woo-review/dismissed-<0-f>.jsonl`, where the
+shard is the first hex char of `sha1(file path)`. Sharding cuts merge-conflict
+surface ~16× for concurrent PRs; a `merge=union` rule in `.gitattributes`
+(installed automatically on first write) makes the remaining same-shard
+collisions resolve line-by-line without conflict. Entries older than
+`sidecar_ttl_days` (default 180) are pruned opportunistically — only on
+shards the current write touches. On first run after upgrade, any pre-existing
+`.woo-review/dismissed.json` is migrated into the shards and removed atomically
+in the same commit; the migration runs even when there are zero newly-resolved
+threads, so dormant repos still convert.
+
+This write is gated on the `enable_sidecar_write` config flag (default `true`). In the CI extension the script runs in a *separate, permission-isolated* job that holds `contents: write` — the validator job (which runs the LLM against untrusted PR content) only holds `contents: read`, so an LLM compromise cannot pivot to repo-write capability. On local hosts the same isolation holds: the skill session never calls `sidecar-write.sh` itself. Instead it drops a `sidecar-pending` sentinel after the review POST, and a host-level **post-session hook** — registered in `.claude/settings.local.json` by `woo-review install` — runs the script once the session ends. The hook no-ops unless the sentinel is present and the current repo matches the reviewed one (`review-context.json:repo_path`).
 
 #### Host-specific hook setup
 
@@ -121,6 +134,7 @@ When `findings.deduped.json ∪ sidecar-findings.json` contains ≥ `WOO_REVIEW_
 |---|---|---|---|
 | `enable_history_dedup` | `.woo-review.yml` boolean | `true` | Gates `dedup-against-history.sh`. When `false`, Stage 5 consumes `findings.json` directly (legacy path). |
 | `enable_sidecar_write` | `.woo-review.yml` boolean | `true` | Gates `sidecar-write.sh`. |
+| `sidecar_ttl_days` | `.woo-review.yml` integer | `180` | Age cap for sidecar entries. Pruned opportunistically on touched shards. Set `0` to disable pruning. |
 | `WOO_REVIEW_RULES_THRESHOLD` | env integer | `2` | Cluster size at which rule recommendations are drafted. Set to `0` to disable rule recs entirely. |
 
 ## Knowledge Aggregation
@@ -152,6 +166,7 @@ angles:
   force: [database]            # always run, even if not auto-detected
   skip:  [seo]                 # never run (bugs/security cannot be skipped)
 severity_floor: medium         # one of: low | medium | high; drops findings below the floor
+sidecar_ttl_days: 180          # age cap in days for sidecar entries; set 0 to disable pruning
 ignore:                        # fnmatch globs; ignored paths skip angle triggers + diff body
   - "**/*.generated.ts"
   - "migrations/*.sql"
@@ -214,7 +229,7 @@ export PR_NUMBER=<n>   # optional; prefetch.sh derives it from the branch when u
 bash "$WOO_REVIEW_ACTION_PATH/scripts/prefetch.sh"
 ```
 
-When prefetch resolves a PR number AND finds an open PR, it produces the full artifact tree (`diff.txt`, `meta.json`, `last_sha.txt`, `prior-findings.json`, `rules.md` when applicable, `sidecar-findings.json` when `.woo-review/dismissed.json` exists in the consumer repo). When no PR resolves, it emits `skip=true` — the host then falls back to local-diff mode below.
+When prefetch resolves a PR number AND finds an open PR, it produces the full artifact tree (`diff.txt`, `meta.json`, `last_sha.txt`, `prior-findings.json`, `rules.md` when applicable, `sidecar-findings.json` when any `.woo-review/dismissed-*.jsonl` shards or the legacy `dismissed.json` exist in the consumer repo). When no PR resolves, it emits `skip=true` — the host then falls back to local-diff mode below.
 
 **Artifact reference.** All paths are under `$OUTDIR` (default `/tmp/pr-review/`):
 
@@ -229,7 +244,7 @@ When prefetch resolves a PR number AND finds an open PR, it produces the full ar
 | `findings.<angle>.json` | angle workers | `merge-findings.sh` | Raw per-angle output |
 | `raw_findings.json` | `merge-findings.sh` | validator passes | Merged, chunk-collapsed findings |
 | `findings.json` | `intersect-findings.sh` | Stage 5, dedup script | Final validated set |
-| `sidecar-findings.json` | `prefetch.sh` (from `.woo-review/dismissed.json`) | dedup Pass 1 | Committed dismissals from past PRs; see *History Dedup* above |
+| `sidecar-findings.json` | `prefetch.sh` (from `.woo-review/dismissed-*.jsonl` + legacy `dismissed.json` fallback) | dedup Pass 1 | array of `{file, line, title, semantic_key, code_anchor, resolved_at, pr_number}`; merged across all 16 shards. |
 | `review-context.json` | `prefetch.sh` | `sidecar-write.sh` (local Stop hook) | PR handoff: `{pr_number, head_sha, repo, repo_path}`; read by the post-session hook to re-hydrate state when session env is absent. Local hosts only. |
 | `findings.deduped.json` | `dedup-against-history.sh` | Stage 5 posting | `findings.json` with history-matched entries removed |
 | `dedup-metrics.json` | `dedup-against-history.sh` | observability | `det_drops`, `llm_drops`, `pair_count` counters |

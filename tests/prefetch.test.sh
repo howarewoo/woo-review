@@ -582,6 +582,69 @@ SIDECAR_CONTENT=$(cat "$PREFETCH/sidecar-findings.json" 2>/dev/null || echo "MIS
 assert_eq "case20 sidecar-findings.json is []" "[]" "$SIDECAR_CONTENT"
 echo "ok   case20 sidecar missing -> sidecar-findings.json is []"
 
+# ---- SHARD_A: legacy-only — read dismissed.json as before
+reset
+unset GITHUB_ACTIONS || true
+rm -rf "$GITHUB_WORKSPACE/.woo-review"
+mkdir -p "$GITHUB_WORKSPACE/.woo-review"
+echo '[{"file":"a.ts","line":1,"semantic_key":"bugs/x","code_anchor":"a1b2c3d4e5f6","pr_number":1,"resolved_at":"2026-05-01T00:00:00Z","title":"t"}]' \
+  > "$GITHUB_WORKSPACE/.woo-review/dismissed.json"
+bash "$SCRIPT" > "$WORK/stdout" 2>&1 || { echo "FAIL SHARD_A (script error):"; sed 's/^/    /' "$WORK/stdout"; fail=1; }
+SHARD_A_LEN=$(jq -e 'length' "$PREFETCH/sidecar-findings.json" 2>/dev/null || echo "missing")
+assert_eq "SHARD_A: legacy entry present in sidecar-findings.json (length)" "1" "$SHARD_A_LEN"
+SHARD_A_KEY=$(jq -r '.[0].semantic_key' "$PREFETCH/sidecar-findings.json" 2>/dev/null || echo "missing")
+assert_eq "SHARD_A: legacy entry semantic_key" "bugs/x" "$SHARD_A_KEY"
+echo "ok   SHARD_A: legacy entry present in sidecar-findings.json"
+
+# ---- SHARD_B: shards-only — read all dismissed-<hex>.jsonl
+reset
+unset GITHUB_ACTIONS || true
+rm -rf "$GITHUB_WORKSPACE/.woo-review"
+mkdir -p "$GITHUB_WORKSPACE/.woo-review"
+echo '{"file":"a.ts","line":1,"semantic_key":"bugs/sa","code_anchor":"111111111111","pr_number":2,"resolved_at":"2026-05-02T00:00:00Z","title":"sa"}' \
+  > "$GITHUB_WORKSPACE/.woo-review/dismissed-3.jsonl"
+echo '{"file":"b.ts","line":2,"semantic_key":"bugs/sb","code_anchor":"222222222222","pr_number":3,"resolved_at":"2026-05-03T00:00:00Z","title":"sb"}' \
+  > "$GITHUB_WORKSPACE/.woo-review/dismissed-9.jsonl"
+bash "$SCRIPT" > "$WORK/stdout" 2>&1 || { echo "FAIL SHARD_B (script error):"; sed 's/^/    /' "$WORK/stdout"; fail=1; }
+SHARD_B_LEN=$(jq -e 'length' "$PREFETCH/sidecar-findings.json" 2>/dev/null || echo "missing")
+assert_eq "SHARD_B: both shard entries merged" "2" "$SHARD_B_LEN"
+echo "ok   SHARD_B: both shard entries merged"
+
+# ---- SHARD_C: mixed — shards + legacy file both contribute
+reset
+unset GITHUB_ACTIONS || true
+rm -rf "$GITHUB_WORKSPACE/.woo-review"
+mkdir -p "$GITHUB_WORKSPACE/.woo-review"
+echo '{"file":"a.ts","line":1,"semantic_key":"bugs/sa","code_anchor":"111111111111","pr_number":2,"resolved_at":"2026-05-02T00:00:00Z","title":"sa"}' \
+  > "$GITHUB_WORKSPACE/.woo-review/dismissed-3.jsonl"
+echo '{"file":"b.ts","line":2,"semantic_key":"bugs/sb","code_anchor":"222222222222","pr_number":3,"resolved_at":"2026-05-03T00:00:00Z","title":"sb"}' \
+  > "$GITHUB_WORKSPACE/.woo-review/dismissed-9.jsonl"
+echo '[{"file":"c.ts","line":3,"semantic_key":"bugs/lg","code_anchor":"333333333333","pr_number":4,"resolved_at":"2026-05-04T00:00:00Z","title":"lg"}]' \
+  > "$GITHUB_WORKSPACE/.woo-review/dismissed.json"
+bash "$SCRIPT" > "$WORK/stdout" 2>&1 || { echo "FAIL SHARD_C (script error):"; sed 's/^/    /' "$WORK/stdout"; fail=1; }
+SHARD_C_LEN=$(jq -e 'length' "$PREFETCH/sidecar-findings.json" 2>/dev/null || echo "missing")
+assert_eq "SHARD_C: legacy + shards merged" "3" "$SHARD_C_LEN"
+echo "ok   SHARD_C: legacy + shards merged"
+
+# ---- SHARD_D: combined size cap respected
+reset
+unset GITHUB_ACTIONS || true
+rm -rf "$GITHUB_WORKSPACE/.woo-review"
+mkdir -p "$GITHUB_WORKSPACE/.woo-review"
+export W="$GITHUB_WORKSPACE"
+python3 -c '
+import json, os
+e = {"file":"big.ts","line":1,"semantic_key":"bugs/big","code_anchor":"bbbbbbbbbbbb","pr_number":99,"resolved_at":"2026-05-01T00:00:00Z","title":"big"}
+line = json.dumps(e) + "\n"
+target = 5 * 1024 * 1024 + 1024
+with open(os.environ["W"] + "/.woo-review/dismissed-0.jsonl","w") as f:
+    while f.tell() < target: f.write(line)
+'
+bash "$SCRIPT" > "$WORK/stdout" 2>&1 || { echo "FAIL SHARD_D (script error):"; sed 's/^/    /' "$WORK/stdout"; fail=1; }
+SHARD_D_LEN=$(jq -e 'length' "$PREFETCH/sidecar-findings.json" 2>/dev/null || echo "missing")
+assert_eq "SHARD_D: oversized combined shards -> empty sidecar" "0" "$SHARD_D_LEN"
+echo "ok   SHARD_D: oversized combined shards -> empty sidecar"
+
 if [ "$fail" -ne 0 ]; then
   echo "prefetch tests FAILED"
   exit 1

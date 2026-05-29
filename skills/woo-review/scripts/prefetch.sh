@@ -551,24 +551,47 @@ PRIOR_COUNT=$(jq 'length' "$OUTDIR/prior-findings.json" 2>/dev/null || echo 0)
 echo "Prior review threads (open + resolved): $PRIOR_COUNT"
 
 # Repository dismissal sidecar — committed source of cross-PR dedup signal.
-# Missing file or malformed JSON falls back to []. Hard cap on size to keep
-# the pipeline responsive.
-SIDECAR_SRC="${GITHUB_WORKSPACE:-$(pwd)}/.woo-review/dismissed.json"
+# New layout: 16 hash-sharded JSONL files .woo-review/dismissed-<0-f>.jsonl,
+# with merge=union for conflict-free concurrent appends. Legacy single-file
+# .woo-review/dismissed.json is still read during the migration window —
+# sidecar-write.sh removes it on first run.
+SIDECAR_ROOT="${GITHUB_WORKSPACE:-$(pwd)}/.woo-review"
 SIDECAR_OUT="$OUTDIR/sidecar-findings.json"
-if [ -f "$SIDECAR_SRC" ]; then
-  SIZE=$(wc -c < "$SIDECAR_SRC")
-  if [ "$SIZE" -gt 5242880 ]; then
-    echo "Sidecar too large ($SIZE bytes); ignoring. Rotate .woo-review/dismissed.json."
-    echo '[]' > "$SIDECAR_OUT"
-  elif jq empty "$SIDECAR_SRC" 2>/dev/null; then
-    cp "$SIDECAR_SRC" "$SIDECAR_OUT"
-  else
-    echo "Sidecar parse error; ignoring. Not overwriting (may be user edit)."
-    echo '[]' > "$SIDECAR_OUT"
-  fi
-else
+SHARD_GLOB=("$SIDECAR_ROOT"/dismissed-*.jsonl)
+LEGACY="$SIDECAR_ROOT/dismissed.json"
+
+# Combined-size cap (sharded files + legacy file). Mirrors the prior 5 MB cap
+# but applied to the sum so a single hot shard cannot starve the prefetch.
+TOTAL=0
+for f in "${SHARD_GLOB[@]}" "$LEGACY"; do
+  [ -f "$f" ] || continue
+  SIZE=$(wc -c < "$f" 2>/dev/null || echo 0)
+  TOTAL=$((TOTAL + SIZE))
+done
+if [ "$TOTAL" -gt 5242880 ]; then
+  echo "Sidecar too large ($TOTAL bytes total); ignoring. Rotate .woo-review/dismissed*."
   echo '[]' > "$SIDECAR_OUT"
+else
+  # Per-shard validation so one corrupt/half-written shard cannot wipe the
+  # dedup signal from the other 15. jq -s over a single bad line in the
+  # combined stream exits non-zero and the `|| echo '[]'` fallback discards
+  # every entry. Validating each shard with `jq -s . >/dev/null` upfront
+  # isolates corruption to the offending file (mirrors the legacy guard).
+  {
+    for f in "${SHARD_GLOB[@]}"; do
+      [ -f "$f" ] || continue
+      if awk 'NF' "$f" | jq -s '.' >/dev/null 2>&1; then
+        awk 'NF' "$f"
+      else
+        echo "Sidecar shard $f malformed; skipping" >&2
+      fi
+    done
+    if [ -f "$LEGACY" ] && jq empty "$LEGACY" 2>/dev/null; then
+      jq -c '.[]' "$LEGACY"
+    fi
+  } | jq -s '.' > "$SIDECAR_OUT" 2>/dev/null || echo '[]' > "$SIDECAR_OUT"
 fi
+
 SIDECAR_COUNT=$(jq length "$SIDECAR_OUT" 2>/dev/null || echo 0)
 echo "Sidecar dismissed entries: $SIDECAR_COUNT"
 
