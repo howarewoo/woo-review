@@ -154,7 +154,7 @@ Key reference (JSON has no comments, so the per-key semantics live here):
 - **`models`** — per-tier slug overrides; the action input `inputs.model` still wins.
 - **`fix_commands`** — reserved for `--loop` mode (issue #15).
 - **`disable_adversarial`** — cost-sensitive opt-out for the prosecutor+defender validator (issue #13). When `true`, only the defender pass runs and its output becomes `findings.json` directly.
-- `metrics` (bool, default `false`) — opt in to per-angle signal/noise metrics: emit `findings.metrics.json` per run and fold a rolling `.woo-review/metrics.json` aggregate (local only). See Stage 6.5.
+- **`metrics`**: opt in to per-angle signal/noise metrics (bool, default `false`) — emit `findings.metrics.json` per run and fold a rolling `.woo-review/metrics.json` aggregate (local only). See Stage 6.5.
 - **`chunking.max_loc`** — diff-chunking threshold (issue #14). When the post-ignore diff exceeds this many changed lines, prefetch splits it into chunks honoring workspace package roots > top-level dirs > file-LOC-balanced groups; each angle fans out as angles × chunks parallel sub-agents. `0` disables chunking; missing => 4000.
 
 **Precedence**: for the angle set, `angles.force` beats `angles.skip` when the same angle is listed in both. For model resolution, the action input `inputs.model` beats `models.<tier>` which beats the table default in `prompts/_header.md`. `ignore` is applied to both file paths and the per-file diff sections before angle gates evaluate.
@@ -400,7 +400,7 @@ ensures that path is gitignored — the aggregate is local data, never committed
 (cross-host aggregation is the job of the opt-in central sink, a separate feature).
 
 ```bash
-bash skills/woo-review/scripts/metrics-fold.sh
+bash scripts/metrics-fold.sh
 ```
 
 This is a no-op when `metrics` is off or no per-run record exists. As with memory, the
