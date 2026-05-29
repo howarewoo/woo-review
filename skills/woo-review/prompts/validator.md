@@ -16,6 +16,12 @@ This pass is one half of an adversarial validation pipeline (issue #13). The Pro
 
 ## Your Task
 
+**Step 0 — First action (crash guard).** Before launching any subagent or doing any work, write a valid empty array to your output file, so a crash or turn-limit during Step 1/2 leaves `[]` (a valid empty result) instead of a missing file:
+
+```bash
+printf '[]\n' > "${OUTDIR:-/tmp/pr-review}/findings.defender.json"
+```
+
 ### Step 1 — Review Summary
 Launch one Haiku subagent. Task:
 - Read /tmp/pr-review/diff.txt, /tmp/pr-review/meta.json, /tmp/pr-review/angles.txt, and /tmp/pr-review/rules.md if it exists.
@@ -24,6 +30,7 @@ Launch one Haiku subagent. Task:
 - Return: summary.
 
 ### Step 2 — Validation
+
 1. **Deduplicate**: If multiple angles flagged the same issue, pick the one with the most actionable and technical description. Preserve `title`, `description`, and `fix` from the winning finding.
 2. **Skeptical Audit**: For each finding in /tmp/pr-review/raw_findings.json, try to prove it is WRONG. 
    - Discard if: Pedantic, style-only (without rule backing), already caught by linting, or "maybe" behavior.

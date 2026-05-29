@@ -18,6 +18,12 @@ This pass is one half of an adversarial validation pipeline. Your output is inte
 
 ### Step 1 — Validation (Prosecutor bias)
 
+**First action (non-destructive crash guard — angle workers write `[]` on entry for the same reason):** write an empty array to your output file before doing anything else, so a crash leaves a valid empty result instead of a missing file:
+
+```bash
+printf '[]\n' > "${OUTDIR:-/tmp/pr-review}/findings.prosecutor.json"
+```
+
 1. **Deduplicate**: If multiple angles flagged the same issue, pick the one with the most actionable description. Preserve `title`, `description`, and `fix` from the winning finding.
 2. **Prosecutor Audit**: For each finding in `/tmp/pr-review/raw_findings.json`, assume it is REAL. Try to **justify keeping it**. Drop ONLY if ALL of the following hold:
    - The finding is verifiably wrong against the diff (e.g. the cited line does not contain the cited code, or the claimed behavior is contradicted by code visible in the diff).
@@ -53,6 +59,8 @@ DO NOT:
 - Edit the PR body or title.
 - Touch `/tmp/pr-review/findings.json` (owned by the intersect script, written after the Defender pass).
 - Write any other file.
+- Run `prefetch.sh` or otherwise re-fetch the diff/meta.
+- Delete or recreate `$OUTDIR` (it holds orchestrator-owned `meta.json`, `prior-findings.json`, etc.).
 
 After writing `findings.prosecutor.json`, EXIT.
 

@@ -316,7 +316,7 @@ on the diff's RIGHT side and the GitHub API will reject the comment). EXIT.
 
 **Chunked fan-out.** When `/tmp/pr-review/chunks.txt` exists, spawn one sub-agent per `(angle, chunk_id)` instead of one per angle. Pass the chunk ID in the brief, and tell the sub-agent to read `/tmp/pr-review/diff.chunk-<id>.txt` and write `/tmp/pr-review/findings.<angle>.chunk-<id>.json`. The validator pass still runs **once globally** — `merge-findings.sh` collapses any within-angle duplicates across chunks before validation, and the validator handles cross-angle dedup as today.
 
-Sub-agents MUST NOT post comments, edit the PR, or touch other angles' files.
+Sub-agents MUST NOT post comments, edit the PR, touch other angles' files, run `prefetch.sh`, or delete/recreate `$OUTDIR`. `prefetch.sh` is a Stage-1-only operation; re-running it mid-swarm wipes `meta.json` / `prior-findings.json` and corrupts the posting stage (issue #48).
 
 **Model routing (token optimization, host-agnostic).** Each angle prompt and the validator declare a `tier:` in frontmatter — `fast`, `standard`, or `deep`. The host resolves the tier to a concrete model via the table in `prompts/_header.md`. Tier assignments:
 
