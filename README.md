@@ -1,21 +1,19 @@
 # woo-review
 
-A portable AI **skill** that turns any coding agent into a parallel PR review swarm. One slash command spawns specialized sub-agents (bugs, security, SEO, design, React, database), runs a skeptical validator, dedupes findings against prior review history, and — if you point it at a GitHub PR — posts a single batched review.
+A portable AI **skill** that turns any coding agent into a parallel PR review swarm. One slash command spawns specialized sub-agents (bugs, security, SEO, design, React, database), runs a skeptical validator, and — if you point it at a GitHub PR — posts a single batched review.
 
 The companion GitHub Action is an **extension** of the skill: same prompts, same angles, same validator, just packaged for CI.
 
-**Idempotent across runs.** Re-running on the same PR will not re-post findings that already match an open or resolved thread, a sidecar dismissal, or a line-shifted version of a prior finding. When a recurring `semantic_key` pattern is detected, the review body suggests short rules to add to `AGENT.md` / `CLAUDE.md` so coding agents catch the issue upfront on the next pass.
+**Idempotent across runs.** Re-running on the same PR will not re-post findings that already match an open or resolved thread or a line-shifted version of a prior finding.
 
 ---
 
 ## Features
 
 - **Parallel angle swarm** — one sub-agent per detected angle (`bugs`, `security`, `seo`, `aeo`, `design`, `react`, `database`) runs concurrently against the same diff.
-- **Skeptical Validator** — adversarial prosecutor + defender pass, deterministic intersect, severity downgrade only (never upgrade).
-- **History dedup** — stable `(file, code_anchor, semantic_key)` identity survives line shifts; drops findings already posted on the PR or dismissed in the sidecar.
-- **LLM tiebreak** — Sonnet-class adjudicator handles ambiguous near-matches (`|Δline| ≤ 10`, one of anchor/sem_key matches), batched and cost-capped, fails open.
-- **Rule recommendations** — recurring `semantic_key` clusters become a "Suggested rules for AGENT.md / CLAUDE.md" section in the review body, so coding agents learn from repeated misses.
-- **Sidecar persistence** — newly-resolved threads land in 16 hash-sharded `.woo-review/dismissed-<0-f>.jsonl` files via a bot commit, so dedup signal survives across PRs. `merge=union` and TTL pruning keep concurrent appends conflict-free.
+- **Skeptical Validator** — adversarial prosecutor + defender pass, deterministic intersect, severity downgrade only (never upgrade). Merges duplicate findings from different angles before posting.
+- **Cross-PR memory** — a plain-markdown file at `.woo-review/memory.md` that the team curates with gotchas and intentionally-accepted issues. The review reads it as context and drops any finding the memory already records as known/accepted. Humans can edit it freely; the local skill may append to it after a review.
+- **High-priority-only by default** — `severity_floor` defaults to `high` so only critical findings surface out of the box. Set `severity_floor: low` or `medium` in `.woo-review/config.yml` to widen the net.
 - **Host-agnostic** — the skill runs under Claude Code, Cursor, Gemini CLI, opencode, or any host that can spawn sub-agents.
 - **Multi-provider** — Anthropic, OpenAI, Google, and OpenRouter all work with the same prompts; provider auto-detected from the secret you supply.
 - **CI extension** — same prompts, same angles, same validator, packaged as a reusable GitHub Actions workflow.
@@ -43,16 +41,16 @@ woo-review status      # Show current PR review state
 
 When you invoke `/woo-review` the host agent:
 
-1. **Prefetches** diff + metadata + rules + prior review threads (open + resolved) + sidecar dismissals into `/tmp/pr-review/`.
+1. **Prefetches** diff + metadata + rules + prior review threads (open + resolved) + cross-PR memory into `/tmp/pr-review/`.
 2. **Detects** which angles apply (always-on: `bugs`, `security`; conditional: `seo`, `aeo`, `design`, `react`, `database`).
-3. **Spawns one sub-agent per angle in parallel** (Claude Code Task, Cursor subagents, Gemini CLI sequential loop fallback — host-agnostic). Each finding carries `semantic_key` + `code_anchor` for stable identity across runs.
-4. **Validates** all findings through a Skeptical Validator pass (dedupe, defense-attorney audit, severity downgrade only).
-5. **Dedupes against history** — drops findings whose `(file, code_anchor, semantic_key)` matches a prior thread or sidecar entry; LLM tiebreak handles ambiguous near-matches. Recurring `semantic_key` clusters trigger a short "Suggested rules for AGENT.md / CLAUDE.md" section in the review body.
-6. **Reports** locally OR posts one batched GitHub Review when a PR# was given. After posting, newly-resolved threads are recorded to the sharded `.woo-review/dismissed-<0-f>.jsonl` files (when `enable_sidecar_write` is on). A legacy `.woo-review/dismissed.json`, if present, is migrated into the shards on first write.
+3. **Spawns one sub-agent per angle in parallel** (Claude Code Task, Cursor subagents, Gemini CLI sequential loop fallback — host-agnostic).
+4. **Validates** all findings through a Skeptical Validator pass (merges duplicate findings from different angles, defense-attorney audit, severity downgrade only).
+5. **Filters against memory** — drops findings already recorded as known/accepted in `.woo-review/memory.md`.
+6. **Reports** locally OR posts one batched GitHub Review when a PR# was given.
 
 ```mermaid
 flowchart TD
-    A["/woo-review [PR#?]"] --> B[Prefetch<br/>diff + metadata + rules<br/>→ /tmp/pr-review/]
+    A["/woo-review [PR#?]"] --> B[Prefetch<br/>diff + metadata + rules + memory<br/>→ /tmp/pr-review/]
     B --> C{Detect angles}
     C -->|always-on| D1[bugs]
     C -->|always-on| D2[security]
@@ -61,13 +59,12 @@ flowchart TD
     C -->|*.tsx/css/vue/svelte| D4[design]
     C -->|*.tsx/jsx + react dep| D6[react]
     C -->|*.sql, migrations/, SQL DDL/RLS tokens| D7[database]
-    D1 & D2 & D3 & D3a & D4 & D6 & D7 --> E[Parallel sub-agents<br/>one per angle<br/>each finding: semantic_key + code_anchor]
-    E --> F[Skeptical Validator<br/>dedupe · defense-attorney · severity downgrade only]
-    F --> F2[History dedup<br/>drop findings matching prior threads<br/>or sidecar dismissals<br/>+ cluster recurring keys → rule recs]
+    D1 & D2 & D3 & D3a & D4 & D6 & D7 --> E[Parallel sub-agents<br/>one per angle]
+    E --> F[Skeptical Validator<br/>merge duplicate findings · defense-attorney · severity downgrade only]
+    F --> F2[Memory filter<br/>drop findings already recorded as<br/>known/accepted in .woo-review/memory.md]
     F2 --> G{PR# given?}
     G -->|no| H[Local report]
-    G -->|yes| I[Batched GitHub Review<br/>event=REQUEST_CHANGES when blocking<br/>+ Suggested rules for AGENT.md / CLAUDE.md]
-    I --> J[Sidecar write<br/>append newly-resolved threads<br/>to .woo-review/dismissed-&lt;0-f&gt;.jsonl shards<br/>via bot commit]
+    G -->|yes| I[Batched GitHub Review<br/>event=REQUEST_CHANGES when blocking]
 ```
 
 See [`skills/woo-review/SKILL.md`](./skills/woo-review/SKILL.md) for the full workflow contract.
@@ -149,9 +146,7 @@ The CI pipeline mirrors the skill's swarm 1:1 — detection job → matrix of an
 | `mode` | `full` | `full`, `detect`, `review`, `validate`. Reusable workflow handles wiring. |
 | `disable_angles` | `""` | CSV of optional angles to skip (e.g. `seo,aeo,design,react,database`). `bugs` and `security` are non-negotiable. |
 | `max_turns` | `30` | Agent loop cap (Anthropic; other providers use their equivalent). |
-| `enable_history_dedup` | `true` | Run `dedup-against-history.sh` between validator and posting. Set `false` to fall back to legacy `findings.json` consumption. |
-| `enable_sidecar_write` | `true` | After review POST, append newly-resolved threads to sharded `.woo-review/dismissed-<0-f>.jsonl` files and commit via bot. Requires `contents: write`. |
-| `sidecar_ttl_days` | `180` | Age cap in days for sidecar entries. Pruned opportunistically on shards a write touches; set `0` to disable. |
+| `severity_floor` | `high` | Minimum severity to surface. Set to `low` or `medium` in `.woo-review/config.yml` to widen the net. |
 
 ---
 
@@ -159,26 +154,21 @@ The CI pipeline mirrors the skill's swarm 1:1 — detection job → matrix of an
 
 Whether triggered locally or via CI:
 
-1. **Inline review comments** — one batched `gh api ... /pulls/<N>/reviews` POST with `suggestion` blocks where applicable. Findings duplicating prior PR threads (open or resolved) or sidecar dismissals are dropped before posting.
+1. **Inline review comments** — one batched `gh api ... /pulls/<N>/reviews` POST with `suggestion` blocks where applicable. Findings already recorded as known/accepted in `.woo-review/memory.md` are dropped before posting.
 2. **Status line** in the review body: `**Status: APPROVED** / APPROVED WITH SUGGESTIONS / CHANGES REQUESTED — counts.`
-3. **Native review event** — `REQUEST_CHANGES` when any validated finding is blocking OR when any prior thread is still `status: open`; `COMMENT` when only non-blocking findings exist; `APPROVE` when none and no open prior threads. Resolved priors are dedup signal only — they no longer floor the event. Wire branch protection to "Require approval of the most recent reviewable push" or the `pull-request-review` required check to gate merges.
-4. **Suggested rules for AGENT.md / CLAUDE.md** — appended to the review body when ≥`WOO_REVIEW_RULES_THRESHOLD` (default 2) findings across this run and the sidecar share a `semantic_key`. Lets coding agents learn from recurring issues upfront on the next pass.
+3. **Native review event** — `REQUEST_CHANGES` when any validated finding is blocking OR when any prior thread is still `status: open`; `COMMENT` when only non-blocking findings exist; `APPROVE` when none and no open prior threads. Wire branch protection to "Require approval of the most recent reviewable push" or the `pull-request-review` required check to gate merges.
 
 The action never modifies the PR title, description, or labels.
 
-### History dedup & sidecar
+### Cross-PR memory
 
-Every finding emits two fields used for stable identity across runs:
+`.woo-review/memory.md` is the skill's home for cross-PR knowledge — a plain-markdown list of gotchas, known false positives, and intentionally-accepted issues that the team curates over time. There is no database, no sharded JSONL, no hooks: just a file.
 
-- `semantic_key` — kebab-case `<angle>/<issue-type>` (≤40 chars), from the per-angle enum in `skills/woo-review/prompts/angles/*.md`.
-- `code_anchor` — first 12 hex chars of `shasum -a 1` over the 3 lines before + the finding line + the 3 lines after. Survives line shifts in unrelated code.
+- **Read as context.** Prefetch loads it into the review; every angle and both validator passes drop any finding the memory already records as known/accepted/wontfix. That is what keeps re-reviews quiet.
+- **Written inline (local).** When you run `/woo-review` locally and dismiss a finding, the skill appends a short bullet to `.woo-review/memory.md` — the local skill has direct write access, no post-session hook.
+- **Curated by humans.** Edit it freely; it is meant to be read.
 
-`dedup-against-history.sh` runs between the validator and the posting step:
-
-- **Pass 1 (deterministic)** — drop any new finding whose `(file, code_anchor, semantic_key)` triple matches a prior PR thread or sidecar entry.
-- **Pass 2 (LLM tiebreak)** — for ambiguous cases (same file, |Δline| ≤ 10, exactly one of anchor/sem_key matches), one Sonnet call returns a keep/drop verdict. Batched 20 pairs/call, hard-capped at 10 calls/run. Fails open on any error.
-
-When `enable_sidecar_write: true`, the script also writes newly-resolved threads to the sharded `.woo-review/dismissed-<0-f>.jsonl` files via a bot commit so dedup signal survives across PRs. Entries older than `sidecar_ttl_days` (default 180) are pruned opportunistically on shards a write touches. See [`skills/woo-review/SKILL.md`](./skills/woo-review/SKILL.md) under "History Dedup & Rule Recommendations" for the artifact lifecycle.
+See [`skills/woo-review/SKILL.md`](./skills/woo-review/SKILL.md) for the full workflow contract.
 
 ---
 

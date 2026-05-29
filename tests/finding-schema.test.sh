@@ -5,20 +5,16 @@ HEADER="$REPO_ROOT/skills/woo-review/prompts/_header.md"
 
 fail=0
 
-# Sidecar filename must appear in the prefetched-artifacts section.
-if ! grep -q 'sidecar-findings.json' "$HEADER"; then
-  echo "FAIL: $HEADER missing sidecar-findings.json artifact bullet"
+# Cross-PR memory file must appear in the prefetched-artifacts section.
+if ! grep -q 'memory.md' "$HEADER"; then
+  echo "FAIL: $HEADER missing memory.md artifact bullet"
   fail=1
 fi
 
-# Range matches the findings schema example block. Anchored to line-start
-# so an inline ```suggestion``` token inside a string does not close it.
-if ! awk '/^```json/,/^```$/' "$HEADER" | grep -q '"semantic_key"'; then
-  echo "FAIL: semantic_key not present in JSON schema example"
-  fail=1
-fi
-if ! awk '/^```json/,/^```$/' "$HEADER" | grep -q '"code_anchor"'; then
-  echo "FAIL: code_anchor not present in JSON schema example"
+# The dedup-only fields must be gone from the schema example (the cross-PR
+# dedup feature was removed in favour of the plain-markdown memory file).
+if awk '/^```json/,/^```$/' "$HEADER" | grep -q '"semantic_key"\|"code_anchor"'; then
+  echo "FAIL: semantic_key/code_anchor must not appear in the JSON schema example"
   fail=1
 fi
 

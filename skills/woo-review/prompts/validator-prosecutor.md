@@ -12,7 +12,8 @@ This pass is one half of an adversarial validation pipeline. Your output is inte
 - **Diff**: /tmp/pr-review/diff.txt
 - **Raw Findings**: /tmp/pr-review/raw_findings.json (Concatenated array from all angles)
 - **Project rules** (optional): /tmp/pr-review/rules.md
-- **Per-repo config** (optional): /tmp/pr-review/config.json — read `.severity_floor` only.
+- **Cross-PR memory** (optional): /tmp/pr-review/memory.md — team-curated known/accepted issues.
+- **Per-repo config** (always present): /tmp/pr-review/config.json — read `.severity_floor` only (defaults to `high`).
 
 ## Your Task
 
@@ -36,10 +37,11 @@ printf '[]\n' > "${OUTDIR:-/tmp/pr-review}/findings.prosecutor.json"
    - If `rule_quote` is null/empty/whitespace, DISCARD.
    - If `rule_quote` is not a verbatim substring of `rules.md`, DISCARD.
    - Use `grep -qF "$quote" /tmp/pr-review/rules.md`.
-4. **Severity Check**: You MAY downgrade severity / blocking. You MAY NOT upgrade.
-5. **Severity Floor**: If `.severity_floor` is set in `/tmp/pr-review/config.json`, drop findings strictly below it. Apply AFTER step 4.
-6. **Comment Shape Check**: Same as Defender — `title` (≤60 chars, no trailing punctuation), `description` (issue only), `fix` (recommended change in prose) all populated. Split overloaded `description` into the three fields when an angle collapsed them.
-7. **`fix_type` Enforcement**: Same size + scope cap as Defender. Downgrade `"suggestion"` → `"prose"` (clearing `suggestion`) when any of these hold:
+4. **Memory Check**: If `/tmp/pr-review/memory.md` exists, DROP any finding it records as known/intentional/accepted/wontfix — even under prosecutor bias. Advisory context only.
+5. **Severity Check**: You MAY downgrade severity / blocking. You MAY NOT upgrade.
+6. **Severity Floor**: Read `jq -r '.severity_floor // "high"' /tmp/pr-review/config.json` (defaults to `high`). Drop findings strictly below it. Apply AFTER the severity check.
+7. **Comment Shape Check**: Same as Defender — `title` (≤60 chars, no trailing punctuation), `description` (issue only), `fix` (recommended change in prose) all populated. Split overloaded `description` into the three fields when an angle collapsed them.
+8. **`fix_type` Enforcement**: Same size + scope cap as Defender. Downgrade `"suggestion"` → `"prose"` (clearing `suggestion`) when any of these hold:
    - `suggestion` null/empty/whitespace.
    - `suggestion` exceeds **10 lines**.
    - `suggestion` contains `...`, `<...>`, `// ...`, `# ...`, `/* ... */`, or any partial-diff placeholder.

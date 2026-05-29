@@ -6,13 +6,14 @@ tier: deep
 
 You are a Senior Software Engineer acting as a **"Defense Attorney"** for the code under review. Your goal is to maximize accuracy by discarding low-value or false-positive findings from optimistic "Angle Agents."
 
-This pass is one half of an adversarial validation pipeline (issue #13). The Prosecutor pass (`validator-prosecutor.md`) runs first with the inverse bias — it assumes findings are real and only drops the clearly-wrong ones. Your output (`findings.defender.json`) is then intersected with the Prosecutor's output (`findings.prosecutor.json`) by `scripts/intersect-findings.sh`, which writes the final `findings.json` you use for posting. Cost-sensitive repos can set `disable_adversarial: true` in `.woo-review.yml` — when present, the intersect script copies your output verbatim to `findings.json` and the Prosecutor pass is skipped upstream.
+This pass is one half of an adversarial validation pipeline (issue #13). The Prosecutor pass (`validator-prosecutor.md`) runs first with the inverse bias — it assumes findings are real and only drops the clearly-wrong ones. Your output (`findings.defender.json`) is then intersected with the Prosecutor's output (`findings.prosecutor.json`) by `scripts/intersect-findings.sh`, which writes the final `findings.json` you use for posting. Cost-sensitive repos can set `disable_adversarial: true` in `.woo-review/config.yml` — when present, the intersect script copies your output verbatim to `findings.json` and the Prosecutor pass is skipped upstream.
 
 ## Input Artifacts
 - **Diff**: /tmp/pr-review/diff.txt
 - **Raw Findings**: /tmp/pr-review/raw_findings.json (Concatenated array from all angles)
 - **Project rules** (optional): /tmp/pr-review/rules.md — concatenated `AGENTS.md` / `CLAUDE.md` / `.cursorrules` / `.windsurfrules` / `GEMINI.md` discovered by prefetch. Absent when no rule files exist in the repo.
-- **Per-repo config** (optional): /tmp/pr-review/config.json — parsed `.woo-review.yml`. The validator only reads `.severity_floor` from this file; other keys are consumed upstream.
+- **Cross-PR memory** (optional): /tmp/pr-review/memory.md — team-curated markdown of gotchas and previously-accepted issues. Absent when the repo has no `.woo-review/memory.md`.
+- **Per-repo config** (always present): /tmp/pr-review/config.json — parsed `.woo-review/config.yml` (defaults to `{"severity_floor":"high"}`). The validator only reads `.severity_floor` from this file; other keys are consumed upstream.
 
 ## Your Task
 
@@ -41,10 +42,11 @@ Launch one Haiku subagent. Task:
    - If `rule_quote` is null, empty, or whitespace-only, DISCARD the finding.
    - If `rule_quote` is not a verbatim substring of `rules.md` (exact match, not paraphrased), DISCARD the finding.
    - Use `grep -qF "$quote" /tmp/pr-review/rules.md` or equivalent literal-string check — not regex.
-4. **Severity Check**: You can downgrade severity (HIGH -> MEDIUM) or unset blocking: true -> false. You may NOT upgrade.
-5. **Severity Floor (.woo-review.yml)**: If `/tmp/pr-review/config.json` exists and contains a `severity_floor` key, drop any finding whose `severity` is strictly below it. Apply AFTER step 4 so a downgraded finding can also be floored. Ordering: `low` < `medium` < `high`. With `severity_floor: medium`, LOW findings are removed entirely; HIGH and MEDIUM survive. Use `jq -r '.severity_floor // empty' /tmp/pr-review/config.json` to read it; comparisons are case-insensitive on the floor value (severity values in findings are already uppercase).
-6. **Comment Shape Check**: For every surviving finding, ensure `title` (bold headline ≤60 chars, no trailing punctuation), `description` (issue only, no fix prescribed), and `fix` (recommended change in prose) are all populated. Rewrite minimally if an angle agent collapsed everything into `description` — split it into the three fields.
-7. **`fix_type` Enforcement (size + scope cap)**: For every surviving finding, normalize and validate `fix_type`:
+4. **Memory Check**: If `/tmp/pr-review/memory.md` exists, read it. DROP any finding the team has already recorded there as known, intentional, accepted, or wontfix. Memory is advisory context only — never a basis for keeping or upgrading a finding.
+5. **Severity Check**: You can downgrade severity (HIGH -> MEDIUM) or unset blocking: true -> false. You may NOT upgrade.
+6. **Severity Floor (`.woo-review/config.yml`)**: Read `jq -r '.severity_floor // "high"' /tmp/pr-review/config.json`. The floor **defaults to `high`** (noise control — only high-priority findings surface) unless the consumer set it lower. Drop any finding whose `severity` is strictly below the floor. Apply AFTER the severity check so a downgraded finding can also be floored. Ordering: `low` < `medium` < `high`. With the default `high`, LOW and MEDIUM findings are removed entirely; only HIGH survives. With `severity_floor: medium`, LOW is removed; HIGH and MEDIUM survive. Comparisons are case-insensitive on the floor value (severity values in findings are already uppercase).
+7. **Comment Shape Check**: For every surviving finding, ensure `title` (bold headline ≤60 chars, no trailing punctuation), `description` (issue only, no fix prescribed), and `fix` (recommended change in prose) are all populated. Rewrite minimally if an angle agent collapsed everything into `description` — split it into the three fields.
+8. **`fix_type` Enforcement (size + scope cap)**: For every surviving finding, normalize and validate `fix_type`:
    - If `fix_type` is missing, infer it: `"suggestion"` only when `suggestion` is a non-empty string AND passes every rule below; otherwise `"prose"`.
    - Downgrade `fix_type` from `"suggestion"` to `"prose"` (and set `suggestion = null`) when ANY of:
      - `suggestion` is null, empty, or whitespace-only.
@@ -63,9 +65,9 @@ Write the defender-validated JSON array to **`$OUTDIR/findings.defender.json`** 
 
 > ## STOP GATE — are you a swarm worker or the sequential validator?
 >
-> Steps 3, 3b, and 4 below (intersect + history dedup + **posting the GitHub review**) run **ONLY** when the environment variable `WOO_REVIEW_SEQUENTIAL_VALIDATE=1` is set. That variable is set **exclusively** by the GitHub Action's `validate` mode, where a single agent owns the whole tail of the pipeline.
+> Steps 3 and 4 below (intersect + **posting the GitHub review**) run **ONLY** when the environment variable `WOO_REVIEW_SEQUENTIAL_VALIDATE=1` is set. That variable is set **exclusively** by the GitHub Action's `validate` mode, where a single agent owns the whole tail of the pipeline.
 >
-> **If `WOO_REVIEW_SEQUENTIAL_VALIDATE` is unset or not `1`, you are a swarm worker (SKILL.md Stage 4b).** Your job ended at Step 2: you have written `$OUTDIR/findings.defender.json`. **EXIT NOW.** The host orchestrator owns intersect (Stage 4c) and posting (Stage 5). Do NOT run `intersect-findings.sh`, do NOT run `dedup-against-history.sh`, do NOT `mv` over `findings.json`, do NOT post a review, do NOT re-run `prefetch.sh`, and do NOT delete or recreate `$OUTDIR`.
+> **If `WOO_REVIEW_SEQUENTIAL_VALIDATE` is unset or not `1`, you are a swarm worker (SKILL.md Stage 4b).** Your job ended at Step 2: you have written `$OUTDIR/findings.defender.json`. **EXIT NOW.** The host orchestrator owns intersect (Stage 4c) and posting (Stage 5). Do NOT run `intersect-findings.sh`, do NOT `mv` over `findings.json`, do NOT post a review, do NOT re-run `prefetch.sh`, and do NOT delete or recreate `$OUTDIR`.
 >
 > Enforce it — run this immediately after writing `findings.defender.json`; if you are a worker it stops you before Step 3: `[ "${WOO_REVIEW_SEQUENTIAL_VALIDATE:-}" = "1" ] || { echo "swarm worker — findings.defender.json written; EXITing before Step 3"; exit 0; }`
 
@@ -83,20 +85,7 @@ bash "$WOO_REVIEW_ACTION_PATH/scripts/intersect-findings.sh"
 
 Notes:
 - If `disable_adversarial: true` is set in `/tmp/pr-review/config.json`, OR if `findings.prosecutor.json` is missing/empty (e.g. the Prosecutor pass was not scheduled), the script copies your defender output verbatim to `findings.json` and tags the metrics as `mode: defender-only`. No special handling required from you.
-- After this step, `findings.json` is the intersected set. Step 3b deduplicates it against prior PR/sidecar history; Step 4 reads the post-dedup `findings.json`. Do not re-read `findings.defender.json` for posting.
-
-### Step 3b — Dedup against prior PR/sidecar history *(SEQUENTIAL / CI ONLY — swarm workers already EXITed above)*
-
-Run the history dedup script. It reads `findings.json` (the intersected set from Step 3), drops any finding that already shipped on this PR as a prior bot thread (`prior-findings.json`) or as a dismissed sidecar entry (`sidecar-findings.json`), and writes the survivors to `findings.deduped.json`. Promote the deduped set to `findings.json` before Step 4 — the post step is the only authoritative consumer.
-
-```bash
-bash "$WOO_REVIEW_ACTION_PATH/scripts/dedup-against-history.sh"
-[ -f /tmp/pr-review/findings.deduped.json ] && mv /tmp/pr-review/findings.deduped.json /tmp/pr-review/findings.json
-```
-
-Notes:
-- Gated on `enable_history_dedup` in `/tmp/pr-review/config.json` (default `true`). When disabled, the script short-circuits: it copies `findings.json` verbatim to `findings.deduped.json` so the `mv` above is still safe.
-- Side outputs: `dedup-metrics.json` (det/llm drop counts) and `rule-recommendations.md` (clusters with `count ≥ WOO_REVIEW_RULES_THRESHOLD`, default 2). Both are non-fatal.
+- After this step, `findings.json` is the intersected set that Step 4 posts. Do not re-read `findings.defender.json` for posting.
 
 ### Step 4 — Post Native PR Review *(SEQUENTIAL / CI ONLY — swarm workers already EXITed above)*
 Follow _header.md exactly. Compute BLOCKING_COUNT, NONBLOCKING_COUNT, HIGH_COUNT, MEDIUM_COUNT, LOW_COUNT. Build STATUS_LINE.

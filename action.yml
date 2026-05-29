@@ -31,7 +31,7 @@ inputs:
     required: false
     default: ''
   mode:
-    description: 'Execution mode: full (sequential) | detect | review | validate-prosecutor | validate | sidecar-write. The adversarial validator runs as two passes: validate-prosecutor first (writes findings.prosecutor.json), then validate (writes findings.defender.json, runs intersect-findings.sh, and posts the review). `sidecar-write` is a permission-isolated post-step that commits newly-resolved threads to the sharded `.woo-review/dismissed-<0-f>.jsonl` files (issue #33, #34). The validate step sets WOO_REVIEW_SEQUENTIAL_VALIDATE=1 so validator.md runs its Step 3/3b/4 orchestration; in the chat-host swarm (SKILL.md Stage 4b) that flag is unset and the defender is a pure worker that exits after findings.defender.json.'
+    description: 'Execution mode: full (sequential) | detect | review | validate-prosecutor | validate. The adversarial validator runs as two passes: validate-prosecutor first (writes findings.prosecutor.json), then validate (writes findings.defender.json, runs intersect-findings.sh, and posts the review). The validate step sets WOO_REVIEW_SEQUENTIAL_VALIDATE=1 so validator.md runs its Step 3/4 orchestration; in the chat-host swarm (SKILL.md Stage 4b) that flag is unset and the defender is a pure worker that exits after findings.defender.json.'
     required: false
     default: 'full'
   angle:
@@ -102,25 +102,12 @@ inputs:
     description: 'Review scope: `auto` re-uses the prior review SHA marker (if any) and diffs only new commits; `off` forces a full re-review of the PR diff. A PR-comment trigger containing `--full` overrides to off.'
     required: false
     default: 'auto'
-  enable_history_dedup:
-    description: 'Drop findings duplicating prior PR threads or sidecar dismissals.'
-    required: false
-    default: 'true'
-  enable_sidecar_write:
-    description: 'Commit newly-resolved threads to sharded `.woo-review/dismissed-<0-f>.jsonl` files via bot.'
-    required: false
-    default: 'true'
-  sidecar_ttl_days:
-    description: 'Age cap in days for sidecar entries; pruned opportunistically on touched shards. Set 0 to disable pruning.'
-    required: false
-    default: '180'
 
 runs:
   using: 'composite'
   steps:
     - name: Resolve provider
       id: detect
-      if: inputs.mode != 'sidecar-write'
       shell: bash
       env:
         INPUT_PROVIDER: ${{ inputs.provider }}
@@ -140,9 +127,8 @@ runs:
       run: |
         echo "number=$EVENT_NUMBER" >> "$GITHUB_OUTPUT"
 
-    - name: Prefetch diff, metadata, rules, .woo-review.yml
+    - name: Prefetch diff, metadata, rules, config, memory
       id: prefetch
-      if: inputs.mode != 'sidecar-write'
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
@@ -154,33 +140,6 @@ runs:
         INPUT_INCREMENTAL: ${{ inputs.incremental }}
         COMMENT_BODY: ${{ github.event.comment.body }}
       run: bash "${{ github.action_path }}/skills/woo-review/scripts/prefetch.sh"
-
-    # Permission-isolated post-step (issue #33). Runs only in the dedicated
-    # `sidecar-write` job that holds `contents: write` — the validator job
-    # never sees this script invocation, so the LLM step cannot escalate from
-    # PR-write to repo-write.
-    - name: Sidecar write (commit newly-resolved threads)
-      if: inputs.mode == 'sidecar-write' && inputs.enable_sidecar_write == 'true'
-      shell: bash
-      env:
-        GH_TOKEN: ${{ github.token }}
-        GITHUB_REPOSITORY: ${{ github.repository }}
-        PR_NUMBER: ${{ steps.pr.outputs.number }}
-        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        SIDECAR_TTL_DAYS: ${{ inputs.sidecar_ttl_days }}
-      run: |
-        set -euo pipefail
-        mkdir -p /tmp/pr-review
-        # Workflow guards already gate this job on enable_sidecar_write=true;
-        # write a minimal config.json so the script's defense-in-depth check
-        # passes without needing an artifact roundtrip.
-        # --arg (not --argjson) + tonumber? so non-numeric SIDECAR_TTL_DAYS
-        # (e.g. 'disabled') falls back to 180 instead of crashing jq before
-        # sidecar-write.sh's own numeric guard ever runs.
-        jq -n --arg ttl "${SIDECAR_TTL_DAYS:-180}" \
-          '{enable_sidecar_write: true, sidecar_ttl_days: ($ttl | tonumber? // 180)}' \
-          > /tmp/pr-review/config.json
-        bash "${{ github.action_path }}/skills/woo-review/scripts/sidecar-write.sh"
 
     - name: Detect review angles
       id: angles

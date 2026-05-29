@@ -50,15 +50,6 @@ jobs:
       - name: Run prompt-sync tests
         run: bash tests/prompt-sync.test.sh
 
-      - name: Run dedup-against-history tests
-        run: bash tests/dedup-against-history.test.sh
-
-      - name: Run rule-recommendations tests
-        run: bash tests/rule-recommendations.test.sh
-
-      - name: Run sidecar-write tests
-        run: bash tests/sidecar-write.test.sh
-
       - name: Run intersect-findings tests
         run: bash tests/intersect-findings.test.sh
 
@@ -68,7 +59,7 @@ jobs:
       - name: Run header-markers tests
         run: bash tests/header-markers.test.sh
 
-      - name: Smoke-test .woo-review.yml end-to-end
+      - name: Smoke-test .woo-review/config.yml end-to-end
         # Drops a fixture config into a synthetic workspace, runs the
         # loader directly, then runs detect-angles to confirm `force:` lands
         # and `skip:` is honored. Validates the artifact tree the prefetch
@@ -78,8 +69,8 @@ jobs:
           GITHUB_WORKSPACE="$(mktemp -d)"
           GITHUB_OUTPUT="$(mktemp)"
           export GITHUB_WORKSPACE GITHUB_OUTPUT
-          mkdir -p /tmp/pr-review
-          cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+          mkdir -p /tmp/pr-review "$GITHUB_WORKSPACE/.woo-review"
+          cat > "$GITHUB_WORKSPACE/.woo-review/config.yml" <<'YAML'
           angles:
             force: [database]
             skip:  [seo]
@@ -188,57 +179,3 @@ jobs:
           provider: anthropic
           anthropic_token: ${{ env.ANTHROPIC_TOKEN }}
           model: claude-sonnet-4-6
-
-  loop-reproduction:
-    name: dedup closes loop (resolved / line-shift / reworded)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Prep fixture
-        run: |
-          mkdir -p /tmp/pr-review
-          cat > /tmp/pr-review/findings.json <<'JSON'
-          [ {"angle":"bugs","file":"x.ts","line":12,"severity":"HIGH","blocking":true,
-             "title":"original","description":"d","fix_type":"prose","fix":"f","suggestion":null,
-             "rule_quote":null,"semantic_key":"bugs/off-by-one-loop-bound","code_anchor":"AAA111AAA111"} ]
-          JSON
-          cat > /tmp/pr-review/prior-findings.json <<'JSON'
-          [ {"file":"x.ts","line":12,"title":"original","author":"bot","status":"resolved",
-             "semantic_key":"bugs/off-by-one-loop-bound","code_anchor":"AAA111AAA111"} ]
-          JSON
-          echo '[]' > /tmp/pr-review/sidecar-findings.json
-
-      - name: Dedup must drop resolved match
-        env:
-          WOO_REVIEW_DISABLE_LLM_TIEBREAK: '1'
-        run: |
-          bash skills/woo-review/scripts/dedup-against-history.sh
-          n=$(jq length /tmp/pr-review/findings.deduped.json)
-          [ "$n" -eq 0 ] || { echo "expected 0 findings, got $n"; exit 1; }
-
-      - name: Line-shift — anchor still matches when line differs
-        env:
-          WOO_REVIEW_DISABLE_LLM_TIEBREAK: '1'
-        run: |
-          cat > /tmp/pr-review/findings.json <<'JSON'
-          [ {"angle":"bugs","file":"x.ts","line":17,"severity":"HIGH","blocking":true,
-             "title":"original","description":"d","fix_type":"prose","fix":"f","suggestion":null,
-             "rule_quote":null,"semantic_key":"bugs/off-by-one-loop-bound","code_anchor":"AAA111AAA111"} ]
-          JSON
-          bash skills/woo-review/scripts/dedup-against-history.sh
-          n=$(jq length /tmp/pr-review/findings.deduped.json)
-          [ "$n" -eq 0 ] || { echo "expected 0, got $n"; exit 1; }
-
-      - name: Reworded title — sem_key match still wins
-        env:
-          WOO_REVIEW_DISABLE_LLM_TIEBREAK: '1'
-        run: |
-          cat > /tmp/pr-review/findings.json <<'JSON'
-          [ {"angle":"bugs","file":"x.ts","line":12,"severity":"HIGH","blocking":true,
-             "title":"completely reworded headline","description":"d","fix_type":"prose","fix":"f",
-             "suggestion":null,"rule_quote":null,
-             "semantic_key":"bugs/off-by-one-loop-bound","code_anchor":"AAA111AAA111"} ]
-          JSON
-          bash skills/woo-review/scripts/dedup-against-history.sh
-          n=$(jq length /tmp/pr-review/findings.deduped.json)
-          [ "$n" -eq 0 ] || { echo "expected 0, got $n"; exit 1; }

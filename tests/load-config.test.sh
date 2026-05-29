@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Unit test for skills/woo-review/scripts/load-config.sh.
-# Each case writes a fixture .woo-review.yml into a temp $GITHUB_WORKSPACE and
-# asserts the produced /tmp/pr-review/config.json (or that the loader exits
+# Each case writes a fixture .woo-review/config.yml into a temp $GITHUB_WORKSPACE
+# and asserts the produced /tmp/pr-review/config.json (or that the loader exits
 # non-zero with a GitHub-Actions ::error annotation).
+# severity_floor defaults to "high" when not specified (noise control).
 
 set -euo pipefail
 
@@ -14,7 +15,7 @@ mkdir -p "$PREFETCH"
 trap 'rm -rf "$WORK" "$PREFETCH"' EXIT
 
 export GITHUB_WORKSPACE="$WORK/workspace"
-mkdir -p "$GITHUB_WORKSPACE"
+mkdir -p "$GITHUB_WORKSPACE/.woo-review"
 
 fail=0
 
@@ -30,18 +31,18 @@ assert_json_eq() {
   return 0
 }
 
-# ---------- Case 1: missing config -> empty {} JSON ----------
-rm -f "$GITHUB_WORKSPACE/.woo-review.yml" "$PREFETCH/config.json"
+# ---------- Case 1: missing config -> defaults (severity_floor=high) ----------
+rm -f "$GITHUB_WORKSPACE/.woo-review/config.yml" "$PREFETCH/config.json"
 bash "$SCRIPT" >/dev/null
-if [ "$(jq -r 'keys | length' "$PREFETCH/config.json")" = "0" ]; then
-  echo "ok   missing-config-yields-empty-json"
+if [ "$(jq -r '.severity_floor' "$PREFETCH/config.json")" = "high" ]; then
+  echo "ok   missing-config-defaults-severity-high"
 else
-  echo "FAIL missing-config-yields-empty-json: expected {}, got $(cat "$PREFETCH/config.json")"
+  echo "FAIL missing-config-defaults-severity-high: expected high, got $(cat "$PREFETCH/config.json")"
   fail=1
 fi
 
 # ---------- Case 2: valid full config round-trips ----------
-cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+cat > "$GITHUB_WORKSPACE/.woo-review/config.yml" <<'YAML'
 angles:
   force: [database]
   skip:  [seo]
@@ -73,7 +74,7 @@ assert_json_eq "valid-full" '.fix_commands | join(",")' "pnpm lint:fix" || ok=0
 [ $ok -eq 1 ] && echo "ok   valid-full-config-roundtrip"
 
 # ---------- Case 3: invalid YAML -> exit 1 + ::error with line= ----------
-cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+cat > "$GITHUB_WORKSPACE/.woo-review/config.yml" <<'YAML'
 angles:
   force: [database
 YAML
@@ -82,7 +83,7 @@ if bash "$SCRIPT" 2>"$err_out" >/dev/null; then
   echo "FAIL invalid-yaml-exits-nonzero-with-line: loader exited 0"
   fail=1
 else
-  if grep -qE '^::error file=\.woo-review\.yml,line=[0-9]+' "$err_out"; then
+  if grep -qE '^::error file=\.woo-review/config\.yml,line=[0-9]+' "$err_out"; then
     echo "ok   invalid-yaml-exits-nonzero-with-line"
   else
     echo "FAIL invalid-yaml-exits-nonzero-with-line: annotation not found in stderr"
@@ -92,7 +93,7 @@ else
 fi
 
 # ---------- Case 4: unknown top-level key rejected ----------
-cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+cat > "$GITHUB_WORKSPACE/.woo-review/config.yml" <<'YAML'
 bogus_key: 1
 YAML
 err_out="$WORK/err.txt"
@@ -110,7 +111,7 @@ else
 fi
 
 # ---------- Case 5: unknown angle rejected ----------
-cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+cat > "$GITHUB_WORKSPACE/.woo-review/config.yml" <<'YAML'
 angles:
   force: [made_up_angle]
 YAML
@@ -129,7 +130,7 @@ else
 fi
 
 # ---------- Case 6: severity_floor case-insensitive ----------
-cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+cat > "$GITHUB_WORKSPACE/.woo-review/config.yml" <<'YAML'
 severity_floor: HIGH
 YAML
 bash "$SCRIPT" >/dev/null
@@ -141,7 +142,7 @@ else
 fi
 
 # ---------- Case 7: invalid severity_floor rejected ----------
-cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+cat > "$GITHUB_WORKSPACE/.woo-review/config.yml" <<'YAML'
 severity_floor: critical
 YAML
 err_out="$WORK/err.txt"
@@ -159,7 +160,7 @@ else
 fi
 
 # ---------- Case 8: models passthrough preserves slug strings exactly ----------
-cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+cat > "$GITHUB_WORKSPACE/.woo-review/config.yml" <<'YAML'
 models:
   fast: openrouter/anthropic/claude-haiku-4-5
   standard: openai/gpt-5
@@ -173,7 +174,7 @@ assert_json_eq "models-passthrough" '.models.deep' "anthropic/claude-opus-4-7" |
 [ $ok -eq 1 ] && echo "ok   models-passthrough"
 
 # ---------- Case 9a: disable_adversarial bool round-trips ----------
-cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+cat > "$GITHUB_WORKSPACE/.woo-review/config.yml" <<'YAML'
 disable_adversarial: true
 YAML
 bash "$SCRIPT" >/dev/null
@@ -185,7 +186,7 @@ else
 fi
 
 # ---------- Case 9b: disable_adversarial non-bool rejected ----------
-cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+cat > "$GITHUB_WORKSPACE/.woo-review/config.yml" <<'YAML'
 disable_adversarial: "yes"
 YAML
 err_out="$WORK/err.txt"
@@ -203,7 +204,7 @@ else
 fi
 
 # ---------- Case 10a: chunking.max_loc int round-trips ----------
-cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+cat > "$GITHUB_WORKSPACE/.woo-review/config.yml" <<'YAML'
 chunking:
   max_loc: 6000
 YAML
@@ -216,7 +217,7 @@ else
 fi
 
 # ---------- Case 10b: chunking.max_loc non-integer rejected ----------
-cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+cat > "$GITHUB_WORKSPACE/.woo-review/config.yml" <<'YAML'
 chunking:
   max_loc: "lots"
 YAML
@@ -235,7 +236,7 @@ else
 fi
 
 # ---------- Case 10c: chunking.max_loc negative rejected ----------
-cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+cat > "$GITHUB_WORKSPACE/.woo-review/config.yml" <<'YAML'
 chunking:
   max_loc: -1
 YAML
@@ -254,7 +255,7 @@ else
 fi
 
 # ---------- Case 10d: chunking unknown sub-key rejected ----------
-cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+cat > "$GITHUB_WORKSPACE/.woo-review/config.yml" <<'YAML'
 chunking:
   strategy: balanced
 YAML
@@ -273,7 +274,7 @@ else
 fi
 
 # ---------- Case 12a: release_rollup_pattern string round-trips ----------
-cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+cat > "$GITHUB_WORKSPACE/.woo-review/config.yml" <<'YAML'
 release_rollup_pattern: '^(staging|release)'
 YAML
 bash "$SCRIPT" >/dev/null
@@ -285,7 +286,7 @@ else
 fi
 
 # ---------- Case 12b: invalid regex rejected with line annotation ----------
-cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+cat > "$GITHUB_WORKSPACE/.woo-review/config.yml" <<'YAML'
 release_rollup_pattern: '(unbalanced'
 YAML
 err_out="$WORK/err.txt"
@@ -303,7 +304,7 @@ else
 fi
 
 # ---------- Case 12c: empty release_rollup_pattern is valid (opt-out) ----------
-cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+cat > "$GITHUB_WORKSPACE/.woo-review/config.yml" <<'YAML'
 release_rollup_pattern: ''
 YAML
 bash "$SCRIPT" >/dev/null
@@ -315,7 +316,7 @@ else
 fi
 
 # ---------- Case 12d: non-string release_rollup_pattern rejected ----------
-cat > "$GITHUB_WORKSPACE/.woo-review.yml" <<'YAML'
+cat > "$GITHUB_WORKSPACE/.woo-review/config.yml" <<'YAML'
 release_rollup_pattern: 42
 YAML
 err_out="$WORK/err.txt"
@@ -332,13 +333,13 @@ else
   fi
 fi
 
-# ---------- Case 11: empty file -> empty {} JSON ----------
-: > "$GITHUB_WORKSPACE/.woo-review.yml"
+# ---------- Case 11: empty file -> defaults (severity_floor=high) ----------
+: > "$GITHUB_WORKSPACE/.woo-review/config.yml"
 bash "$SCRIPT" >/dev/null
-if [ "$(jq -r 'keys | length' "$PREFETCH/config.json")" = "0" ]; then
-  echo "ok   empty-file-yields-empty-json"
+if [ "$(jq -r '.severity_floor' "$PREFETCH/config.json")" = "high" ]; then
+  echo "ok   empty-file-defaults-severity-high"
 else
-  echo "FAIL empty-file-yields-empty-json: got $(cat "$PREFETCH/config.json")"
+  echo "FAIL empty-file-defaults-severity-high: got $(cat "$PREFETCH/config.json")"
   fail=1
 fi
 

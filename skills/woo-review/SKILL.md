@@ -19,7 +19,7 @@ This skill is **host-agnostic**: it works in any AI coding agent that supports s
 - `/woo-review` — Auto-detect: if the current branch has an open PR (via `gh pr view --json number`), behave as `/woo-review <PR#>`. Otherwise review the local diff (no GitHub posting).
 - `/woo-review <PR#>` — Fetch the PR via `gh`, run the swarm, and post a native batched GitHub Review.
 - `/woo-review --full` (or `@review --full` in a PR comment) — Force a complete re-review even when a prior SHA marker exists. Skips the incremental path described below.
-- `woo-review install` — Verify local deps (`gh`, `jq`, `node`), pre-fetch `impeccable` + `react-doctor`, and register the post-session sidecar-write Stop hook in `.claude/settings.local.json` (run once per repo).
+- `woo-review install` — Verify local deps (`gh`, `jq`, `node`) and pre-fetch `impeccable` + `react-doctor` (run once per repo).
 - `woo-review status` — Show the current PR's review status.
 
 ### PR-comment triggers (issue #19)
@@ -38,7 +38,7 @@ The legacy `@review` trigger phrase still works; `/woo-review` is an alias the e
 
 `prefetch.sh` short-circuits the review with a single one-line PR comment when either condition holds (before fetching the diff, so token cost is ~zero):
 
-- **PR author matches `authors_skip`.** Default list: `dependabot[bot]`, `renovate[bot]`, `github-actions[bot]`. Override with `authors_skip: [...]` in `.woo-review.yml`; explicit `authors_skip: []` opts out entirely.
+- **PR author matches `authors_skip`.** Default list: `dependabot[bot]`, `renovate[bot]`, `github-actions[bot]`. Override with `authors_skip: [...]` in `.woo-review/config.yml`; explicit `authors_skip: []` opts out entirely.
 - **PR title matches `release_rollup_pattern`** (Python regex). Default: `^(staging|release|chore\(release\))`. Override with any string; explicit empty string opts out.
 
 The skip comment carries a `<!-- woo-review:skipped -->` marker; subsequent triggers on the same PR detect the marker and re-skip silently (no comment spam). To force a full review of a skipped PR, post `/woo-review force`.
@@ -51,7 +51,7 @@ By default (`incremental: auto` on the GitHub Action), every posted review carri
 <!-- woo-review:sha=<headRefOid> -->
 ```
 
-On the next run, `prefetch.sh` scans **bot-authored** prior review bodies (the same `BOT_NAME_PATTERN` used elsewhere) for the marker — non-bot reviewers cannot forge a marker to narrow the window. If found, prefetch diffs `<last_sha>...HEAD` via the GitHub compare API instead of the full PR diff — only the new commits since the last pass are reviewed. Unresolved prior review threads (any author) are dumped to `/tmp/pr-review/prior-findings.json` and consumed by the posting stage for two things only: (a) **event floor** — any non-empty priors list keeps the new review at minimum `REQUEST_CHANGES`, conservative gate so a stale open thread is never auto-resolved by a clean incremental pass; (b) **dedupe** — a new finding at the same `(file, line, title-stem)` as a prior unresolved thread is dropped (it would be a duplicate of an already-posted comment).
+On the next run, `prefetch.sh` scans **bot-authored** prior review bodies (the same `BOT_NAME_PATTERN` used elsewhere) for the marker — non-bot reviewers cannot forge a marker to narrow the window. If found, prefetch diffs `<last_sha>...HEAD` via the GitHub compare API instead of the full PR diff — only the new commits since the last pass are reviewed. Unresolved prior review threads (any author) are dumped to `/tmp/pr-review/prior-findings.json` and consumed by the posting stage as an **event floor**: any non-empty priors list keeps the new review at minimum `REQUEST_CHANGES`, a conservative gate so a stale open thread is never auto-resolved by a clean incremental pass.
 
 Override paths:
 - Action input `incremental: off` (workflow-level opt-out).
@@ -62,80 +62,23 @@ When the incremental diff has no new commits (i.e. `LAST_SHA == HEAD_SHA`, e.g. 
 
 Marker semantics are state-light: the marker IS the state. There is no DB or workflow artifact retention beyond what GitHub already keeps in review history.
 
-## History Dedup & Rule Recommendations
+## Cross-PR Memory (`.woo-review/memory.md`)
 
-After the adversarial validator produces `findings.json`, a second dedup pass runs against cross-PR history to suppress findings that have already been surfaced. Implementation lives in `scripts/dedup-against-history.sh`; the JSON schema and field contracts live in `prompts/_header.md`.
+Reviews stay useful across PRs through a single plain-markdown file in the consumer repo: **`.woo-review/memory.md`**. It is the team's running list of gotchas, intentional design choices, and issues a prior review already surfaced and the team consciously accepted. There is no database, no sharded JSONL, no hooks — just a file you can read and edit by hand.
 
-### What it does
+### How it's used
 
-**Pass 1 — Deterministic drop.** Each finding is identified by a `(file, code_anchor, semantic_key)` triple. Any finding whose triple matches an entry in `prior-findings.json` (open or resolved threads from prior reviews) or `sidecar-findings.json` (committed dismissals from past PRs) is dropped without an LLM call.
+- **Read as context.** `prefetch.sh` copies `.woo-review/memory.md` (if present, 100KB cap) into `/tmp/pr-review/memory.md`. Every angle worker and both validator passes treat it as additional rubric and **drop any finding the memory already records as known/accepted/wontfix**. This is what keeps re-reviews quiet: an issue the team has consciously accepted is not re-flagged on the next PR.
+- **Written inline (local).** When you run `/woo-review` locally and dismiss a finding (or note a gotcha worth remembering), the skill appends a short markdown bullet to `.woo-review/memory.md` in the reviewed repo. The local skill has direct write access to that file — no post-session hook, no permission-isolated job. See Stage 5 below.
+- **Curated by humans.** The file is meant to be edited directly. Add a bullet, delete a stale one, group entries under headings — whatever keeps it readable.
 
-**Pass 2 — LLM tiebreak.** Ambiguous pairs — same file, `|Δline| ≤ 10`, exactly one of `(code_anchor, semantic_key)` matches — are sent to a fast-tier model call that decides whether the two findings refer to the same underlying issue. Deterministic drops always win over the LLM tiebreak.
+### Event-floor rule (prior threads)
 
-**Output:** `findings.deduped.json` (the deduplicated set consumed by Stage 5) and `dedup-metrics.json` (counters: `det_drops`, `llm_drops`, `pair_count`, etc.).
+`prior-findings.json` (unresolved + resolved threads on the *current* PR) is still produced for incremental mode, but it is used for one thing only: **open** prior threads are an event floor — a non-empty set keeps the new review at minimum `REQUEST_CHANGES`. Resolved threads do not gate the event; a clean incremental pass can `APPROVE`.
 
-### New required finding fields
+### Noise control (`severity_floor`)
 
-Workers MUST emit two additional fields on every finding (defined in the angle prompt's `semantic_key` enum and the `_header.md` schema):
-
-- **`semantic_key`** — kebab-case `<angle>/<issue-type>` string, ≤ 40 chars (e.g. `bugs/null-deref`, `security/sql-injection`). Sourced from the angle prompt's enum; workers must not free-form it.
-- **`code_anchor`** — first 12 hex chars of `shasum -a 1` of the ±3 source lines around the finding. Computed by the worker before writing `findings.<angle>.json`. Together with `semantic_key`, these form the dedup identity that persists across PR runs.
-
-### Sidecar lifecycle
-
-`prefetch.sh` loads the sidecar from the consumer repo into `/tmp/pr-review/sidecar-findings.json` at the start of each run. This file accumulates resolved threads that authors have explicitly dismissed — it prevents re-surfacing issues the team has consciously accepted.
-
-After the review POST, `sidecar-write.sh` reads any threads that became
-resolved on the PR and appends them — one JSON object per line — to one of
-16 hash-sharded files at `.woo-review/dismissed-<0-f>.jsonl`, where the
-shard is the first hex char of `sha1(file path)`. Sharding cuts merge-conflict
-surface ~16× for concurrent PRs; a `merge=union` rule in `.gitattributes`
-(installed automatically on first write) makes the remaining same-shard
-collisions resolve line-by-line without conflict. Entries older than
-`sidecar_ttl_days` (default 180) are pruned opportunistically — only on
-shards the current write touches. On first run after upgrade, any pre-existing
-`.woo-review/dismissed.json` is migrated into the shards and removed atomically
-in the same commit; the migration runs even when there are zero newly-resolved
-threads, so dormant repos still convert.
-
-This write is gated on the `enable_sidecar_write` config flag (default `true`). In the CI extension the script runs in a *separate, permission-isolated* job that holds `contents: write` — the validator job (which runs the LLM against untrusted PR content) only holds `contents: read`, so an LLM compromise cannot pivot to repo-write capability. On local hosts the same isolation holds: the skill session never calls `sidecar-write.sh` itself. Instead it drops a `sidecar-pending` sentinel after the review POST, and a host-level **post-session hook** — registered in `.claude/settings.local.json` by `woo-review install` — runs the script once the session ends. The hook no-ops unless the sentinel is present and the current repo matches the reviewed one (`review-context.json:repo_path`).
-
-#### Host-specific hook setup
-
-`woo-review install` auto-registers the post-session hook only on **Claude Code** (it writes a `Stop` hook to `.claude/settings.local.json`). On other hosts it prints the command to wire manually instead of registering it. To complete local-sidecar setup on a non-Claude host, register this command as a **post-session / post-task hook** using your host's mechanism:
-
-```bash
-bash "$WOO_REVIEW_ACTION_PATH/scripts/sidecar-write.sh"
-```
-
-| Host | Where to register |
-|---|---|
-| **Claude Code** | Automatic — `Stop` hook in `.claude/settings.local.json` (run `woo-review install` once per repo). |
-| **Cursor** | A background-agent post-task hook; the exact mechanism depends on Cursor's extension/agent API. |
-| **opencode** | A session-end hook in the OpenCode runtime's hook configuration. |
-| **Gemini CLI** | A post-run shell step (Gemini CLI has no native session-end hook today — wire it into your invoking wrapper/script). |
-
-The hook is safe to run after every session: it no-ops unless the `sidecar-pending` sentinel is present **and** the current repo matches `review-context.json:repo_path`. Running the LLM step never touches repo-write — only this out-of-band hook does (PR #33 contract).
-
-### Event-floor rule change
-
-The posting stage now uses `prior-findings.json` differently from earlier releases:
-
-- **Open** prior threads remain a gate signal — a non-empty set of open priors keeps the new review at minimum `REQUEST_CHANGES`.
-- **Resolved** prior threads are dedup signal only. They no longer force `REQUEST_CHANGES`; a clean incremental pass can `APPROVE` even when resolved threads exist in history.
-
-### Rule recommendations for AGENT.md / CLAUDE.md
-
-When `findings.deduped.json ∪ sidecar-findings.json` contains ≥ `WOO_REVIEW_RULES_THRESHOLD` entries sharing the same `semantic_key`, one short Sonnet (`fast`-tier) call drafts a markdown bullet list of project rules that would have prevented the cluster. The output is appended to the PR review body under the heading `### Suggested rules for AGENT.md / CLAUDE.md`. Authors can copy the bullets directly into their repo's `AGENTS.md` or `CLAUDE.md`; on the next PR the `conventions` angle will enforce them.
-
-### Config flags
-
-| Flag | Type | Default | Effect |
-|---|---|---|---|
-| `enable_history_dedup` | `.woo-review.yml` boolean | `true` | Gates `dedup-against-history.sh`. When `false`, Stage 5 consumes `findings.json` directly (legacy path). |
-| `enable_sidecar_write` | `.woo-review.yml` boolean | `true` | Gates `sidecar-write.sh`. |
-| `sidecar_ttl_days` | `.woo-review.yml` integer | `180` | Age cap for sidecar entries. Pruned opportunistically on touched shards. Set `0` to disable pruning. |
-| `WOO_REVIEW_RULES_THRESHOLD` | env integer | `2` | Cluster size at which rule recommendations are drafted. Set to `0` to disable rule recs entirely. |
+`severity_floor` **defaults to `high`** — by default only high-priority findings surface. Widen it per-repo in `.woo-review/config.yml` (`severity_floor: low` or `medium`). The validator applies the floor after its own severity check.
 
 ## Knowledge Aggregation
 
@@ -156,17 +99,18 @@ The audit frameworks themselves are embedded in `prompts/` (inside this skill bu
 
 Prefetch auto-discovers project rule files (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.windsurfrules`, `GEMINI.md`) at the repo root, and additionally walks up from each changed file path to collect any `AGENTS.md` / `CLAUDE.md` along the way. The discovered content is concatenated (each section prefixed by a `## SOURCE: <path>` header, 100KB cap) into `/tmp/pr-review/rules.md` and surfaced to every angle as additional rubric. When that file is present, an extra `conventions` angle fires; the validator drops any finding that claims a rule violation but cannot quote the rule verbatim. Repos without rule files run unchanged.
 
-## Per-repo Configuration (`.woo-review.yml`)
+## Per-repo Configuration (`.woo-review/config.yml`)
 
-Drop an optional `.woo-review.yml` at the consumer repo root to tune the review without forking the skill. Prefetch parses it into `/tmp/pr-review/config.json`; downstream stages read from there. Missing file = current behaviour. Invalid YAML or unknown keys → loud `::error file=.woo-review.yml,line=N::<msg>` annotation and the workflow fails (no silent fallback).
+Drop an optional `.woo-review/config.yml` in the consumer repo to tune the review without forking the skill. Prefetch parses it into `/tmp/pr-review/config.json`; downstream stages read from there. Missing file = defaults (`severity_floor: high`). Invalid YAML or unknown keys → loud `::error file=.woo-review/config.yml,line=N::<msg>` annotation and the workflow fails (no silent fallback).
 
 ```yaml
-# .woo-review.yml — all keys optional
+# .woo-review/config.yml — all keys optional
 angles:
   force: [database]            # always run, even if not auto-detected
   skip:  [seo]                 # never run (bugs/security cannot be skipped)
-severity_floor: medium         # one of: low | medium | high; drops findings below the floor
-sidecar_ttl_days: 180          # age cap in days for sidecar entries; set 0 to disable pruning
+severity_floor: high           # one of: low | medium | high; drops findings below the
+                               # floor. DEFAULT high — only high-priority findings
+                               # surface. Set low/medium for noisier reviews.
 ignore:                        # fnmatch globs; ignored paths skip angle triggers + diff body
   - "**/*.generated.ts"
   - "migrations/*.sql"
@@ -229,7 +173,7 @@ export PR_NUMBER=<n>   # optional; prefetch.sh derives it from the branch when u
 bash "$WOO_REVIEW_ACTION_PATH/scripts/prefetch.sh"
 ```
 
-When prefetch resolves a PR number AND finds an open PR, it produces the full artifact tree (`diff.txt`, `meta.json`, `last_sha.txt`, `prior-findings.json`, `rules.md` when applicable, `sidecar-findings.json` when any `.woo-review/dismissed-*.jsonl` shards or the legacy `dismissed.json` exist in the consumer repo). When no PR resolves, it emits `skip=true` — the host then falls back to local-diff mode below.
+When prefetch resolves a PR number AND finds an open PR, it produces the full artifact tree (`diff.txt`, `meta.json`, `last_sha.txt`, `prior-findings.json`, `rules.md` when applicable, `memory.md` when the consumer repo has `.woo-review/memory.md`). When no PR resolves, it emits `skip=true` — the host then falls back to local-diff mode below.
 
 **Artifact reference.** All paths are under `$OUTDIR` (default `/tmp/pr-review/`):
 
@@ -238,17 +182,13 @@ When prefetch resolves a PR number AND finds an open PR, it produces the full ar
 | `diff.txt` | `prefetch.sh` | angle workers, `merge-findings.sh` | Full or incremental diff |
 | `meta.json` | `prefetch.sh` | all stages | PR metadata (title, files, SHA, author) |
 | `last_sha.txt` | `prefetch.sh` | Stage 5 watermark | Present only when a prior watermark was found |
-| `prior-findings.json` | `prefetch.sh` | dedup, event-floor gate | Unresolved + resolved prior review threads |
+| `prior-findings.json` | `prefetch.sh` | event-floor gate | Unresolved + resolved prior review threads |
 | `rules.md` | `prefetch.sh` | `conventions` angle, validator | Concatenated project rule files; triggers `conventions` angle when present |
+| `memory.md` | `prefetch.sh` | all angles, validator | Cross-PR memory (`.woo-review/memory.md`); findings it records as known/accepted are dropped. Present only when the consumer repo has the file |
 | `angles.txt` | `detect-angles.sh` | Stage 3 orchestrator | One angle name per line |
 | `findings.<angle>.json` | angle workers | `merge-findings.sh` | Raw per-angle output |
 | `raw_findings.json` | `merge-findings.sh` | validator passes | Merged, chunk-collapsed findings |
-| `findings.json` | `intersect-findings.sh` | Stage 5, dedup script | Final validated set |
-| `sidecar-findings.json` | `prefetch.sh` (from `.woo-review/dismissed-*.jsonl` + legacy `dismissed.json` fallback) | dedup Pass 1 | array of `{file, line, title, semantic_key, code_anchor, resolved_at, pr_number}`; merged across all 16 shards. |
-| `review-context.json` | `prefetch.sh` | `sidecar-write.sh` (local Stop hook) | PR handoff: `{pr_number, head_sha, repo, repo_path}`; read by the post-session hook to re-hydrate state when session env is absent. Local hosts only. |
-| `findings.deduped.json` | `dedup-against-history.sh` | Stage 5 posting | `findings.json` with history-matched entries removed |
-| `dedup-metrics.json` | `dedup-against-history.sh` | observability | `det_drops`, `llm_drops`, `pair_count` counters |
-| `rule-recommendations.md` | `dedup-against-history.sh` (Sonnet call) | Stage 5 posting | Markdown bullets appended to review body when emitted; see *Rule Recommendations* above |
+| `findings.json` | `intersect-findings.sh` | Stage 5 posting | Final validated set |
 | `validator-metrics.json` | `intersect-findings.sh` | observability | `prosecutor_count`, `defender_count`, `kept_count`, `disagreement_count`, `mode`, `degraded` |
 
 **If no PR number resolved (local mode):**
@@ -273,7 +213,7 @@ git diff --name-only "$BASE"...HEAD \
 ### Stage 2 — Detect Angles
 
 ```bash
-bash "$WOO_REVIEW_ACTION_PATH/scripts/load-config.sh"   # parses .woo-review.yml (no-op if absent)
+bash "$WOO_REVIEW_ACTION_PATH/scripts/load-config.sh"   # parses .woo-review/config.yml (defaults severity_floor=high)
 bash "$WOO_REVIEW_ACTION_PATH/scripts/detect-angles.sh"
 ```
 
@@ -406,7 +346,7 @@ jq -r '.degraded // false' /tmp/pr-review/validator-metrics.json
 
 If `true`, tell the user in your orchestrator summary that the review is defender-only / lower-confidence — the posting stage also appends a ⚠️ line to the review body (`_header.md`). A `disable_adversarial: true` opt-out reports `degraded: false` and needs no warning.
 
-Produces `/tmp/pr-review/findings.json` — the final validated set — and `/tmp/pr-review/validator-metrics.json` with `prosecutor_count`, `defender_count`, `kept_count`, `disagreement_count`. Intersection key is `(file, line, title-stem)` (same stem as prior-thread dedupe in `_header.md`). When `disable_adversarial: true` is set or `findings.prosecutor.json` is absent, the script copies defender output verbatim and tags metrics `mode: defender-only`. Severity = `min(prosecutor, defender)`, blocking = `prosecutor.blocking AND defender.blocking`, other fields take the defender's copy.
+Produces `/tmp/pr-review/findings.json` — the final validated set — and `/tmp/pr-review/validator-metrics.json` with `prosecutor_count`, `defender_count`, `kept_count`, `disagreement_count`. Intersection key is `(file, line, title-stem)`. When `disable_adversarial: true` is set or `findings.prosecutor.json` is absent, the script copies defender output verbatim and tags metrics `mode: defender-only`. Severity = `min(prosecutor, defender)`, blocking = `prosecutor.blocking AND defender.blocking`, other fields take the defender's copy.
 
 ### Stage 5 — Report
 
@@ -417,6 +357,17 @@ Produces `/tmp/pr-review/findings.json` — the final validated set — and `/tm
 - DO NOT modify the PR title or body. DO NOT mutate PR labels.
 
 **If invoked locally (no PR#)** — print the validated findings to the terminal grouped by severity, then stop. Do not touch any remote.
+
+### Stage 6 — Update cross-PR memory (local hosts)
+
+After reporting, when the user **dismisses** a finding as a known/intentional/accepted issue, or tells you a gotcha worth remembering for future reviews, append a one-line markdown bullet to `.woo-review/memory.md` in the reviewed repo (create the `.woo-review/` directory and the file if absent). The local skill writes this file directly — there is no post-session hook and no permission-isolated job. Keep entries short and specific so the next review can match them:
+
+```bash
+mkdir -p .woo-review
+printf -- '- %s\n' "<file or symbol>: <why this is accepted / what to not re-flag>" >> .woo-review/memory.md
+```
+
+Only append on an explicit dismissal or a stated gotcha — never auto-record every finding. Do NOT write memory in CI: the GitHub Action's validator job holds `contents: read` and posts the review only; memory is curated locally and by humans editing the file. Memory is read back as review context on the next run (Stage 1) and the validator drops findings it records.
 
 ## Architecture
 
