@@ -208,6 +208,49 @@ else
   fi
 fi
 
+# ---------- Case 9c: metrics bool round-trips ----------
+cat > "$GITHUB_WORKSPACE/.woo-review/config.json" <<'JSON'
+{ "metrics": true }
+JSON
+bash "$SCRIPT" >/dev/null
+if [ "$(jq -r 'has("metrics")' "$PREFETCH/config.json")" = "true" ] && \
+   [ "$(jq -r '.metrics' "$PREFETCH/config.json")" = "true" ]; then
+  echo "ok   metrics-bool-roundtrip"
+else
+  echo "FAIL metrics-bool-roundtrip: got $(jq -r '.' "$PREFETCH/config.json")"
+  fail=1
+fi
+
+# ---------- Case 9d: metrics absent => key omitted ----------
+cat > "$GITHUB_WORKSPACE/.woo-review/config.json" <<'JSON'
+{ "severity_floor": "high" }
+JSON
+bash "$SCRIPT" >/dev/null
+if [ "$(jq -r 'has("metrics")' "$PREFETCH/config.json")" = "false" ]; then
+  echo "ok   metrics-absent-key-omitted"
+else
+  echo "FAIL metrics-absent-key-omitted: expected has(metrics)==false, got $(jq -r '.' "$PREFETCH/config.json")"
+  fail=1
+fi
+
+# ---------- Case 9e: metrics non-bool rejected ----------
+cat > "$GITHUB_WORKSPACE/.woo-review/config.json" <<'JSON'
+{ "metrics": "yes" }
+JSON
+err_out="$WORK/err.txt"
+if bash "$SCRIPT" 2>"$err_out" >/dev/null; then
+  echo "FAIL metrics-non-bool: loader exited 0"
+  fail=1
+else
+  if grep -q 'metrics' "$err_out" && grep -q 'must be a boolean' "$err_out"; then
+    echo "ok   metrics-non-bool-rejected"
+  else
+    echo "FAIL metrics-non-bool: wrong error"
+    cat "$err_out"
+    fail=1
+  fi
+fi
+
 # ---------- Case 10a: chunking.max_loc int round-trips ----------
 cat > "$GITHUB_WORKSPACE/.woo-review/config.json" <<'JSON'
 { "chunking": { "max_loc": 6000 } }

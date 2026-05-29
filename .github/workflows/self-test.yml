@@ -53,6 +53,12 @@ jobs:
       - name: Run intersect-findings tests
         run: bash tests/intersect-findings.test.sh
 
+      - name: Run intersect-metrics tests
+        run: bash tests/intersect-metrics.test.sh
+
+      - name: Run metrics-fold tests
+        run: bash tests/metrics-fold.test.sh
+
       - name: Run prefetch tests
         run: bash tests/prefetch.test.sh
 
