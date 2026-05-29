@@ -215,7 +215,7 @@ if [ "$disable_adversarial" = "true" ] || [ "$prosecutor_present" = "false" ]; t
   cp "$DEFENDER" "$FINAL"
   write_metrics "$mode" "$degraded" null "$defender_count" "$defender_count" 0 0 0
   echo "intersect-findings: mode=$mode degraded=$degraded kept=$defender_count"
-  emit_angle_metrics "$mode" "$degraded"
+  emit_angle_metrics "$mode" "$degraded" || echo "::warning::emit_angle_metrics failed (non-fatal)" >&2
   exit 0
 fi
 
@@ -357,4 +357,4 @@ disagreement_count="$((dropped_by_defender + dropped_by_prosecutor))"
 write_metrics adversarial false "$prosecutor_count" "$defender_count" "$kept_count" "$disagreement_count" "$dropped_by_defender" "$dropped_by_prosecutor"
 
 echo "intersect-findings: mode=adversarial degraded=false prosecutor=$prosecutor_count defender=$defender_count kept=$kept_count disagreement=$disagreement_count"
-emit_angle_metrics adversarial false
+emit_angle_metrics adversarial false || echo "::warning::emit_angle_metrics failed (non-fatal)" >&2
