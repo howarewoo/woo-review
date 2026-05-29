@@ -13,7 +13,7 @@ The companion GitHub Action is an **extension** of the skill: same prompts, same
 - **Parallel angle swarm** — one sub-agent per detected angle (`bugs`, `security`, `seo`, `aeo`, `design`, `react`, `database`) runs concurrently against the same diff.
 - **Skeptical Validator** — adversarial prosecutor + defender pass, deterministic intersect, severity downgrade only (never upgrade). Merges duplicate findings from different angles before posting.
 - **Cross-PR memory** — a plain-markdown file at `.woo-review/memory.md` that the team curates with gotchas and intentionally-accepted issues. The review reads it as context and drops any finding the memory already records as known/accepted. Humans can edit it freely; the local skill may append to it after a review.
-- **High-priority-only by default** — `severity_floor` defaults to `high` so only critical findings surface out of the box. Set `severity_floor: low` or `medium` in `.woo-review/config.yml` to widen the net.
+- **High-priority-only by default** — `severity_floor` defaults to `high` so only critical findings surface out of the box. Set `"severity_floor": "low"` or `"medium"` in `.woo-review/config.json` to widen the net.
 - **Host-agnostic** — the skill runs under Claude Code, Cursor, Gemini CLI, opencode, or any host that can spawn sub-agents.
 - **Multi-provider** — Anthropic, OpenAI, Google, and OpenRouter all work with the same prompts; provider auto-detected from the secret you supply.
 - **CI extension** — same prompts, same angles, same validator, packaged as a reusable GitHub Actions workflow.
@@ -153,7 +153,7 @@ The CI pipeline mirrors the skill's swarm 1:1 — detection job → matrix of an
 | `disable_angles` | `""` | CSV of optional angles to skip (e.g. `seo,aeo,design,react,database`). `bugs` and `security` are non-negotiable. |
 | `max_turns` | `30` | Agent loop cap (Anthropic; other providers use their equivalent). |
 
-> Review tuning that is **not** an action input — `severity_floor`, `angles.force`/`skip`, `ignore`, `authors_skip`, `disable_adversarial`, `chunking`, per-tier `models` — lives in the consumer repo's `.woo-review/config.yml`, not here. See the [Per-repo Configuration](skills/woo-review/SKILL.md#per-repo-configuration-woo-reviewconfigyml) section of the skill for the full schema.
+> Review tuning that is **not** an action input — `severity_floor`, `angles.force`/`skip`, `ignore`, `authors_skip`, `disable_adversarial`, `chunking`, per-tier `models` — lives in the consumer repo's `.woo-review/config.json`, not here. See the [Per-repo Configuration](skills/woo-review/SKILL.md#per-repo-configuration-woo-reviewconfigjson) section of the skill for the full schema.
 
 ---
 

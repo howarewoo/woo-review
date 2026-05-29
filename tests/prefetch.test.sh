@@ -436,10 +436,9 @@ echo "ok   case13 release_rollup_pattern match -> skip + comment"
 reset
 export WOO_REVIEW_TEST_META_FIXTURE="$BOT_META"
 mkdir -p "$GITHUB_WORKSPACE/.woo-review"
-cat > "$GITHUB_WORKSPACE/.woo-review/config.yml" <<'YAML'
-authors_skip: []
-release_rollup_pattern: ''
-YAML
+cat > "$GITHUB_WORKSPACE/.woo-review/config.json" <<'JSON'
+{ "authors_skip": [], "release_rollup_pattern": "" }
+JSON
 COMMENT_LOG="$WORK/comment-log-5.txt"; : > "$COMMENT_LOG"
 export WOO_REVIEW_TEST_COMMENT_LOG="$COMMENT_LOG"
 bash "$SCRIPT" > "$WORK/stdout" 2>&1 || { echo "FAIL case14 (script error):"; sed 's/^/    /' "$WORK/stdout"; fail=1; }

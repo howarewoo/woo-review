@@ -59,7 +59,7 @@ jobs:
       - name: Run header-markers tests
         run: bash tests/header-markers.test.sh
 
-      - name: Smoke-test .woo-review/config.yml end-to-end
+      - name: Smoke-test .woo-review/config.json end-to-end
         # Drops a fixture config into a synthetic workspace, runs the
         # loader directly, then runs detect-angles to confirm `force:` lands
         # and `skip:` is honored. Validates the artifact tree the prefetch
@@ -70,12 +70,12 @@ jobs:
           GITHUB_OUTPUT="$(mktemp)"
           export GITHUB_WORKSPACE GITHUB_OUTPUT
           mkdir -p /tmp/pr-review "$GITHUB_WORKSPACE/.woo-review"
-          cat > "$GITHUB_WORKSPACE/.woo-review/config.yml" <<'YAML'
-          angles:
-            force: [database]
-            skip:  [seo]
-          severity_floor: high
-          YAML
+          cat > "$GITHUB_WORKSPACE/.woo-review/config.json" <<'JSON'
+          {
+            "angles": { "force": ["database"], "skip": ["seo"] },
+            "severity_floor": "high"
+          }
+          JSON
           cat > /tmp/pr-review/meta.json <<'JSON'
           {
             "headRefOid": "deadbeef", "baseRefName": "main",

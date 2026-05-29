@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Loads .woo-review/config.yml from the consumer repo and emits canonical JSON
+# Loads .woo-review/config.json from the consumer repo and emits canonical JSON
 # to /tmp/pr-review/config.json. Missing file -> defaults (severity_floor=high).
-# Invalid YAML or invalid schema -> loud GitHub-style ::error annotation and
+# Invalid JSON or invalid schema -> loud GitHub-style ::error annotation and
 # non-zero exit (per issue #11 acceptance bullet 4).
 #
 # Noise control: severity_floor defaults to "high" so only high-priority
-# findings surface unless the consumer widens it (low | medium) in config.yml.
+# findings surface unless the consumer widens it (low | medium) in config.json.
 #
 # Schema (all keys optional):
 #   angles.force        list[str] subset of angle enum
@@ -40,30 +40,20 @@ OUTDIR="${OUTDIR:-/tmp/pr-review}"
 mkdir -p "$OUTDIR"
 
 ROOT="${GITHUB_WORKSPACE:-$(pwd)}"
-CFG_PATH="$ROOT/.woo-review/config.yml"
+CFG_PATH="$ROOT/.woo-review/config.json"
 
 if [ ! -f "$CFG_PATH" ]; then
   echo '{"severity_floor":"high"}' > "$OUTDIR/config.json"
-  echo "load-config: no .woo-review/config.yml at $CFG_PATH, using defaults (severity_floor=high)"
+  echo "load-config: no .woo-review/config.json at $CFG_PATH, using defaults (severity_floor=high)"
   exit 0
 fi
 
-# Inline python3 parser. PyYAML ships in the GitHub-hosted runner image and
-# on macOS (via the system Python or `pip install pyyaml`). On failure we
-# emit `::error file=...,line=...,col=...::<msg>` so the GH annotation links
-# straight to the offending line.
+# Inline python3 parser using the stdlib `json` module (no third-party deps).
+# On a decode error we emit `::error file=...,line=...,col=...::<msg>` so the
+# GH annotation links straight to the offending line.
 python3 - "$CFG_PATH" "$OUTDIR/config.json" <<'PY'
 import json
 import sys
-
-try:
-    import yaml
-except ImportError as exc:
-    sys.stderr.write(
-        "::error file=.woo-review/config.yml::PyYAML not installed in this environment "
-        "(pip install pyyaml). Cannot parse config: {}\n".format(exc)
-    )
-    sys.exit(2)
 
 src, dst = sys.argv[1], sys.argv[2]
 
@@ -77,16 +67,14 @@ TOP_KEYS = {
 MODEL_TIERS = {"fast", "standard", "deep"}
 
 
-def loud(msg, mark=None):
+def loud(msg, line=None, col=None):
     """Emit a GitHub-style error annotation and exit non-zero."""
-    if mark is not None:
-        line = getattr(mark, "line", 0) + 1
-        col = getattr(mark, "column", 0) + 1
+    if line is not None:
         sys.stderr.write(
-            "::error file=.woo-review/config.yml,line={},col={}::{}\n".format(line, col, msg)
+            "::error file=.woo-review/config.json,line={},col={}::{}\n".format(line, col, msg)
         )
     else:
-        sys.stderr.write("::error file=.woo-review/config.yml::{}\n".format(msg))
+        sys.stderr.write("::error file=.woo-review/config.json::{}\n".format(msg))
     sys.exit(1)
 
 
@@ -101,21 +89,20 @@ def require_list_of_strings(node, key):
 with open(src, "r") as fh:
     text = fh.read()
 
-try:
-    raw = yaml.safe_load(text)
-except yaml.YAMLError as exc:
-    mark = getattr(exc, "problem_mark", None) or getattr(exc, "context_mark", None)
-    loud(str(exc).splitlines()[0], mark)
-
-if raw is None:
+if text.strip() == "":
     # Empty file is equivalent to defaults.
     with open(dst, "w") as fh:
         json.dump({"severity_floor": "high"}, fh)
-    print("load-config: .woo-review/config.yml is empty, using defaults (severity_floor=high)")
+    print("load-config: .woo-review/config.json is empty, using defaults (severity_floor=high)")
     sys.exit(0)
 
+try:
+    raw = json.loads(text)
+except json.JSONDecodeError as exc:
+    loud(exc.msg, exc.lineno, exc.colno)
+
 if not isinstance(raw, dict):
-    loud("top-level YAML must be a mapping, got {}".format(type(raw).__name__))
+    loud("top-level JSON must be an object, got {}".format(type(raw).__name__))
 
 unknown = sorted(set(raw.keys()) - TOP_KEYS)
 if unknown:
@@ -126,7 +113,7 @@ out = {}
 if "angles" in raw:
     angles = raw["angles"]
     if not isinstance(angles, dict):
-        loud("`angles` must be a mapping with `force:` and/or `skip:` keys")
+        loud("`angles` must be an object with `force` and/or `skip` keys")
     bad = sorted(set(angles.keys()) - {"force", "skip"})
     if bad:
         loud("unknown angles sub-key(s): {}".format(", ".join(bad)))
@@ -178,7 +165,7 @@ if "disable_adversarial" in raw:
 if "chunking" in raw:
     chunking = raw["chunking"]
     if not isinstance(chunking, dict):
-        loud("`chunking` must be a mapping with `max_loc:` key")
+        loud("`chunking` must be an object with `max_loc` key")
     bad = sorted(set(chunking.keys()) - {"max_loc"})
     if bad:
         loud("unknown chunking sub-key(s): {} (valid: max_loc)".format(", ".join(bad)))
@@ -193,7 +180,7 @@ if "chunking" in raw:
 if "models" in raw:
     models = raw["models"]
     if not isinstance(models, dict):
-        loud("`models` must be a mapping with fast/standard/deep keys")
+        loud("`models` must be an object with fast/standard/deep keys")
     bad = sorted(set(models.keys()) - MODEL_TIERS)
     if bad:
         loud("unknown models tier(s): {} (valid: {})".format(", ".join(bad), ", ".join(sorted(MODEL_TIERS))))
@@ -203,12 +190,12 @@ if "models" in raw:
     out["models"] = {k: v.strip() for k, v in models.items()}
 
 # Noise control default: only high-priority findings surface unless the
-# consumer explicitly widens the floor in config.yml.
+# consumer explicitly widens the floor in config.json.
 out.setdefault("severity_floor", "high")
 
 with open(dst, "w") as fh:
     json.dump(out, fh, indent=2, sort_keys=True)
     fh.write("\n")
 
-print("load-config: parsed .woo-review/config.yml -> {} keys: {}".format(len(out), ", ".join(sorted(out.keys())) or "(empty)"))
+print("load-config: parsed .woo-review/config.json -> {} keys: {}".format(len(out), ", ".join(sorted(out.keys())) or "(empty)"))
 PY

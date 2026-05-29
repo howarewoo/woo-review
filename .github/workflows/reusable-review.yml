@@ -179,7 +179,7 @@ jobs:
       # findings.prosecutor.json (inclusive bias), defender pass writes
       # findings.defender.json (exclusive bias) + runs intersect-findings.sh
       # to produce the final findings.json, then posts the review.
-      # `disable_adversarial: true` in .woo-review/config.yml short-circuits the
+      # `disable_adversarial: true` in .woo-review/config.json short-circuits the
       # prosecutor step (the intersect script then falls back to defender-only).
       - name: Read disable_adversarial flag
         id: adv

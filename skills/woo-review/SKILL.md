@@ -38,7 +38,7 @@ The legacy `@review` trigger phrase still works; `/woo-review` is an alias the e
 
 `prefetch.sh` short-circuits the review with a single one-line PR comment when either condition holds (before fetching the diff, so token cost is ~zero):
 
-- **PR author matches `authors_skip`.** Default list: `dependabot[bot]`, `renovate[bot]`, `github-actions[bot]`. Override with `authors_skip: [...]` in `.woo-review/config.yml`; explicit `authors_skip: []` opts out entirely.
+- **PR author matches `authors_skip`.** Default list: `dependabot[bot]`, `renovate[bot]`, `github-actions[bot]`. Override with `"authors_skip": [...]` in `.woo-review/config.json`; explicit `"authors_skip": []` opts out entirely.
 - **PR title matches `release_rollup_pattern`** (Python regex). Default: `^(staging|release|chore\(release\))`. Override with any string; explicit empty string opts out.
 
 The skip comment carries a `<!-- woo-review:skipped -->` marker; subsequent triggers on the same PR detect the marker and re-skip silently (no comment spam). To force a full review of a skipped PR, post `/woo-review force`.
@@ -78,7 +78,7 @@ Reviews stay useful across PRs through a single plain-markdown file in the consu
 
 ### Noise control (`severity_floor`)
 
-`severity_floor` **defaults to `high`** — by default only high-priority findings surface. Widen it per-repo in `.woo-review/config.yml` (`severity_floor: low` or `medium`). The validator applies the floor after its own severity check.
+`severity_floor` **defaults to `high`** — by default only high-priority findings surface. Widen it per-repo in `.woo-review/config.json` (`"severity_floor": "low"` or `"medium"`). The validator applies the floor after its own severity check.
 
 ## Knowledge Aggregation
 
@@ -99,49 +99,62 @@ The audit frameworks themselves are embedded in `prompts/` (inside this skill bu
 
 Prefetch auto-discovers project rule files (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.windsurfrules`, `GEMINI.md`) at the repo root, and additionally walks up from each changed file path to collect any `AGENTS.md` / `CLAUDE.md` along the way. The discovered content is concatenated (each section prefixed by a `## SOURCE: <path>` header, 100KB cap) into `/tmp/pr-review/rules.md` and surfaced to every angle as additional rubric. When that file is present, an extra `conventions` angle fires; the validator drops any finding that claims a rule violation but cannot quote the rule verbatim. Repos without rule files run unchanged.
 
-## Per-repo Configuration (`.woo-review/config.yml`)
+## Per-repo Configuration (`.woo-review/config.json`)
 
-Drop an optional `.woo-review/config.yml` in the consumer repo to tune the review without forking the skill. Prefetch parses it into `/tmp/pr-review/config.json`; downstream stages read from there. Missing file = defaults (`severity_floor: high`). Invalid YAML or unknown keys → loud `::error file=.woo-review/config.yml,line=N::<msg>` annotation and the workflow fails (no silent fallback).
+Drop an optional `.woo-review/config.json` in the consumer repo to tune the review without forking the skill. Prefetch parses it into `/tmp/pr-review/config.json` (canonical copy); downstream stages read from there. Missing file = defaults (`severity_floor: high`). **All keys are optional — specify only the ones you want to override; the rest keep their built-in defaults.** Invalid JSON or unknown keys → loud `::error file=.woo-review/config.json,line=N::<msg>` annotation and the workflow fails (no silent fallback).
 
-```yaml
-# .woo-review/config.yml — all keys optional
-angles:
-  force: [database]            # always run, even if not auto-detected
-  skip:  [seo]                 # never run (bugs/security cannot be skipped)
-severity_floor: high           # one of: low | medium | high; drops findings below the
-                               # floor. DEFAULT high — only high-priority findings
-                               # surface. Set low/medium for noisier reviews.
-ignore:                        # fnmatch globs; ignored paths skip angle triggers + diff body
-  - "**/*.generated.ts"
-  - "migrations/*.sql"
-project_rules:                 # appended to auto-discovered rules.md
-  - constitution.md
-  - "docs/standards/*.md"
-authors_skip:                  # PR author logins that short-circuit the entire review.
-  - "dependabot[bot]"          # Defaults: dependabot[bot], renovate[bot],
-  - "renovate[bot]"            # github-actions[bot]. Set to [] to opt out.
-release_rollup_pattern: '^(staging|release|chore\(release\))'  # Python regex on PR
-                               # title. Default shown. Empty string opts out.
-models:                        # per-tier overrides; inputs.model still wins
-  fast:     anthropic/claude-haiku-4-5
-  standard: openai/gpt-5
-  deep:     anthropic/claude-opus-4-7
-fix_commands:                  # reserved for --loop mode (issue #15)
-  - pnpm lint:fix
-  - pnpm format
-disable_adversarial: false     # cost-sensitive opt-out for the prosecutor+
-                               # defender validator (issue #13). When true,
-                               # only the defender pass runs and its output
-                               # becomes findings.json directly.
-chunking:
-  max_loc: 4000                # diff-chunking threshold (issue #14). When the
-                               # post-ignore diff exceeds this many changed
-                               # lines, prefetch splits it into chunks honoring
-                               # workspace package roots > top-level dirs >
-                               # file-LOC balanced groups. Each angle fans out
-                               # as angles × chunks parallel sub-agents.
-                               # `0` disables chunking entirely. Missing => 4000.
+Minimal example — override one knob, everything else stays default:
+
+```json
+{ "severity_floor": "medium" }
 ```
+
+Full schema (every key shown; all optional):
+
+```json
+{
+  "angles": {
+    "force": ["database"],
+    "skip": ["seo"]
+  },
+  "severity_floor": "high",
+  "ignore": [
+    "**/*.generated.ts",
+    "migrations/*.sql"
+  ],
+  "project_rules": [
+    "constitution.md",
+    "docs/standards/*.md"
+  ],
+  "authors_skip": [
+    "dependabot[bot]",
+    "renovate[bot]"
+  ],
+  "release_rollup_pattern": "^(staging|release|chore\\(release\\))",
+  "models": {
+    "fast": "anthropic/claude-haiku-4-5",
+    "standard": "openai/gpt-5",
+    "deep": "anthropic/claude-opus-4-7"
+  },
+  "fix_commands": ["pnpm lint:fix", "pnpm format"],
+  "disable_adversarial": false,
+  "chunking": {
+    "max_loc": 4000
+  }
+}
+```
+
+Key reference (JSON has no comments, so the per-key semantics live here):
+- **`angles.force`** — always run these, even if not auto-detected. **`angles.skip`** — never run these (`bugs`/`security` cannot be skipped).
+- **`severity_floor`** — one of `low` | `medium` | `high`; drops findings below the floor. **Default `high`** — only high-priority findings surface. Set `low`/`medium` for noisier reviews.
+- **`ignore`** — fnmatch globs; ignored paths skip angle triggers + diff body.
+- **`project_rules`** — fnmatch globs appended to auto-discovered `rules.md`.
+- **`authors_skip`** — PR author logins that short-circuit the entire review. Defaults: `dependabot[bot]`, `renovate[bot]`, `github-actions[bot]`. Set to `[]` to opt out.
+- **`release_rollup_pattern`** — Python regex on the PR title (default shown above; note `\\(` to escape the paren in JSON). Empty string opts out.
+- **`models`** — per-tier slug overrides; the action input `inputs.model` still wins.
+- **`fix_commands`** — reserved for `--loop` mode (issue #15).
+- **`disable_adversarial`** — cost-sensitive opt-out for the prosecutor+defender validator (issue #13). When `true`, only the defender pass runs and its output becomes `findings.json` directly.
+- **`chunking.max_loc`** — diff-chunking threshold (issue #14). When the post-ignore diff exceeds this many changed lines, prefetch splits it into chunks honoring workspace package roots > top-level dirs > file-LOC-balanced groups; each angle fans out as angles × chunks parallel sub-agents. `0` disables chunking; missing => 4000.
 
 **Precedence**: for the angle set, `angles.force` beats `angles.skip` when the same angle is listed in both. For model resolution, the action input `inputs.model` beats `models.<tier>` which beats the table default in `prompts/_header.md`. `ignore` is applied to both file paths and the per-file diff sections before angle gates evaluate.
 
@@ -213,7 +226,7 @@ git diff --name-only "$BASE"...HEAD \
 ### Stage 2 — Detect Angles
 
 ```bash
-bash "$WOO_REVIEW_ACTION_PATH/scripts/load-config.sh"   # parses .woo-review/config.yml (defaults severity_floor=high)
+bash "$WOO_REVIEW_ACTION_PATH/scripts/load-config.sh"   # parses .woo-review/config.json (defaults severity_floor=high)
 bash "$WOO_REVIEW_ACTION_PATH/scripts/detect-angles.sh"
 ```
 

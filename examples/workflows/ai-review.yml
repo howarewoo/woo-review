@@ -35,7 +35,7 @@ jobs:
     name: AI Code Review
     runs-on: ubuntu-latest
     # NOTE: bot-author skip (dependabot/renovate/github-actions) + release-rollup
-    # title skip are now enforced inside the action by .woo-review/config.yml defaults,
+    # title skip are now enforced inside the action by .woo-review/config.json defaults,
     # so the workflow no longer needs to hard-code them. `/woo-review force` in
     # a PR comment overrides those skips — that path is what the issue_comment
     # branch below enables.
