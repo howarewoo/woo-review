@@ -12,7 +12,8 @@
 #   validator-metrics.json     {prosecutor_count, defender_count,
 #                               kept_count, disagreement_count,
 #                               dropped_by_defender, dropped_by_prosecutor,
-#                               mode: "adversarial" | "defender-only"}
+#                               mode: "adversarial" | "defender-only",
+#                               degraded: bool}
 #
 # Intersection key: two-pass match. Pass 1 is exact `(file, line, title_stem)`
 # where `title_stem` is lowercase alphanumeric truncated to 40 chars — same
@@ -74,16 +75,22 @@ fi
 
 if [ "$disable_adversarial" = "true" ] || [ "$prosecutor_present" = "false" ]; then
   mode="defender-only"
-  reason="$disable_adversarial"
+  # degraded = the adversarial pass was EXPECTED but the prosecutor output is
+  # missing/invalid (a silent failure). A legitimate `disable_adversarial: true`
+  # opt-out is NOT degraded. Only the former should be surfaced to the user.
+  degraded="false"
   if [ "$disable_adversarial" != "true" ]; then
-    echo "::warning::intersect-findings: prosecutor findings absent — falling back to defender-only output" >&2
+    degraded="true"
+    echo "::warning::intersect-findings: prosecutor findings absent — falling back to defender-only output (degraded)" >&2
   fi
   cp "$DEFENDER" "$FINAL"
   jq -n \
     --argjson defender_count "$defender_count" \
     --arg mode "$mode" \
+    --argjson degraded "$degraded" \
     '{
       mode: $mode,
+      degraded: $degraded,
       prosecutor_count: null,
       defender_count: $defender_count,
       kept_count: $defender_count,
@@ -91,7 +98,7 @@ if [ "$disable_adversarial" = "true" ] || [ "$prosecutor_present" = "false" ]; t
       dropped_by_defender: 0,
       dropped_by_prosecutor: 0
     }' > "$METRICS"
-  echo "intersect-findings: mode=$mode kept=$defender_count"
+  echo "intersect-findings: mode=$mode degraded=$degraded kept=$defender_count"
   exit 0
 fi
 
@@ -239,6 +246,7 @@ jq -n \
   --argjson dropped_by_prosecutor "$dropped_by_prosecutor" \
   '{
     mode: "adversarial",
+    degraded: false,
     prosecutor_count: $prosecutor_count,
     defender_count: $defender_count,
     kept_count: $kept_count,
@@ -247,4 +255,4 @@ jq -n \
     dropped_by_prosecutor: $dropped_by_prosecutor
   }' > "$METRICS"
 
-echo "intersect-findings: mode=adversarial prosecutor=$prosecutor_count defender=$defender_count kept=$kept_count disagreement=$disagreement_count"
+echo "intersect-findings: mode=adversarial degraded=false prosecutor=$prosecutor_count defender=$defender_count kept=$kept_count disagreement=$disagreement_count"

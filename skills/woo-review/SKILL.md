@@ -249,7 +249,7 @@ When prefetch resolves a PR number AND finds an open PR, it produces the full ar
 | `findings.deduped.json` | `dedup-against-history.sh` | Stage 5 posting | `findings.json` with history-matched entries removed |
 | `dedup-metrics.json` | `dedup-against-history.sh` | observability | `det_drops`, `llm_drops`, `pair_count` counters |
 | `rule-recommendations.md` | `dedup-against-history.sh` (Sonnet call) | Stage 5 posting | Markdown bullets appended to review body when emitted; see *Rule Recommendations* above |
-| `validator-metrics.json` | `intersect-findings.sh` | observability | `prosecutor_count`, `defender_count`, `kept_count`, `disagreement_count` |
+| `validator-metrics.json` | `intersect-findings.sh` | observability | `prosecutor_count`, `defender_count`, `kept_count`, `disagreement_count`, `mode`, `degraded` |
 
 **If no PR number resolved (local mode):**
 
