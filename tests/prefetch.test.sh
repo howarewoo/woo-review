@@ -645,6 +645,34 @@ SHARD_D_LEN=$(jq -e 'length' "$PREFETCH/sidecar-findings.json" 2>/dev/null || ec
 assert_eq "SHARD_D: oversized combined shards -> empty sidecar" "0" "$SHARD_D_LEN"
 echo "ok   SHARD_D: oversized combined shards -> empty sidecar"
 
+# ---------- Guard: in-flight findings.* block the rm -rf wipe (issue #48) ----------
+# The guard runs at the very top of prefetch.sh (before any gh/PR work), so a
+# later failure in this minimal env is irrelevant — the wipe decision already ran.
+GUARD_OUT="$WORK/guard-outdir"
+mkdir -p "$GUARD_OUT"
+echo '[{"file":"x.ts"}]' > "$GUARD_OUT/findings.bugs.json"
+GUARD_ERR="$WORK/guard.err"
+OUTDIR="$GUARD_OUT" PR_NUMBER="" GITHUB_ACTIONS="true" bash "$SCRIPT" >/dev/null 2>"$GUARD_ERR" || true
+if [ -f "$GUARD_OUT/findings.bugs.json" ]; then
+  echo "ok   guard-preserves-inflight"
+else
+  echo "FAIL guard-preserves-inflight: findings.bugs.json was wiped"; exit 1
+fi
+if grep -qE "refusing.*rm -rf|in-flight findings" "$GUARD_ERR"; then
+  echo "ok   guard-warns"
+else
+  echo "FAIL guard-warns: no warning emitted"; exit 1
+fi
+
+# NOTE: relies on the preserve-test above having left findings.bugs.json in
+# $GUARD_OUT — this proves WOO_REVIEW_FRESH=1 wipes a populated dir. Keep ordered.
+WOO_REVIEW_FRESH=1 OUTDIR="$GUARD_OUT" PR_NUMBER="" GITHUB_ACTIONS="true" bash "$SCRIPT" >/dev/null 2>/dev/null || true
+if [ -f "$GUARD_OUT/findings.bugs.json" ]; then
+  echo "FAIL guard-fresh-force: file survived WOO_REVIEW_FRESH=1"; exit 1
+else
+  echo "ok   guard-fresh-force"
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo "prefetch tests FAILED"
   exit 1
