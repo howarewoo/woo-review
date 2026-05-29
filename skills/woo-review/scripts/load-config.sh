@@ -30,6 +30,9 @@
 #   fix_commands        list[str]  (consumed by issue #15 --loop mode)
 #   disable_adversarial bool       (cost-sensitive opt-out for issue #13's
 #                                   prosecutor+defender pipeline; default false)
+#   metrics             bool       (issue #41: opt-in per-angle signal/noise
+#                                   metrics emit + rolling aggregate; default
+#                                   false)
 #   chunking.max_loc    int >= 0   (issue #14: diff split threshold; 0 disables
 #                                   chunking entirely; absent => 4000 default
 #                                   applied by chunk-diff.sh)
@@ -62,7 +65,7 @@ VALID_FLOORS = {"low", "medium", "high"}
 TOP_KEYS = {
     "angles", "severity_floor", "ignore", "project_rules",
     "authors_skip", "release_rollup_pattern", "models", "fix_commands",
-    "disable_adversarial", "chunking",
+    "disable_adversarial", "metrics", "chunking",
 }
 MODEL_TIERS = {"fast", "standard", "deep"}
 
@@ -161,6 +164,12 @@ if "disable_adversarial" in raw:
     if not isinstance(val, bool):
         loud("`disable_adversarial` must be a boolean (true/false), got {}".format(type(val).__name__))
     out["disable_adversarial"] = val
+
+if "metrics" in raw:
+    val = raw["metrics"]
+    if not isinstance(val, bool):
+        loud("`metrics` must be a boolean (true/false), got {}".format(type(val).__name__))
+    out["metrics"] = val
 
 if "chunking" in raw:
     chunking = raw["chunking"]
