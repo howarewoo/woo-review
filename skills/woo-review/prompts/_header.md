@@ -262,6 +262,16 @@ for f in findings:
     if footer_parts:
         body += "\n\n<sub>— " + " · ".join(footer_parts) + "</sub>"
 
+    # Sidecar marker — appended so sidecar-write.sh can parse the original
+    # semantic_key/code_anchor out of the comment body via GraphQL on the next
+    # run. Whitelist-validated: malformed/missing fields → marker omitted, no
+    # injection surface. Falls back to the existing placeholder behavior in
+    # sidecar-write.sh (unknown/unknown, unknown000000) when the marker is absent.
+    sk = (f.get("semantic_key") or "").strip()
+    ca = (f.get("code_anchor")  or "").strip()
+    if sk and ca and re.fullmatch(r"[a-z0-9/_-]{1,40}", sk) and re.fullmatch(r"[a-f0-9]{12}", ca):
+        body += f"\n<!-- woo-review:sk={sk} ca={ca} -->"
+
     comments.append({
         "path": f["file"],
         "line": int(f["line"]),
