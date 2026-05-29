@@ -2,8 +2,10 @@
 # sidecar-write.sh
 #
 # Scans review threads resolved between last_sha..HEAD_SHA, appends them
-# (idempotent on (pr_number, semantic_key, code_anchor)) to
-# .woo-review/dismissed.json, and commits the change via the bot identity.
+# (idempotent on (pr_number, semantic_key, code_anchor); fallback
+# (pr_number, file, line) for legacy placeholder rows) to one of 16
+# hash-sharded JSONL files under .woo-review/dismissed-<0-f>.jsonl, then
+# commits via the bot identity.
 #
 # Gated on:
 #   - .woo-review.yml: enable_sidecar_write (default: true)
@@ -11,17 +13,7 @@
 #
 # Failures (no perm, push race, malformed) → log + exit 0. Never fail the run.
 #
-# NOTE: semantic_key and code_anchor are written as placeholder values
-# ("unknown/unknown" and "unknown000000") because the GitHub reviewThreads
-# GraphQL query only surfaces file + line + comment body — not the original
-# finding's semantic_key/code_anchor. A future improvement would parse those
-# out of the bot review body, where they are embedded as
-# <!-- woo-review:sk=<key> --> / <!-- woo-review:ca=<anchor> --> inline
-# markers (similar to how prefetch.sh reads the <!-- woo-review:sha=... -->
-# watermark). prefetch.sh currently also doesn't extract those markers from
-# prior-findings.json entries, so this limitation is shared across the board.
-# The dedup step still benefits from these entries via the (file, line, title)
-# tuple even when the dedup keys are placeholders.
+# Marker parse + sharded JSONL: see docs/superpowers/specs/2026-05-28-sidecar-scaling-design.html
 
 set -euo pipefail
 
@@ -79,6 +71,8 @@ HEAD_SHA="${HEAD_SHA:-$(jq -r '.head_sha // empty' "$CTX" 2>/dev/null || echo)}"
 GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-$(jq -r '.repo // empty' "$CTX" 2>/dev/null || echo)}"
 export GITHUB_REPOSITORY
 
+shard_for() { printf '%s' "$1" | shasum -a 1 | cut -c1; }
+
 if [ -z "$PR_NUMBER" ] || [ -z "$HEAD_SHA" ]; then
   echo "sidecar-write: PR_NUMBER or HEAD_SHA missing; skipping"
   exit 0
@@ -105,7 +99,8 @@ else
     }' 2>/dev/null || echo '{}')
 fi
 
-NEW_ENTRIES=$(printf '%s' "$RESOLVED" | jq --arg pr "$PR_NUMBER" --arg now "$(date -u +%FT%TZ)" '
+NOW=$(date -u +%FT%TZ)
+NEW_ENTRIES=$(printf '%s' "$RESOLVED" | jq -c --arg pr "$PR_NUMBER" --arg now "$NOW" '
   [ .data.repository.pullRequest.reviewThreads.nodes[]?
     | select(.isResolved == true)
     | select(.path != null)
@@ -119,31 +114,64 @@ NEW_ENTRIES=$(printf '%s' "$RESOLVED" | jq --arg pr "$PR_NUMBER" --arg now "$(da
       } ]')
 
 NEW_COUNT=$(printf '%s' "$NEW_ENTRIES" | jq length)
-[ "$NEW_COUNT" -eq 0 ] && { echo "sidecar-write: no newly-resolved threads"; exit 0; }
-
-SIDECAR=".woo-review/dismissed.json"
-mkdir -p .woo-review
-[ -f "$SIDECAR" ] || echo '[]' > "$SIDECAR"
-
-if ! jq empty "$SIDECAR" 2>/dev/null; then
-  echo "sidecar-write: existing sidecar malformed; skipping (not overwriting)"
-  exit 0
+if [ "$NEW_COUNT" -eq 0 ]; then
+  echo "sidecar-write: no newly-resolved threads"; exit 0
 fi
 
-MERGED=$(jq -n --argjson a "$(cat "$SIDECAR")" --argjson b "$NEW_ENTRIES" '
-  ($a + $b) | unique_by({pr_number, file, line})
-')
-printf '%s' "$MERGED" > "$SIDECAR"
+mkdir -p .woo-review
 
+# --- group by shard and append (with in-shard dedup) ----------------------
+WRITTEN=0
+
+# Unique shard letters covered by this batch.
+SHARDS=$(printf '%s' "$NEW_ENTRIES" | jq -r '.[].file' \
+          | while read -r FILE; do shard_for "$FILE"; done | sort -u)
+
+for SH in $SHARDS; do
+  SHARD_FILE=".woo-review/dismissed-$SH.jsonl"
+  [ -f "$SHARD_FILE" ] || : > "$SHARD_FILE"
+
+  # Iterate every candidate entry; keep only the ones that route to this shard
+  # AND survive dedup. The redirect at the loop tail uses process substitution
+  # so the running WRITTEN counter is not lost to a subshell.
+  while IFS= read -r ENTRY; do
+    F=$(printf '%s' "$ENTRY" | jq -r '.file')
+    [ "$(shard_for "$F")" = "$SH" ] || continue
+
+    # Dedup: skip if (pr, sk, ca) matches an existing line, or — for legacy
+    # placeholder rows where sk/ca are both "unknown*" — fall back to
+    # (pr, file, line).
+    KEY=$(printf '%s'    "$ENTRY" | jq -c '[.pr_number,.semantic_key,.code_anchor]')
+    KEY_FB=$(printf '%s' "$ENTRY" | jq -c '[.pr_number,.file,.line]')
+
+    HIT=""
+    while IFS= read -r LN; do
+      [ -z "$LN" ] && continue
+      VK=$(printf '%s'   "$LN" | jq -c '[.pr_number,.semantic_key,.code_anchor]' 2>/dev/null) || continue
+      VKFB=$(printf '%s' "$LN" | jq -c '[.pr_number,.file,.line]'                2>/dev/null) || continue
+      if [ "$VK" = "$KEY" ] || [ "$VKFB" = "$KEY_FB" ]; then HIT=1; break; fi
+    done < "$SHARD_FILE"
+    [ -n "$HIT" ] && continue
+
+    printf '%s\n' "$ENTRY" >> "$SHARD_FILE"
+    WRITTEN=$((WRITTEN + 1))
+  done < <(printf '%s' "$NEW_ENTRIES" | jq -c '.[]')
+done
+
+if [ "$WRITTEN" -eq 0 ]; then
+  echo "sidecar-write: all $NEW_COUNT entries already present"; exit 0
+fi
+
+# --- commit + push --------------------------------------------------------
 git config --local user.name  "${WOO_REVIEW_BOT_NAME:-woo-review[bot]}"
 git config --local user.email "${WOO_REVIEW_BOT_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
 
-if ! git add "$SIDECAR"; then
-  echo "sidecar-write: git add failed; skipping"; exit 0; fi
-if git diff --cached --quiet "$SIDECAR"; then
-  echo "sidecar-write: nothing new to commit"; exit 0; fi
+git add .woo-review/dismissed-*.jsonl || { echo "sidecar-write: git add failed; skipping"; exit 0; }
+if git diff --cached --quiet; then
+  echo "sidecar-write: nothing new to commit"; exit 0
+fi
 
-git commit -m "chore(woo-review): record $NEW_COUNT dismissed finding(s)" || {
+git commit -m "chore(woo-review): record $WRITTEN dismissed finding(s)" || {
   echo "sidecar-write: commit failed; skipping"; exit 0; }
 
 if ! git push; then
@@ -151,4 +179,4 @@ if ! git push; then
   git pull --rebase || { echo "sidecar-write: rebase failed; skipping"; exit 0; }
   git push || { echo "sidecar-write: push still failing; skipping"; exit 0; }
 fi
-echo "sidecar-write: appended $NEW_COUNT entries to $SIDECAR"
+echo "sidecar-write: appended $WRITTEN entries across sharded JSONL"
