@@ -154,6 +154,7 @@ Key reference (JSON has no comments, so the per-key semantics live here):
 - **`models`** — per-tier slug overrides; the action input `inputs.model` still wins.
 - **`fix_commands`** — reserved for `--loop` mode (issue #15).
 - **`disable_adversarial`** — cost-sensitive opt-out for the prosecutor+defender validator (issue #13). When `true`, only the defender pass runs and its output becomes `findings.json` directly.
+- `metrics` (bool, default `false`) — opt in to per-angle signal/noise metrics: emit `findings.metrics.json` per run and fold a rolling `.woo-review/metrics.json` aggregate (local only). See Stage 6.5.
 - **`chunking.max_loc`** — diff-chunking threshold (issue #14). When the post-ignore diff exceeds this many changed lines, prefetch splits it into chunks honoring workspace package roots > top-level dirs > file-LOC-balanced groups; each angle fans out as angles × chunks parallel sub-agents. `0` disables chunking; missing => 4000.
 
 **Precedence**: for the angle set, `angles.force` beats `angles.skip` when the same angle is listed in both. For model resolution, the action input `inputs.model` beats `models.<tier>` which beats the table default in `prompts/_header.md`. `ignore` is applied to both file paths and the per-file diff sections before angle gates evaluate.
@@ -203,6 +204,7 @@ When prefetch resolves a PR number AND finds an open PR, it produces the full ar
 | `raw_findings.json` | `merge-findings.sh` | validator passes | Merged, chunk-collapsed findings |
 | `findings.json` | `intersect-findings.sh` | Stage 5 posting | Final validated set |
 | `validator-metrics.json` | `intersect-findings.sh` | observability | `prosecutor_count`, `defender_count`, `kept_count`, `disagreement_count`, `mode`, `degraded` |
+| `findings.metrics.json` | `intersect-findings.sh` | metrics fold, telemetry | Per-angle signal/noise breakdown. Emitted **only when `metrics: true`** in config. Keyed by angle: `raw_count`, `prosecutor_kept`, `defender_kept`, `kept`, `dropped_by_defender`, `dropped_by_prosecutor`, `blocking_count`, `nonblocking_count`, `severity` |
 
 **If no PR number resolved (local mode):**
 
@@ -388,6 +390,37 @@ printf -- '- %s\n' "<general pattern>: <why it is accepted / what not to re-flag
 ```
 
 Phrase entries as patterns, not instances — prefer "Generated `*.pb.go` files are intentional; do not flag their style" over "dismissed line 42 in user.pb.go". The local skill writes this file directly — no post-session hook, no permission-isolated job. Only record on an explicit dismissal or a stated gotcha — never auto-record every finding. Do NOT write memory in CI: the GitHub Action's validator job holds `contents: read` and posts the review only; memory is curated locally and by humans editing the file. Memory is read back as review context on the next run (Stage 1) and the validator drops findings it records.
+
+### Stage 6.5 — Fold per-angle metrics (local hosts, opt-in)
+
+Only when the consumer repo sets `metrics: true` in `.woo-review/config.json`. The
+per-run `findings.metrics.json` (written by `intersect-findings.sh`) is folded into a
+rolling, **per-clone** aggregate at `.woo-review/metrics.json`. The fold script also
+ensures that path is gitignored — the aggregate is local data, never committed
+(cross-host aggregation is the job of the opt-in central sink, a separate feature).
+
+```bash
+bash skills/woo-review/scripts/metrics-fold.sh
+```
+
+This is a no-op when `metrics` is off or no per-run record exists. As with memory, the
+GitHub Action does **not** fold — its job is `contents: read` + post; metrics persistence
+is local only (the action uploads `findings.metrics.json` as a build artifact instead).
+
+**Reading the aggregate.** Rank angles by validator-drop rate (noise candidates first):
+
+```bash
+jq -r '.angles | to_entries
+  | map({angle: .key,
+         raw: .value.raw_total,
+         drop_rate: (if .value.raw_total > 0 then .value.dropped_by_defender_total / .value.raw_total else 0 end),
+         keep_rate: (if .value.raw_total > 0 then .value.kept_total / .value.raw_total else 0 end)})
+  | sort_by(-.drop_rate)[]
+  | "\(.angle)\traw=\(.raw)\tdrop=\((.drop_rate*100|floor))%\tkeep=\((.keep_rate*100|floor))%"' \
+  .woo-review/metrics.json
+```
+
+A high `raw` with a high `drop` rate is a noise candidate; a high `keep` rate is a useful angle.
 
 ## Architecture
 
