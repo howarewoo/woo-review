@@ -83,7 +83,7 @@ Apply `$WOO_REVIEW_ACTION_PATH/prompts/validator-prosecutor.md` against `raw_fin
 
 ### Phase 3b — Defender pass
 
-Apply `$WOO_REVIEW_ACTION_PATH/prompts/validator.md` against `raw_findings.json`. Bias: try to prove each finding wrong; drop pedantic / lint-catchable / "maybe" findings; enforce the comment-shape + `fix_type` rules. Write surviving findings to `/tmp/pr-review/findings.defender.json`.
+Apply `$WOO_REVIEW_ACTION_PATH/prompts/validator.md` against `raw_findings.json`. Bias: try to prove each finding wrong; drop pedantic / lint-catchable / "maybe" findings; enforce the comment-shape + `fix_type` rules. Write surviving findings to `/tmp/pr-review/findings.defender.json`. Apply only `validator.md`'s validation/filter rules (its Steps 1–2) to produce `findings.defender.json`; IGNORE validator.md's Step 3/3b/4 and its STOP-GATE — the orchestrator runs the intersect itself in the next phase.
 
 ### Phase 3c — Intersect
 

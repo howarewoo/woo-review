@@ -215,6 +215,61 @@ JSON
 bash "$SCRIPT" >/dev/null 2>"$CASE/err.txt"
 assert_eq "fuzzy-different-files kept" "$(jq 'length' "$CASE/findings.json")" "0" && echo "ok   fuzzy-different-files-not-matched"
 
+# ---------- Case: fuzzy-window comments match LINE_WINDOW (issue #49) ----------
+# The fuzzy-match comments must say "<= 10" (LINE_WINDOW = 10), not the stale "<= 5".
+if grep -nE '\|line_?a? ?- ?line_?b?\| <= 5|line delta\| <= 5' "$SCRIPT" >/dev/null 2>&1; then
+  echo "FAIL fuzzy-window-comment: stale '<= 5' still present in $SCRIPT"
+  grep -nE '<= 5' "$SCRIPT" || true
+  fail=1
+else
+  echo "ok   fuzzy-window-comment"
+fi
+
+# ---------- Case: prosecutor absent + adversarial ENABLED → degraded=true ----------
+new_case "degraded-when-enabled"
+cat > "$CASE/findings.defender.json" <<'JSON'
+[{"file":"a.ts","line":1,"title":"T","severity":"HIGH","blocking":true,"description":"d","fix":"f","fix_type":"prose","suggestion":null,"angle":"bugs"}]
+JSON
+# no prosecutor file, no config (adversarial defaults enabled)
+bash "$SCRIPT" >/dev/null 2>&1
+ok=1
+assert_eq "degraded-enabled mode" "$(jq -r '.mode' "$CASE/validator-metrics.json")" "defender-only" || ok=0
+assert_eq "degraded-enabled flag" "$(jq -r '.degraded' "$CASE/validator-metrics.json")" "true" || ok=0
+[ $ok -eq 1 ] && echo "ok   degraded-when-enabled"
+
+# ---------- Case: prosecutor absent + adversarial DISABLED → degraded=false ----------
+new_case "not-degraded-when-disabled"
+cat > "$CASE/findings.defender.json" <<'JSON'
+[{"file":"a.ts","line":1,"title":"T","severity":"HIGH","blocking":true,"description":"d","fix":"f","fix_type":"prose","suggestion":null,"angle":"bugs"}]
+JSON
+echo '{"disable_adversarial":true}' > "$CASE/config.json"
+bash "$SCRIPT" >/dev/null 2>&1
+ok=1
+assert_eq "disabled mode" "$(jq -r '.mode' "$CASE/validator-metrics.json")" "defender-only" || ok=0
+assert_eq "disabled degraded-false" "$(jq -r '.degraded' "$CASE/validator-metrics.json")" "false" || ok=0
+[ $ok -eq 1 ] && echo "ok   not-degraded-when-disabled"
+
+# ---------- Case: both passes present → degraded=false ----------
+new_case "not-degraded-adversarial"
+cat > "$CASE/findings.defender.json" <<'JSON'
+[{"file":"a.ts","line":1,"title":"T","severity":"HIGH","blocking":true,"description":"d","fix":"f","fix_type":"prose","suggestion":null,"angle":"bugs"}]
+JSON
+cp "$CASE/findings.defender.json" "$CASE/findings.prosecutor.json"
+bash "$SCRIPT" >/dev/null 2>&1
+assert_eq "adversarial degraded-false" "$(jq -r '.degraded' "$CASE/validator-metrics.json")" "false" && echo "ok   not-degraded-adversarial"
+
+# ---------- Case: prosecutor present but NON-ARRAY + enabled → degraded=true ----------
+new_case "degraded-when-prosecutor-invalid"
+cat > "$CASE/findings.defender.json" <<'JSON'
+[{"file":"a.ts","line":1,"title":"T","severity":"HIGH","blocking":true,"description":"d","fix":"f","fix_type":"prose","suggestion":null,"angle":"bugs"}]
+JSON
+echo '{"not":"an array"}' > "$CASE/findings.prosecutor.json"
+bash "$SCRIPT" >/dev/null 2>&1
+ok=1
+assert_eq "invalid-pros mode" "$(jq -r '.mode' "$CASE/validator-metrics.json")" "defender-only" || ok=0
+assert_eq "invalid-pros degraded" "$(jq -r '.degraded' "$CASE/validator-metrics.json")" "true" || ok=0
+[ $ok -eq 1 ] && echo "ok   degraded-when-prosecutor-invalid"
+
 if [ $fail -ne 0 ]; then
   echo "TESTS FAILED"
   exit 1

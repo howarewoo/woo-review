@@ -134,6 +134,12 @@ reset() {
   : > "$OUTPUT_FILE"
   rm -f "$PREFETCH"/* 2>/dev/null || true
   rm -f "$GITHUB_WORKSPACE/.woo-review.yml" 2>/dev/null || true
+  # Non-GHA baseline. These cases drive prefetch.sh via the WOO_REVIEW_FAKE_*
+  # hooks, which prefetch.sh refuses when GITHUB_ACTIONS=true (local-only test
+  # hooks). The CI runner exports GITHUB_ACTIONS=true, so without this unset the
+  # whole suite trips the refusal in CI while passing locally. Cases that need
+  # the GHA-gated paths set GITHUB_ACTIONS=true explicitly after calling reset.
+  unset GITHUB_ACTIONS || true
   unset WOO_REVIEW_FAKE_PR_REVIEWS_JSON || true
   unset WOO_REVIEW_FAKE_INCREMENTAL_DIFF || true
   unset WOO_REVIEW_TEST_COMPARE_404 || true
@@ -644,6 +650,34 @@ bash "$SCRIPT" > "$WORK/stdout" 2>&1 || { echo "FAIL SHARD_D (script error):"; s
 SHARD_D_LEN=$(jq -e 'length' "$PREFETCH/sidecar-findings.json" 2>/dev/null || echo "missing")
 assert_eq "SHARD_D: oversized combined shards -> empty sidecar" "0" "$SHARD_D_LEN"
 echo "ok   SHARD_D: oversized combined shards -> empty sidecar"
+
+# ---------- Guard: in-flight findings.* block the rm -rf wipe (issue #48) ----------
+# The guard runs at the very top of prefetch.sh (before any gh/PR work), so a
+# later failure in this minimal env is irrelevant — the wipe decision already ran.
+GUARD_OUT="$WORK/guard-outdir"
+mkdir -p "$GUARD_OUT"
+echo '[{"file":"x.ts"}]' > "$GUARD_OUT/findings.bugs.json"
+GUARD_ERR="$WORK/guard.err"
+OUTDIR="$GUARD_OUT" PR_NUMBER="" GITHUB_ACTIONS="true" bash "$SCRIPT" >/dev/null 2>"$GUARD_ERR" || true
+if [ -f "$GUARD_OUT/findings.bugs.json" ]; then
+  echo "ok   guard-preserves-inflight"
+else
+  echo "FAIL guard-preserves-inflight: findings.bugs.json was wiped"; fail=1
+fi
+if grep -qE "refusing.*rm -rf|in-flight findings" "$GUARD_ERR"; then
+  echo "ok   guard-warns"
+else
+  echo "FAIL guard-warns: no warning emitted"; fail=1
+fi
+
+# NOTE: relies on the preserve-test above having left findings.bugs.json in
+# $GUARD_OUT — this proves WOO_REVIEW_FRESH=1 wipes a populated dir. Keep ordered.
+WOO_REVIEW_FRESH=1 OUTDIR="$GUARD_OUT" PR_NUMBER="" GITHUB_ACTIONS="true" bash "$SCRIPT" >/dev/null 2>/dev/null || true
+if [ -f "$GUARD_OUT/findings.bugs.json" ]; then
+  echo "FAIL guard-fresh-force: file survived WOO_REVIEW_FRESH=1"; fail=1
+else
+  echo "ok   guard-fresh-force"
+fi
 
 if [ "$fail" -ne 0 ]; then
   echo "prefetch tests FAILED"

@@ -117,11 +117,19 @@ Spawn one `@generalist` with `$WOO_REVIEW_ACTION_PATH/prompts/validator-prosecut
 
 ### Phase 3b — Defender pass
 
-Spawn one `@generalist` with `$WOO_REVIEW_ACTION_PATH/prompts/validator.md` as its brief. It applies the strict "defense attorney" filter — drops pedantic / lint-catchable / maybe-issues / placeholder-suggestion findings — and writes `/tmp/pr-review/findings.defender.json`. It then runs `bash $WOO_REVIEW_ACTION_PATH/scripts/intersect-findings.sh` which produces the final `/tmp/pr-review/findings.json` (intersection of prosecutor + defender). When adversarial is disabled or the prosecutor file is absent, the script copies defender output verbatim and tags metrics `mode: defender-only`.
+Spawn one `@generalist` with `$WOO_REVIEW_ACTION_PATH/prompts/validator.md` as its brief. It applies the strict "defense attorney" filter — drops pedantic / lint-catchable / maybe-issues / placeholder-suggestion findings — and writes `/tmp/pr-review/findings.defender.json`. It writes `/tmp/pr-review/findings.defender.json` and EXITs — it does NOT run the intersect script or post (the orchestrator does that next). Apply only `validator.md`'s validation/filter rules (its Steps 1–2) to produce `findings.defender.json`; IGNORE validator.md's Step 3/3b/4 and its STOP-GATE — the orchestrator runs the intersect itself in the next phase.
 
-The two passes MUST be sequential — the defender runs the intersect script after writing its output, so the prosecutor's file must already exist when adversarial mode is on.
+The two passes MUST be sequential — the prosecutor's file must already exist before the defender runs when adversarial mode is on.
 
-Per-pass and disagreement counts land in `/tmp/pr-review/validator-metrics.json`.
+### Phase 3c — Intersect (orchestrator)
+
+After both validator subagents finish, the orchestrator (this session) runs:
+
+```bash
+bash "$WOO_REVIEW_ACTION_PATH/scripts/intersect-findings.sh"
+```
+
+This produces the final `/tmp/pr-review/findings.json` (intersection of prosecutor + defender; when adversarial is disabled or the prosecutor file is absent, defender output is copied verbatim). Per-pass and disagreement counts land in `/tmp/pr-review/validator-metrics.json`.
 
 ## Phase 4 — Submit native PR Review
 

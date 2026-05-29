@@ -31,7 +31,7 @@ inputs:
     required: false
     default: ''
   mode:
-    description: 'Execution mode: full (sequential) | detect | review | validate-prosecutor | validate | sidecar-write. The adversarial validator runs as two passes: validate-prosecutor first (writes findings.prosecutor.json), then validate (writes findings.defender.json, runs intersect-findings.sh, and posts the review). `sidecar-write` is a permission-isolated post-step that commits newly-resolved threads to the sharded `.woo-review/dismissed-<0-f>.jsonl` files (issue #33, #34).'
+    description: 'Execution mode: full (sequential) | detect | review | validate-prosecutor | validate | sidecar-write. The adversarial validator runs as two passes: validate-prosecutor first (writes findings.prosecutor.json), then validate (writes findings.defender.json, runs intersect-findings.sh, and posts the review). `sidecar-write` is a permission-isolated post-step that commits newly-resolved threads to the sharded `.woo-review/dismissed-<0-f>.jsonl` files (issue #33, #34). The validate step sets WOO_REVIEW_SEQUENTIAL_VALIDATE=1 so validator.md runs its Step 3/3b/4 orchestration; in the chat-host swarm (SKILL.md Stage 4b) that flag is unset and the defender is a pure worker that exits after findings.defender.json.'
     required: false
     default: 'full'
   angle:
@@ -326,6 +326,7 @@ runs:
           }
       env:
         WOO_REVIEW_ACTION_PATH: ${{ github.action_path }}/skills/woo-review
+        WOO_REVIEW_SEQUENTIAL_VALIDATE: ${{ inputs.mode == 'validate' && '1' || '' }}
         ENABLED_ANGLES: ${{ (inputs.mode == 'review' && inputs.angle) || steps.angles.outputs.angles }}
         IMPECCABLE_VERSION: ${{ inputs.impeccable_version }}
         REACT_DOCTOR_VERSION: ${{ inputs.react_doctor_version }}
@@ -345,6 +346,7 @@ runs:
         GH_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         WOO_REVIEW_ACTION_PATH: ${{ github.action_path }}/skills/woo-review
+        WOO_REVIEW_SEQUENTIAL_VALIDATE: ${{ inputs.mode == 'validate' && '1' || '' }}
         ENABLED_ANGLES: ${{ (inputs.mode == 'review' && inputs.angle) || steps.angles.outputs.angles }}
         IMPECCABLE_VERSION: ${{ inputs.impeccable_version }}
         REACT_DOCTOR_VERSION: ${{ inputs.react_doctor_version }}
@@ -362,6 +364,7 @@ runs:
         GH_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         WOO_REVIEW_ACTION_PATH: ${{ github.action_path }}/skills/woo-review
+        WOO_REVIEW_SEQUENTIAL_VALIDATE: ${{ inputs.mode == 'validate' && '1' || '' }}
         ENABLED_ANGLES: ${{ (inputs.mode == 'review' && inputs.angle) || steps.angles.outputs.angles }}
         IMPECCABLE_VERSION: ${{ inputs.impeccable_version }}
         REACT_DOCTOR_VERSION: ${{ inputs.react_doctor_version }}
@@ -381,6 +384,7 @@ runs:
         GH_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         WOO_REVIEW_ACTION_PATH: ${{ github.action_path }}/skills/woo-review
+        WOO_REVIEW_SEQUENTIAL_VALIDATE: ${{ inputs.mode == 'validate' && '1' || '' }}
         ENABLED_ANGLES: ${{ (inputs.mode == 'review' && inputs.angle) || steps.angles.outputs.angles }}
         IMPECCABLE_VERSION: ${{ inputs.impeccable_version }}
         REACT_DOCTOR_VERSION: ${{ inputs.react_doctor_version }}

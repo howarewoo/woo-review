@@ -16,6 +16,12 @@ This pass is one half of an adversarial validation pipeline (issue #13). The Pro
 
 ## Your Task
 
+**Step 0 — First action (crash guard).** Before launching any subagent or doing any work, write a valid empty array to your output file, so a crash or turn-limit during Step 1/2 leaves `[]` (a valid empty result) instead of a missing file:
+
+```bash
+printf '[]\n' > "${OUTDIR:-/tmp/pr-review}/findings.defender.json"
+```
+
 ### Step 1 — Review Summary
 Launch one Haiku subagent. Task:
 - Read /tmp/pr-review/diff.txt, /tmp/pr-review/meta.json, /tmp/pr-review/angles.txt, and /tmp/pr-review/rules.md if it exists.
@@ -24,6 +30,7 @@ Launch one Haiku subagent. Task:
 - Return: summary.
 
 ### Step 2 — Validation
+
 1. **Deduplicate**: If multiple angles flagged the same issue, pick the one with the most actionable and technical description. Preserve `title`, `description`, and `fix` from the winning finding.
 2. **Skeptical Audit**: For each finding in /tmp/pr-review/raw_findings.json, try to prove it is WRONG. 
    - Discard if: Pedantic, style-only (without rule backing), already caught by linting, or "maybe" behavior.
@@ -52,9 +59,21 @@ Launch one Haiku subagent. Task:
 
 Write the defender-validated JSON array to **`$OUTDIR/findings.defender.json`** (default `/tmp/pr-review/findings.defender.json`) — NOT `findings.json`. The file MUST be a JSON array only: starts with `[`, ends with `]`, no preamble, no commentary, no markdown fences. The final `findings.json` is produced by the intersect script in Step 3.
 
+---
+
+> ## STOP GATE — are you a swarm worker or the sequential validator?
+>
+> Steps 3, 3b, and 4 below (intersect + history dedup + **posting the GitHub review**) run **ONLY** when the environment variable `WOO_REVIEW_SEQUENTIAL_VALIDATE=1` is set. That variable is set **exclusively** by the GitHub Action's `validate` mode, where a single agent owns the whole tail of the pipeline.
+>
+> **If `WOO_REVIEW_SEQUENTIAL_VALIDATE` is unset or not `1`, you are a swarm worker (SKILL.md Stage 4b).** Your job ended at Step 2: you have written `$OUTDIR/findings.defender.json`. **EXIT NOW.** The host orchestrator owns intersect (Stage 4c) and posting (Stage 5). Do NOT run `intersect-findings.sh`, do NOT run `dedup-against-history.sh`, do NOT `mv` over `findings.json`, do NOT post a review, do NOT re-run `prefetch.sh`, and do NOT delete or recreate `$OUTDIR`.
+>
+> Enforce it — run this immediately after writing `findings.defender.json`; if you are a worker it stops you before Step 3: `[ "${WOO_REVIEW_SEQUENTIAL_VALIDATE:-}" = "1" ] || { echo "swarm worker — findings.defender.json written; EXITing before Step 3"; exit 0; }`
+
+---
+
 > **Note for the intersect step.** The script applies a two-pass match: exact `(file, line, title_stem)` first, then a fuzzy fallback (`±10` line window, prefix-20 title-stem). Do not aggressively rewrite peer findings' titles or shift their line anchors — minor drift between prosecutor and defender is now tolerated, so over-normalizing the title only loses fuzzy matches.
 
-### Step 3 — Intersect with Prosecutor pass
+### Step 3 — Intersect with Prosecutor pass *(SEQUENTIAL / CI ONLY — requires `WOO_REVIEW_SEQUENTIAL_VALIDATE=1`; swarm workers already EXITed above)*
 
 Run the deterministic intersection script. It reads `findings.prosecutor.json` + `findings.defender.json`, applies the merge rules (severity = min, blocking = AND, defender's prose wins), writes `/tmp/pr-review/findings.json`, and emits per-pass counts to `/tmp/pr-review/validator-metrics.json`.
 
@@ -66,7 +85,7 @@ Notes:
 - If `disable_adversarial: true` is set in `/tmp/pr-review/config.json`, OR if `findings.prosecutor.json` is missing/empty (e.g. the Prosecutor pass was not scheduled), the script copies your defender output verbatim to `findings.json` and tags the metrics as `mode: defender-only`. No special handling required from you.
 - After this step, `findings.json` is the intersected set. Step 3b deduplicates it against prior PR/sidecar history; Step 4 reads the post-dedup `findings.json`. Do not re-read `findings.defender.json` for posting.
 
-### Step 3b — Dedup against prior PR/sidecar history
+### Step 3b — Dedup against prior PR/sidecar history *(SEQUENTIAL / CI ONLY — swarm workers already EXITed above)*
 
 Run the history dedup script. It reads `findings.json` (the intersected set from Step 3), drops any finding that already shipped on this PR as a prior bot thread (`prior-findings.json`) or as a dismissed sidecar entry (`sidecar-findings.json`), and writes the survivors to `findings.deduped.json`. Promote the deduped set to `findings.json` before Step 4 — the post step is the only authoritative consumer.
 
@@ -79,9 +98,13 @@ Notes:
 - Gated on `enable_history_dedup` in `/tmp/pr-review/config.json` (default `true`). When disabled, the script short-circuits: it copies `findings.json` verbatim to `findings.deduped.json` so the `mv` above is still safe.
 - Side outputs: `dedup-metrics.json` (det/llm drop counts) and `rule-recommendations.md` (clusters with `count ≥ WOO_REVIEW_RULES_THRESHOLD`, default 2). Both are non-fatal.
 
-### Step 4 — Post Native PR Review
+### Step 4 — Post Native PR Review *(SEQUENTIAL / CI ONLY — swarm workers already EXITed above)*
 Follow _header.md exactly. Compute BLOCKING_COUNT, NONBLOCKING_COUNT, HIGH_COUNT, MEDIUM_COUNT, LOW_COUNT. Build STATUS_LINE.
 - Use the findings from `/tmp/pr-review/findings.json` (the intersected set, not your defender output).
 - Submit a single native GitHub PR Review (Batch) including all inline comments and the summary/status line.
 - Determine review event: APPROVE (0 findings), REQUEST_CHANGES (blocking > 0), or COMMENT (non-blocking > 0). The REQUEST_CHANGES event is the only blocking signal — do not apply or remove labels.
 - **DO NOT** update the PR description, title, or labels.
+
+### Step 5 — Exit (sequential mode)
+
+After the review is posted, EXIT. Do not loop, do not re-run prefetch, do not mutate `$OUTDIR` further.

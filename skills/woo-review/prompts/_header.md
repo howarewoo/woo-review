@@ -42,7 +42,14 @@ Set `PR_NUMBER` and `HEAD_SHA` as shell variables before posting anything:
 
 ```bash
 PR_NUMBER="<from Review Context>"
-HEAD_SHA="$(jq -r '.headRefOid' /tmp/pr-review/meta.json)"
+HEAD_SHA="$(jq -r '.headRefOid // empty' /tmp/pr-review/meta.json 2>/dev/null || echo "")"
+if [ -z "$HEAD_SHA" ]; then
+  # meta.json missing/empty (e.g. $OUTDIR was wiped mid-run, issue #48). Re-fetch
+  # from GitHub so commit_id is never null (GitHub 422 "commit_id required").
+  HEAD_SHA="$(gh pr view "$PR_NUMBER" --json headRefOid --jq '.headRefOid' 2>/dev/null || echo "")"
+fi
+# Export so the Python payload builder (os.environ.get("HEAD_SHA")) sees it.
+export HEAD_SHA
 ```
 
 ## Model Tiers (host-agnostic)
@@ -133,6 +140,11 @@ Instead of posting individual comments, batch all findings into a single GitHub 
 # with a blocking finding fails to post at all.
 AUTH_LOGIN=$(gh api user --jq .login 2>/dev/null || echo "")
 PR_AUTHOR=$(jq -r '.author.login // empty' /tmp/pr-review/meta.json 2>/dev/null || echo "")
+if [ -z "$PR_AUTHOR" ]; then
+  # meta.json gone (issue #48). Without the author the self-PR downgrade fails
+  # and GitHub 422s on REQUEST_CHANGES against your own PR. Re-fetch it.
+  PR_AUTHOR=$(gh pr view "$PR_NUMBER" --json author --jq '.author.login' 2>/dev/null || echo "")
+fi
 export AUTH_LOGIN PR_AUTHOR
 
 # 1. Prepare the review body (Summary + Status Line + hidden SHA marker).
@@ -160,6 +172,15 @@ BODY_EOF
 if [ -s /tmp/pr-review/rule-recommendations.md ]; then
   printf '\n\n### Suggested rules for AGENT.md / CLAUDE.md\n\n' >> /tmp/pr_review_body.txt
   cat /tmp/pr-review/rule-recommendations.md >> /tmp/pr_review_body.txt
+fi
+
+# Surface a degraded adversarial pass (issue #47). When intersect-findings.sh
+# fell back to defender-only WHILE adversarial was enabled (degraded:true), tell
+# the author the findings are lower-confidence rather than silently shipping a
+# single-pass review as if it were the full two-pass result.
+if [ -f /tmp/pr-review/validator-metrics.json ] && \
+   [ "$(jq -r '.degraded // false' /tmp/pr-review/validator-metrics.json 2>/dev/null)" = "true" ]; then
+  printf '\n\n> ⚠️ **Adversarial prosecutor pass was unavailable** — these findings are *defender-only* (a single validation pass, lower confidence than the usual two-pass review).\n' >> /tmp/pr_review_body.txt
 fi
 
 # Before running this posting step, the orchestrator MUST first run

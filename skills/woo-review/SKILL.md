@@ -249,7 +249,7 @@ When prefetch resolves a PR number AND finds an open PR, it produces the full ar
 | `findings.deduped.json` | `dedup-against-history.sh` | Stage 5 posting | `findings.json` with history-matched entries removed |
 | `dedup-metrics.json` | `dedup-against-history.sh` | observability | `det_drops`, `llm_drops`, `pair_count` counters |
 | `rule-recommendations.md` | `dedup-against-history.sh` (Sonnet call) | Stage 5 posting | Markdown bullets appended to review body when emitted; see *Rule Recommendations* above |
-| `validator-metrics.json` | `intersect-findings.sh` | observability | `prosecutor_count`, `defender_count`, `kept_count`, `disagreement_count` |
+| `validator-metrics.json` | `intersect-findings.sh` | observability | `prosecutor_count`, `defender_count`, `kept_count`, `disagreement_count`, `mode`, `degraded` |
 
 **If no PR number resolved (local mode):**
 
@@ -316,7 +316,7 @@ on the diff's RIGHT side and the GitHub API will reject the comment). EXIT.
 
 **Chunked fan-out.** When `/tmp/pr-review/chunks.txt` exists, spawn one sub-agent per `(angle, chunk_id)` instead of one per angle. Pass the chunk ID in the brief, and tell the sub-agent to read `/tmp/pr-review/diff.chunk-<id>.txt` and write `/tmp/pr-review/findings.<angle>.chunk-<id>.json`. The validator pass still runs **once globally** — `merge-findings.sh` collapses any within-angle duplicates across chunks before validation, and the validator handles cross-angle dedup as today.
 
-Sub-agents MUST NOT post comments, edit the PR, or touch other angles' files.
+Sub-agents MUST NOT post comments, edit the PR, touch other angles' files, run `prefetch.sh`, or delete/recreate `$OUTDIR`. `prefetch.sh` is a Stage-1-only operation; re-running it mid-swarm wipes `meta.json` / `prior-findings.json` and corrupts the posting stage (issue #48).
 
 **Model routing (token optimization, host-agnostic).** Each angle prompt and the validator declare a `tier:` in frontmatter — `fast`, `standard`, or `deep`. The host resolves the tier to a concrete model via the table in `prompts/_header.md`. Tier assignments:
 
@@ -378,11 +378,33 @@ Run `prompts/validator-prosecutor.md`. Bias: assume each finding is real; drop o
 5. `fix_type` enforcement: every surviving finding MUST carry `fix_type` (`"suggestion"` or `"prose"`). Downgrade any `fix_type: "suggestion"` that violates the ≤10-line / single-file / self-contained / no-placeholder / no-fence-break rules — set `fix_type: "prose"` and `suggestion: null`. Full rule list lives in `prompts/validator.md` step 7.
 6. Writes `/tmp/pr-review/findings.defender.json`.
 
+> **Swarm workers stop here.** In the chat-host swarm the defender writes `findings.defender.json` and EXITs — the orchestrator owns Stage 4c (intersect) and Stage 5 (post). Leave `WOO_REVIEW_SEQUENTIAL_VALIDATE` unset when running as a swarm worker — the GitHub Action's `validate` mode sets it because there one sequential agent owns the whole tail; a swarm host has separate orchestrator and worker roles, so the worker must not see it. Pointing a swarm defender at `validator.md` with the flag unset is the safe default — its Step 3/3b/4 gate keeps it from racing the prosecutor, posting prematurely, or mutating `$OUTDIR`.
+
 **Stage 4c — Intersect**:
 
 ```bash
 bash "$WOO_REVIEW_ACTION_PATH/scripts/intersect-findings.sh"
 ```
+
+**Verify + retry (mirror the Stage 3 angle-retry guard).** Before intersect, run this **detection** check; it only reports — you (the orchestrator) perform the re-launch described after it:
+
+```bash
+for f in findings.prosecutor.json findings.defender.json; do
+  if ! jq -e 'type == "array"' "/tmp/pr-review/$f" >/dev/null 2>&1; then
+    echo "missing/non-array: $f — orchestrator must re-launch this pass once (see below)"
+  fi
+done
+```
+
+Re-launch a missing pass exactly **once** (prosecutor → `validator-prosecutor.md`; defender → `validator.md`), then re-run intersect. If a pass is still missing after the retry, intersect proceeds defender-only and sets `degraded: true` in `validator-metrics.json`.
+
+**Surface degradation.** After intersect, read `validator-metrics.json`:
+
+```bash
+jq -r '.degraded // false' /tmp/pr-review/validator-metrics.json
+```
+
+If `true`, tell the user in your orchestrator summary that the review is defender-only / lower-confidence — the posting stage also appends a ⚠️ line to the review body (`_header.md`). A `disable_adversarial: true` opt-out reports `degraded: false` and needs no warning.
 
 Produces `/tmp/pr-review/findings.json` — the final validated set — and `/tmp/pr-review/validator-metrics.json` with `prosecutor_count`, `defender_count`, `kept_count`, `disagreement_count`. Intersection key is `(file, line, title-stem)` (same stem as prior-thread dedupe in `_header.md`). When `disable_adversarial: true` is set or `findings.prosecutor.json` is absent, the script copies defender output verbatim and tags metrics `mode: defender-only`. Severity = `min(prosecutor, defender)`, blocking = `prosecutor.blocking AND defender.blocking`, other fields take the defender's copy.
 

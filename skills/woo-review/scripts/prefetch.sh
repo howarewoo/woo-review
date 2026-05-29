@@ -16,6 +16,8 @@
 #   WOO_REVIEW_FAKE_PRIOR_THREADS_JSON. The mode flag is intentionally not
 #   exposed in action.yml — a calling workflow cannot opt itself into the
 #   fake-data hooks without first setting an undocumented env var.
+# WOO_REVIEW_FRESH=1 forces the OUTDIR wipe even when in-flight findings.* are
+# present (issue #48 guard). Unset/0 = guard active (skip wipe if findings.* exist).
 
 set -euo pipefail
 
@@ -23,8 +25,18 @@ set -euo pipefail
 # raw_findings.json, validator-metrics.json, etc. in $OUTDIR. Without a wipe,
 # stale files (e.g. from an earlier meta-review of the skill itself) silently
 # re-enter the merge step. Wipe first, recreate empty.
+#
+# GUARD (issue #48): refuse to wipe an $OUTDIR that already holds in-flight
+# findings.* — a stray mid-run re-run (e.g. a sub-agent over-stepping its scope)
+# would otherwise destroy meta.json / prior-findings.json and break the posting
+# stage. prefetch is a Stage-1-only operation; set WOO_REVIEW_FRESH=1 to force a
+# wipe (the only legitimate caller is a genuinely fresh run).
 OUTDIR="${OUTDIR:-/tmp/pr-review}"
-rm -rf "$OUTDIR"
+if [ "${WOO_REVIEW_FRESH:-}" != "1" ] && compgen -G "$OUTDIR/findings.*" >/dev/null 2>&1; then
+  echo "::warning::prefetch: $OUTDIR holds in-flight findings.* — refusing rm -rf (set WOO_REVIEW_FRESH=1 to force a fresh wipe)" >&2
+else
+  rm -rf "$OUTDIR"
+fi
 mkdir -p "$OUTDIR"
 
 PR_NUMBER="${PR_NUMBER:-}"
