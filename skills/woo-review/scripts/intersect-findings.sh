@@ -54,6 +54,16 @@ if [ -f "$CONFIG" ]; then
   case "$v" in true|false) disable_adversarial="$v" ;; *) disable_adversarial="false" ;; esac
 fi
 
+# Resolve metrics opt-in from config.json (default false). Gates the per-angle
+# findings.metrics.json emit (issue #41). validator-metrics.json is unaffected.
+metrics_enabled="false"
+if [ -f "$CONFIG" ]; then
+  v="$(jq -r '.metrics // false' "$CONFIG" 2>/dev/null || echo false)"
+  case "$v" in true|false) metrics_enabled="$v" ;; *) metrics_enabled="false" ;; esac
+fi
+RAW="$OUTDIR/raw_findings.json"
+ANGLE_METRICS="$OUTDIR/findings.metrics.json"
+
 # Defender output is mandatory. If absent we cannot post a review at all —
 # upstream is broken and we should fail loudly.
 if [ ! -s "$DEFENDER" ]; then
@@ -99,6 +109,99 @@ write_metrics() {
     }' > "$METRICS"
 }
 
+# Per-angle signal/noise breakdown (issue #41). Writes findings.metrics.json
+# keyed by angle. No-op unless metrics_enabled=true. Reads the merged raw set
+# plus both validator passes and the final intersection — all already on disk —
+# and attributes counts by each finding's .angle. In defender-only mode the
+# prosecutor file is absent; prosecutor-derived numbers come out null.
+# Args: mode degraded
+emit_angle_metrics() {
+  [ "$metrics_enabled" = "true" ] || return 0
+  python3 - "$RAW" "$PROSECUTOR" "$DEFENDER" "$FINAL" "$ANGLE_METRICS" "$1" "$2" <<'PY'
+import json, sys
+
+raw_p, pros_p, def_p, final_p, out_p, mode, degraded = sys.argv[1:8]
+
+def load(path):
+    try:
+        with open(path) as fh:
+            data = json.load(fh)
+        return data if isinstance(data, list) else []
+    except (OSError, ValueError):
+        return []
+
+def present(path):
+    try:
+        open(path).close()
+        return True
+    except OSError:
+        return False
+
+raw_present = present(raw_p)
+raw   = load(raw_p)
+defn  = load(def_p)
+final = load(final_p)
+has_pros = mode != "defender-only"
+pros = load(pros_p) if has_pros else []
+
+def angle_of(f):
+    a = f.get("angle")
+    return a if isinstance(a, str) and a else "_unknown"
+
+def count_by_angle(items):
+    out = {}
+    for f in items:
+        out[angle_of(f)] = out.get(angle_of(f), 0) + 1
+    return out
+
+raw_c, pros_c, def_c, final_c = (count_by_angle(x) for x in (raw, pros, defn, final))
+angles = sorted(set(raw_c) | set(pros_c) | set(def_c) | set(final_c))
+
+SEVS = ("HIGH", "MEDIUM", "LOW")
+
+def sev_hist(items, a):
+    h = {s: 0 for s in SEVS}
+    for f in items:
+        if angle_of(f) == a:
+            s = (f.get("severity") or "").upper()
+            if s in h:
+                h[s] += 1
+    return h
+
+def blocking_count(items, a):
+    return sum(1 for f in items if angle_of(f) == a and bool(f.get("blocking", False)))
+
+out = {"schema_version": 1, "mode": mode, "degraded": degraded == "true", "angles": {}}
+
+for a in angles:
+    kept = final_c.get(a, 0)
+    defk = def_c.get(a, 0)
+    blk  = blocking_count(final, a)
+    rawn = raw_c.get(a, 0) if raw_present else max(defk, kept, pros_c.get(a, 0))
+    rec = {
+        "raw_count": rawn,
+        "defender_kept": defk,
+        "kept": kept,
+        "dropped_by_prosecutor": max(0, defk - kept),
+        "blocking_count": blk,
+        "nonblocking_count": kept - blk,
+        "severity": sev_hist(final, a),
+    }
+    if has_pros:
+        prok = pros_c.get(a, 0)
+        rec["prosecutor_kept"] = prok
+        rec["dropped_by_defender"] = max(0, prok - kept)
+    else:
+        rec["prosecutor_kept"] = None
+        rec["dropped_by_defender"] = None
+    out["angles"][a] = rec
+
+with open(out_p, "w") as fh:
+    json.dump(out, fh, indent=2, sort_keys=True)
+    fh.write("\n")
+PY
+}
+
 if [ "$disable_adversarial" = "true" ] || [ "$prosecutor_present" = "false" ]; then
   mode="defender-only"
   # degraded = the adversarial pass was EXPECTED but the prosecutor output is
@@ -112,6 +215,7 @@ if [ "$disable_adversarial" = "true" ] || [ "$prosecutor_present" = "false" ]; t
   cp "$DEFENDER" "$FINAL"
   write_metrics "$mode" "$degraded" null "$defender_count" "$defender_count" 0 0 0
   echo "intersect-findings: mode=$mode degraded=$degraded kept=$defender_count"
+  emit_angle_metrics "$mode" "$degraded"
   exit 0
 fi
 
@@ -253,3 +357,4 @@ disagreement_count="$((dropped_by_defender + dropped_by_prosecutor))"
 write_metrics adversarial false "$prosecutor_count" "$defender_count" "$kept_count" "$disagreement_count" "$dropped_by_defender" "$dropped_by_prosecutor"
 
 echo "intersect-findings: mode=adversarial degraded=false prosecutor=$prosecutor_count defender=$defender_count kept=$kept_count disagreement=$disagreement_count"
+emit_angle_metrics adversarial false
