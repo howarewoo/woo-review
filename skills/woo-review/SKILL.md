@@ -378,6 +378,8 @@ Run `prompts/validator-prosecutor.md`. Bias: assume each finding is real; drop o
 5. `fix_type` enforcement: every surviving finding MUST carry `fix_type` (`"suggestion"` or `"prose"`). Downgrade any `fix_type: "suggestion"` that violates the ≤10-line / single-file / self-contained / no-placeholder / no-fence-break rules — set `fix_type: "prose"` and `suggestion: null`. Full rule list lives in `prompts/validator.md` step 7.
 6. Writes `/tmp/pr-review/findings.defender.json`.
 
+> **Swarm workers stop here.** In the chat-host swarm the defender writes `findings.defender.json` and EXITs — the orchestrator owns Stage 4c (intersect) and Stage 5 (post). Leave `WOO_REVIEW_SEQUENTIAL_VALIDATE` unset when running as a swarm worker — the GitHub Action's `validate` mode sets it because there one sequential agent owns the whole tail; a swarm host has separate orchestrator and worker roles, so the worker must not see it. Pointing a swarm defender at `validator.md` with the flag unset is the safe default — its Step 3/3b/4 gate keeps it from racing the prosecutor, posting prematurely, or mutating `$OUTDIR`.
+
 **Stage 4c — Intersect**:
 
 ```bash
