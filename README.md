@@ -165,7 +165,7 @@ The action never modifies the PR title, description, or labels.
 `.woo-review/memory.md` is the skill's home for cross-PR knowledge — a plain-markdown list of gotchas, known false positives, and intentionally-accepted issues that the team curates over time. There is no database, no sharded JSONL, no hooks: just a file.
 
 - **Read as context.** Prefetch loads it into the review; every angle and both validator passes drop any finding the memory already records as known/accepted/wontfix. That is what keeps re-reviews quiet.
-- **Written inline (local).** When you run `/woo-review` locally and dismiss a finding, the skill appends a short bullet to `.woo-review/memory.md` — the local skill has direct write access, no post-session hook.
+- **Written inline (local).** When you run `/woo-review` locally and dismiss a finding, the skill records the *learning* in `.woo-review/memory.md` — but first checks no existing entry already covers it, so the file stays a small deduplicated set of reusable rules, not a log of every dismissal. Direct write access, no post-session hook.
 - **Curated by humans.** Edit it freely; it is meant to be read.
 
 See [`skills/woo-review/SKILL.md`](./skills/woo-review/SKILL.md) for the full workflow contract.

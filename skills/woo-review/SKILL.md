@@ -69,7 +69,7 @@ Reviews stay useful across PRs through a single plain-markdown file in the consu
 ### How it's used
 
 - **Read as context.** `prefetch.sh` copies `.woo-review/memory.md` (if present, 100KB cap) into `/tmp/pr-review/memory.md`. Every angle worker and both validator passes treat it as additional rubric and **drop any finding the memory already records as known/accepted/wontfix**. This is what keeps re-reviews quiet: an issue the team has consciously accepted is not re-flagged on the next PR.
-- **Written inline (local).** When you run `/woo-review` locally and dismiss a finding (or note a gotcha worth remembering), the skill appends a short markdown bullet to `.woo-review/memory.md` in the reviewed repo. The local skill has direct write access to that file — no post-session hook, no permission-isolated job. See Stage 5 below.
+- **Written inline (local).** When you run `/woo-review` locally and dismiss a finding (or note a gotcha worth remembering), the skill records the **learning** in `.woo-review/memory.md` — first checking that no existing entry already covers it, so the file stays a small deduplicated set of reusable rules rather than a log of every dismissal. The local skill has direct write access — no post-session hook, no permission-isolated job. See Stage 6 below.
 - **Curated by humans.** The file is meant to be edited directly. Add a bullet, delete a stale one, group entries under headings — whatever keeps it readable.
 
 ### Event-floor rule (prior threads)
@@ -360,14 +360,21 @@ Produces `/tmp/pr-review/findings.json` — the final validated set — and `/tm
 
 ### Stage 6 — Update cross-PR memory (local hosts)
 
-After reporting, when the user **dismisses** a finding as a known/intentional/accepted issue, or tells you a gotcha worth remembering for future reviews, append a one-line markdown bullet to `.woo-review/memory.md` in the reviewed repo (create the `.woo-review/` directory and the file if absent). The local skill writes this file directly — there is no post-session hook and no permission-isolated job. Keep entries short and specific so the next review can match them:
+After reporting, when the user **dismisses** a finding as a known/intentional/accepted issue, or tells you a gotcha worth remembering, record the **learning** — not the individual issue resolution. The goal is a small, deduplicated set of generalizable rules ("the team accepts X pattern because Y"), not a growing log of every finding ever dismissed.
+
+Before writing anything:
+
+1. **Read the existing `.woo-review/memory.md`** (it was already loaded to `/tmp/pr-review/memory.md` in Stage 1; re-read the repo copy in case it changed).
+2. **Check coverage.** If an existing entry already captures this learning — even phrased differently, or scoped more narrowly/broadly — do **NOT** append a duplicate. If the existing entry is close but the new dismissal generalizes it (e.g. the same pattern in a second file), edit that entry to widen its scope rather than adding a near-duplicate.
+3. **Only when the learning is genuinely new**, append one short bullet phrased as a reusable rule, then stop.
 
 ```bash
 mkdir -p .woo-review
-printf -- '- %s\n' "<file or symbol>: <why this is accepted / what to not re-flag>" >> .woo-review/memory.md
+# Append ONLY after confirming no existing entry covers this learning.
+printf -- '- %s\n' "<general pattern>: <why it is accepted / what not to re-flag>" >> .woo-review/memory.md
 ```
 
-Only append on an explicit dismissal or a stated gotcha — never auto-record every finding. Do NOT write memory in CI: the GitHub Action's validator job holds `contents: read` and posts the review only; memory is curated locally and by humans editing the file. Memory is read back as review context on the next run (Stage 1) and the validator drops findings it records.
+Phrase entries as patterns, not instances — prefer "Generated `*.pb.go` files are intentional; do not flag their style" over "dismissed line 42 in user.pb.go". The local skill writes this file directly — no post-session hook, no permission-isolated job. Only record on an explicit dismissal or a stated gotcha — never auto-record every finding. Do NOT write memory in CI: the GitHub Action's validator job holds `contents: read` and posts the review only; memory is curated locally and by humans editing the file. Memory is read back as review context on the next run (Stage 1) and the validator drops findings it records.
 
 ## Architecture
 
