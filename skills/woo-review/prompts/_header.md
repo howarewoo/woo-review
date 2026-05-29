@@ -162,6 +162,15 @@ if [ -s /tmp/pr-review/rule-recommendations.md ]; then
   cat /tmp/pr-review/rule-recommendations.md >> /tmp/pr_review_body.txt
 fi
 
+# Surface a degraded adversarial pass (issue #47). When intersect-findings.sh
+# fell back to defender-only WHILE adversarial was enabled (degraded:true), tell
+# the author the findings are lower-confidence rather than silently shipping a
+# single-pass review as if it were the full two-pass result.
+if [ -f /tmp/pr-review/validator-metrics.json ] && \
+   [ "$(jq -r '.degraded // false' /tmp/pr-review/validator-metrics.json 2>/dev/null)" = "true" ]; then
+  printf '\n\n> ⚠️ **Adversarial prosecutor pass was unavailable** — these findings are *defender-only* (a single validation pass, lower confidence than the usual two-pass review).\n' >> /tmp/pr_review_body.txt
+fi
+
 # Before running this posting step, the orchestrator MUST first run
 # `bash $WOO_REVIEW_ACTION_PATH/scripts/dedup-against-history.sh` so
 # `/tmp/pr-review/findings.deduped.json` is populated. Legacy hosts that skip

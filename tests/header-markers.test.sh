@@ -16,6 +16,10 @@ expect "sk whitelist regex present" \
 expect "ca whitelist regex present" \
   "grep -qE 're\\.fullmatch\\(r\"\\[a-f0-9\\]\\{12\\}\"' '$HEADER'"
 
+# Static check: degraded-mode surfacing present (issue #47).
+expect "degraded surface block present" \
+  "grep -q 'validator-metrics.json' '$HEADER' && grep -q 'Adversarial prosecutor pass was unavailable' '$HEADER'"
+
 # Runtime check: extract the python block under '# 2. Prepare the review payload'
 # and re-execute it against synthetic findings, then assert the marker rendering.
 mkdir -p "$WORK/pr-review"

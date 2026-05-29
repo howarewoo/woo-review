@@ -386,6 +386,26 @@ Run `prompts/validator-prosecutor.md`. Bias: assume each finding is real; drop o
 bash "$WOO_REVIEW_ACTION_PATH/scripts/intersect-findings.sh"
 ```
 
+**Verify + retry (mirror the Stage 3 angle-retry guard).** Before intersect, run this **detection** check; it only reports — you (the orchestrator) perform the re-launch described after it:
+
+```bash
+for f in findings.prosecutor.json findings.defender.json; do
+  if ! jq -e 'type == "array"' "/tmp/pr-review/$f" >/dev/null 2>&1; then
+    echo "missing/non-array: $f — orchestrator must re-launch this pass once (see below)"
+  fi
+done
+```
+
+Re-launch a missing pass exactly **once** (prosecutor → `validator-prosecutor.md`; defender → `validator.md`), then re-run intersect. If a pass is still missing after the retry, intersect proceeds defender-only and sets `degraded: true` in `validator-metrics.json`.
+
+**Surface degradation.** After intersect, read `validator-metrics.json`:
+
+```bash
+jq -r '.degraded // false' /tmp/pr-review/validator-metrics.json
+```
+
+If `true`, tell the user in your orchestrator summary that the review is defender-only / lower-confidence — the posting stage also appends a ⚠️ line to the review body (`_header.md`). A `disable_adversarial: true` opt-out reports `degraded: false` and needs no warning.
+
 Produces `/tmp/pr-review/findings.json` — the final validated set — and `/tmp/pr-review/validator-metrics.json` with `prosecutor_count`, `defender_count`, `kept_count`, `disagreement_count`. Intersection key is `(file, line, title-stem)` (same stem as prior-thread dedupe in `_header.md`). When `disable_adversarial: true` is set or `findings.prosecutor.json` is absent, the script copies defender output verbatim and tags metrics `mode: defender-only`. Severity = `min(prosecutor, defender)`, blocking = `prosecutor.blocking AND defender.blocking`, other fields take the defender's copy.
 
 ### Stage 5 — Report
