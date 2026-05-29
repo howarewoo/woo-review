@@ -59,6 +59,15 @@ jobs:
       - name: Run sidecar-write tests
         run: bash tests/sidecar-write.test.sh
 
+      - name: Run intersect-findings tests
+        run: bash tests/intersect-findings.test.sh
+
+      - name: Run prefetch tests
+        run: bash tests/prefetch.test.sh
+
+      - name: Run header-markers tests
+        run: bash tests/header-markers.test.sh
+
       - name: Smoke-test .woo-review.yml end-to-end
         # Drops a fixture config into a synthetic workspace, runs the
         # loader directly, then runs detect-angles to confirm `force:` lands
