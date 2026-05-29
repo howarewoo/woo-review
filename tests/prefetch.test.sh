@@ -134,6 +134,12 @@ reset() {
   : > "$OUTPUT_FILE"
   rm -f "$PREFETCH"/* 2>/dev/null || true
   rm -f "$GITHUB_WORKSPACE/.woo-review.yml" 2>/dev/null || true
+  # Non-GHA baseline. These cases drive prefetch.sh via the WOO_REVIEW_FAKE_*
+  # hooks, which prefetch.sh refuses when GITHUB_ACTIONS=true (local-only test
+  # hooks). The CI runner exports GITHUB_ACTIONS=true, so without this unset the
+  # whole suite trips the refusal in CI while passing locally. Cases that need
+  # the GHA-gated paths set GITHUB_ACTIONS=true explicitly after calling reset.
+  unset GITHUB_ACTIONS || true
   unset WOO_REVIEW_FAKE_PR_REVIEWS_JSON || true
   unset WOO_REVIEW_FAKE_INCREMENTAL_DIFF || true
   unset WOO_REVIEW_TEST_COMPARE_404 || true
