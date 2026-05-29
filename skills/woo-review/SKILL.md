@@ -21,6 +21,7 @@ This skill is **host-agnostic**: it works in any AI coding agent that supports s
 - `/woo-review --full` (or `@review --full` in a PR comment) — Force a complete re-review even when a prior SHA marker exists. Skips the incremental path described below.
 - `woo-review install` — Verify local deps (`gh`, `jq`, `node`) and pre-fetch `impeccable` + `react-doctor` (run once per repo).
 - `woo-review status` — Show the current PR's review status.
+- `woo-review address <PR#>` — Autonomously address the PR's unresolved review threads (fix or push back, reply, resolve) and record accept-by-design dismissals to `.woo-review/memory.md`. Local hosts only. See *Addressing Reviews* below.
 
 ### PR-comment triggers (issue #19)
 
@@ -390,6 +391,31 @@ printf -- '- %s\n' "<general pattern>: <why it is accepted / what not to re-flag
 ```
 
 Phrase entries as patterns, not instances — prefer "Generated `*.pb.go` files are intentional; do not flag their style" over "dismissed line 42 in user.pb.go". The local skill writes this file directly — no post-session hook, no permission-isolated job. Only record on an explicit dismissal or a stated gotcha — never auto-record every finding. Do NOT write memory in CI: the GitHub Action's validator job holds `contents: read` and posts the review only; memory is curated locally and by humans editing the file. Memory is read back as review context on the next run (Stage 1) and the validator drops findings it records.
+
+## Addressing Reviews (`woo-review address <PR#>`, local hosts)
+
+Stage 6 only fires when a finding is dismissed *during a live local run*. For
+PR-targeted reviews the accept/dismiss decision happens **later**, on the PR
+(often in a separate comment-addressing session) — so Stage 6's memory write
+structurally never fires for the primary flow (issue #53). The `address` verb
+closes that gap by owning the comment-addressing flow itself, with the memory
+write at the exact moment a finding is accepted-by-design.
+
+`address` is **local only** — it commits, pushes, and writes memory, none of
+which the GitHub Action's `contents: read` validator job can do.
+
+**Lifecycle (A1→A6):**
+
+1. **Fetch** — resolve the PR# (explicit arg, else the current branch's open PR), then `bash "$WOO_REVIEW_ACTION_PATH/scripts/fetch-threads.sh"` writes every unresolved thread (any author) to `/tmp/pr-review/address-threads.json`. Memory + config are loaded as in Stage 1.
+2. **Precondition** — the working tree must be clean **and** the current branch must be the PR head. Otherwise abort before any edit; tell the user to checkout the PR head on a clean tree.
+3. **Reception loop** — per thread, follow `prompts/address.md`: read → understand → verify → evaluate → decide `FIX` / `ACCEPT` / `CLARIFY`.
+4. **Commit + push** — one commit for all fixes → push to the PR head → capture `<sha>` (before any reply, so "Fixed in `<sha>`" is real). Never force-push.
+5. **Reply + resolve** — per handled thread, `scripts/resolve-thread.sh` posts the reply then resolves (CLARIFY threads use `RESOLVE=0`: reply only, left open).
+6. **Report** — summary table: thread → decision → action → memory-written?
+
+Only an **ACCEPT** (accept-by-design) writes memory, deduplicated and phrased as
+a reusable pattern — never a log of every fix. Memory is read back as context on
+the next review run (Stage 1), keeping re-reviews quiet.
 
 ### Stage 6.5 — Fold per-angle metrics (local hosts, opt-in)
 
