@@ -19,7 +19,7 @@ This skill is **host-agnostic**: it works in any AI coding agent that supports s
 - `/woo-review` — Auto-detect: if the current branch has an open PR (via `gh pr view --json number`), behave as `/woo-review <PR#>`. Otherwise review the local diff (no GitHub posting).
 - `/woo-review <PR#>` — Fetch the PR via `gh`, run the swarm, and post a native batched GitHub Review.
 - `/woo-review --full` (or `@review --full` in a PR comment) — Force a complete re-review even when a prior SHA marker exists. Skips the incremental path described below.
-- `woo-review install` — Verify local deps (`gh`, `jq`, `node`) and pre-fetch `impeccable` + `react-doctor`.
+- `woo-review install` — Verify local deps (`gh`, `jq`, `node`), pre-fetch `impeccable` + `react-doctor`, and register the post-session sidecar-write Stop hook in `.claude/settings.local.json` (run once per repo).
 - `woo-review status` — Show the current PR's review status.
 
 ### PR-comment triggers (issue #19)
@@ -85,7 +85,24 @@ Workers MUST emit two additional fields on every finding (defined in the angle p
 
 `prefetch.sh` loads `.woo-review/dismissed.json` from the consumer repo into `/tmp/pr-review/sidecar-findings.json` at the start of each run. This file accumulates resolved threads that authors have explicitly dismissed — it prevents re-surfacing issues the team has consciously accepted.
 
-After the review POST, `sidecar-write.sh` reads any threads that became resolved during this run, appends them to the sidecar, and commits the updated `.woo-review/dismissed.json` back to the consumer repo via the bot token. This write is gated on the `enable_sidecar_write` config flag (default `true`). In the CI extension the script runs in a *separate, permission-isolated* job that holds `contents: write` — the validator job (which runs the LLM against untrusted PR content) only holds `contents: read`, so an LLM compromise cannot pivot to repo-write capability.
+After the review POST, `sidecar-write.sh` reads any threads that became resolved during this run, appends them to the sidecar, and commits the updated `.woo-review/dismissed.json` back to the consumer repo via the bot token. This write is gated on the `enable_sidecar_write` config flag (default `true`). In the CI extension the script runs in a *separate, permission-isolated* job that holds `contents: write` — the validator job (which runs the LLM against untrusted PR content) only holds `contents: read`, so an LLM compromise cannot pivot to repo-write capability. On local hosts the same isolation holds: the skill session never calls `sidecar-write.sh` itself. Instead it drops a `sidecar-pending` sentinel after the review POST, and a host-level **post-session hook** — registered in `.claude/settings.local.json` by `woo-review install` — runs the script once the session ends. The hook no-ops unless the sentinel is present and the current repo matches the reviewed one (`review-context.json:repo_path`).
+
+#### Host-specific hook setup
+
+`woo-review install` auto-registers the post-session hook only on **Claude Code** (it writes a `Stop` hook to `.claude/settings.local.json`). On other hosts it prints the command to wire manually instead of registering it. To complete local-sidecar setup on a non-Claude host, register this command as a **post-session / post-task hook** using your host's mechanism:
+
+```bash
+bash "$WOO_REVIEW_ACTION_PATH/scripts/sidecar-write.sh"
+```
+
+| Host | Where to register |
+|---|---|
+| **Claude Code** | Automatic — `Stop` hook in `.claude/settings.local.json` (run `woo-review install` once per repo). |
+| **Cursor** | A background-agent post-task hook; the exact mechanism depends on Cursor's extension/agent API. |
+| **opencode** | A session-end hook in the OpenCode runtime's hook configuration. |
+| **Gemini CLI** | A post-run shell step (Gemini CLI has no native session-end hook today — wire it into your invoking wrapper/script). |
+
+The hook is safe to run after every session: it no-ops unless the `sidecar-pending` sentinel is present **and** the current repo matches `review-context.json:repo_path`. Running the LLM step never touches repo-write — only this out-of-band hook does (PR #33 contract).
 
 ### Event-floor rule change
 
@@ -213,6 +230,7 @@ When prefetch resolves a PR number AND finds an open PR, it produces the full ar
 | `raw_findings.json` | `merge-findings.sh` | validator passes | Merged, chunk-collapsed findings |
 | `findings.json` | `intersect-findings.sh` | Stage 5, dedup script | Final validated set |
 | `sidecar-findings.json` | `prefetch.sh` (from `.woo-review/dismissed.json`) | dedup Pass 1 | Committed dismissals from past PRs; see *History Dedup* above |
+| `review-context.json` | `prefetch.sh` | `sidecar-write.sh` (local Stop hook) | PR handoff: `{pr_number, head_sha, repo, repo_path}`; read by the post-session hook to re-hydrate state when session env is absent. Local hosts only. |
 | `findings.deduped.json` | `dedup-against-history.sh` | Stage 5 posting | `findings.json` with history-matched entries removed |
 | `dedup-metrics.json` | `dedup-against-history.sh` | observability | `det_drops`, `llm_drops`, `pair_count` counters |
 | `rule-recommendations.md` | `dedup-against-history.sh` (Sonnet call) | Stage 5 posting | Markdown bullets appended to review body when emitted; see *Rule Recommendations* above |

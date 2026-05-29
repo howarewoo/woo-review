@@ -26,6 +26,37 @@
 set -euo pipefail
 
 OUTDIR="${OUTDIR:-/tmp/pr-review}"
+
+# Non-CI guard (local post-session Stop hook). The hook fires at the end of
+# EVERY host session; act only when a local /woo-review run just posted a
+# review (sentinel) AND we are standing in the repo that was reviewed. CI runs
+# (GITHUB_ACTIONS=true) skip this entirely — the isolated job runs the script
+# unconditionally with env state, preserving #33 parity.
+#
+# IMPORTANT: this block must run BEFORE any ENABLE/DISABLE gate so that the
+# sentinel is consumed (trap registered) even when a later gate exits 0.
+# Without this ordering the sentinel leaks and every future session prints
+# "disabled" even when no review is pending.
+if [ "${GITHUB_ACTIONS:-}" != "true" ]; then
+  SENTINEL="$OUTDIR/sidecar-pending"
+  if [ ! -f "$SENTINEL" ]; then
+    echo "sidecar-write: no pending local review; skipping"
+    exit 0
+  fi
+  # Consume the sentinel on every exit path from here on.
+  trap 'rm -f "$SENTINEL"' EXIT
+  CTX_PATH=$(jq -r '.repo_path // empty' "$OUTDIR/review-context.json" 2>/dev/null || echo)
+  TOPLEVEL=$(git rev-parse --show-toplevel 2>/dev/null || echo)
+  # Safe default: only proceed when we can positively confirm the cwd repo IS
+  # the reviewed repo. An empty CTX_PATH (context file missing/partial, or a
+  # stale sentinel without a matching context) means we CANNOT confirm — skip
+  # rather than risk committing to whatever repo the Stop hook fired in.
+  if [ -z "$CTX_PATH" ] || [ "$CTX_PATH" != "$TOPLEVEL" ]; then
+    echo "sidecar-write: cannot confirm reviewed repo (ctx=$CTX_PATH, cwd=$TOPLEVEL); skipping"
+    exit 0
+  fi
+fi
+
 # `if … == null` (not `//`) because jq's alternative operator treats `false`
 # as "missing" — `false // true` evaluates to `true`, which would silently
 # enable writes for users who explicitly set the flag to `false`.
@@ -40,8 +71,13 @@ if [ "${WOO_REVIEW_DISABLE_GIT_WRITE:-0}" = "1" ]; then
   exit 0
 fi
 
-PR_NUMBER="${PR_NUMBER:-}"
-HEAD_SHA="${HEAD_SHA:-}"
+# State resolution: env wins (CI), else fall back to the handoff file the
+# skill session left in $OUTDIR (local post-session Stop hook path).
+CTX="$OUTDIR/review-context.json"
+PR_NUMBER="${PR_NUMBER:-$(jq -r '.pr_number // empty' "$CTX" 2>/dev/null || echo)}"
+HEAD_SHA="${HEAD_SHA:-$(jq -r '.head_sha // empty' "$CTX" 2>/dev/null || echo)}"
+GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-$(jq -r '.repo // empty' "$CTX" 2>/dev/null || echo)}"
+export GITHUB_REPOSITORY
 
 if [ -z "$PR_NUMBER" ] || [ -z "$HEAD_SHA" ]; then
   echo "sidecar-write: PR_NUMBER or HEAD_SHA missing; skipping"

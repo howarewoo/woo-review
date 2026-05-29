@@ -35,13 +35,20 @@ fi
 IMPECCABLE_VERSION="${IMPECCABLE_VERSION:-latest}"
 REACT_DOCTOR_VERSION="${REACT_DOCTOR_VERSION:-latest}"
 echo "📦 Pre-fetching Node tools (impeccable@${IMPECCABLE_VERSION}, react-doctor@${REACT_DOCTOR_VERSION})..."
-npx -y "impeccable@${IMPECCABLE_VERSION}" --version > /dev/null
-npx -y "react-doctor@${REACT_DOCTOR_VERSION}" --version > /dev/null
+npx -y "impeccable@${IMPECCABLE_VERSION}" --version > /dev/null \
+  || echo "⚠️  Could not pre-fetch impeccable@${IMPECCABLE_VERSION} (will fetch on first use)."
+npx -y "react-doctor@${REACT_DOCTOR_VERSION}" --version > /dev/null \
+  || echo "⚠️  Could not pre-fetch react-doctor@${REACT_DOCTOR_VERSION} (will fetch on first use)."
 
 # 5. Check for dependent AI skills
 echo "🤖 Checking for dependent AI skills..."
 # Note: Since the skills CLI doesn't have a 'list' or 'check' command for specific skills yet,
 # we simply suggest the user ensures they are installed.
 echo "Tip: Ensure you have run 'npx skills add pbakaus/impeccable' and 'npx skills add coreyhaines31/seo-audit'."
+
+# 6. Register the post-session sidecar Stop hook (runs outside the LLM scope).
+echo "🪝 Registering post-session sidecar write hook..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bash "$SCRIPT_DIR/register-hook.sh"
 
 echo "🎉 All dependencies are ready!"

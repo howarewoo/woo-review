@@ -281,13 +281,20 @@ print(json.dumps(payload))
 # 3. Submit the review
 gh api "repos/${GITHUB_REPOSITORY}/pulls/$PR_NUMBER/reviews" \
   --method POST --input /tmp/pr_review_payload.json
+
+# 4. Local hosts only: mark the sidecar pending so the post-session Stop hook
+#    runs sidecar-write.sh. No-op in CI (the isolated job handles writes there).
+[ "${GITHUB_ACTIONS:-}" != "true" ] && touch "${OUTDIR:-/tmp/pr-review}/sidecar-pending" || true
 ```
 
-Sidecar writes (`.woo-review/dismissed.json`) run as a *separate* job after
-the review POST. The CI action invokes `sidecar-write.sh` from a job with
-`contents: write` (gated on `enable_sidecar_write`); skill hosts that do not
-fan out into separate jobs may invoke the script themselves after the review
-POST, but the LLM step itself MUST NOT have repo-write capability.
+Sidecar writes (`.woo-review/dismissed.json`) run *outside* the LLM step. The
+CI action invokes `sidecar-write.sh` from a separate job with `contents: write`
+(gated on `enable_sidecar_write`); the validator/LLM job holds only
+`contents: read`. Local hosts MUST NOT invoke the script from the model's tool
+scope. Instead, the session drops a `sidecar-pending` sentinel after the POST
+(step 4 above), and a host-level post-session hook — registered by
+`woo-review install` — runs `sidecar-write.sh` once the session ends. The LLM
+step itself MUST NOT have repo-write capability (PR #33).
 
 ### Review Body Rules
 The `pr_review_body.txt` should contain:

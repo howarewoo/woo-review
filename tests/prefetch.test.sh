@@ -167,6 +167,15 @@ assert_eq "case1 no-marker last_sha" "" "$LAST_SHA"
 if ! diff -q "$PREFETCH/diff.txt" "$FULL_DIFF_FIXTURE" >/dev/null 2>&1; then
   echo "FAIL case1: diff.txt != full diff fixture"; fail=1
 fi
+# review-context.json handoff for the post-session sidecar hook
+assert_eq "ctx pr_number" "42" "$(jq -r '.pr_number' "$PREFETCH/review-context.json" 2>/dev/null)"
+assert_eq "ctx repo"      "owner/repo" "$(jq -r '.repo' "$PREFETCH/review-context.json" 2>/dev/null)"
+# head_sha drives sidecar-write's commit message + reviewed-SHA identity;
+# repo_path drives the post-session repo-match guard. Regressions in either
+# would otherwise pass undetected. repo_path = prefetch's cwd toplevel (the
+# script does not cd into GITHUB_WORKSPACE), so compare against this repo's.
+assert_eq "ctx head_sha"  "newhead123" "$(jq -r '.head_sha' "$PREFETCH/review-context.json" 2>/dev/null)"
+assert_eq "ctx repo_path" "$(git rev-parse --show-toplevel)" "$(jq -r '.repo_path' "$PREFETCH/review-context.json" 2>/dev/null)"
 echo "ok   case1 no-marker -> full diff"
 
 # --- Case 2: valid marker -> incremental path via env-hook diff
