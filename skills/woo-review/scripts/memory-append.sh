@@ -37,5 +37,5 @@ while IFS= read -r line || [ -n "$line" ]; do
   fi
 done < "$MEMORY_FILE"
 
-printf -- '- %s\n' "$LEARNING" >> "$MEMORY_FILE"
+printf -- '- %s\n' "$NEW_NORM" >> "$MEMORY_FILE"
 echo "memory-append: appended 1 learning to $MEMORY_FILE"

@@ -4,6 +4,7 @@
 # and asserts address-threads.json: only UNRESOLVED threads, full comment
 # bodies, and the thread node-id are preserved. No network.
 set -euo pipefail
+unset GITHUB_ACTIONS || true
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPT="$REPO_ROOT/skills/woo-review/scripts/fetch-threads.sh"

@@ -17,6 +17,7 @@ set -euo pipefail
 OUTDIR="${OUTDIR:-/tmp/pr-review}"
 mkdir -p "$OUTDIR"
 PR_NUMBER="${PR_NUMBER:?PR_NUMBER env var required}"
+[[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || { echo "fetch-threads: PR_NUMBER must be numeric, got '$PR_NUMBER'" >&2; exit 1; }
 GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo)}"
 [ -n "$GITHUB_REPOSITORY" ] || { echo "fetch-threads: cannot resolve GITHUB_REPOSITORY (set it or run inside a gh-authenticated repo)" >&2; exit 1; }
 TEST_MODE="${WOO_REVIEW_TEST_MODE:-}"
@@ -54,7 +55,7 @@ fi
 
 TOTAL=$(printf '%s' "$THREADS_JSON" | jq '[.data.repository.pullRequest.reviewThreads.nodes[]?] | length' 2>/dev/null || echo 0)
 if [ "$TOTAL" -ge 100 ]; then
-  echo "::warning::fetch-threads: hit the 100-thread page cap; some threads may be unaddressed" >&2
+  echo "::warning::fetch-threads: fetched the first 100 threads (resolved+unresolved); some unresolved threads beyond the page cap may be missed" >&2
 fi
 
 printf '%s' "$THREADS_JSON" | jq '

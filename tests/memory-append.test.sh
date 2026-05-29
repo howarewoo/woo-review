@@ -38,4 +38,14 @@ LEARNING="custom path learning" MEMORY_FILE="$WORK/nested/custom-mem.md" bash "$
 [ -f "$WORK/nested/custom-mem.md" ] || { echo "FAIL: MEMORY_FILE override did not create file"; exit 1; }
 grep -qF "custom path learning" "$WORK/nested/custom-mem.md" || { echo "FAIL: learning not written to custom path"; exit 1; }
 
+# --- Multi-line LEARNING is stored single-line and dedups on repeat ---
+ML=$'Multi-line pattern: rule\nwith extra context'
+LEARNING="$ML" bash "$SCRIPT"
+LEARNING="$ML" bash "$SCRIPT"   # second call must NOT add a second bullet
+ml_hits=$(grep -c 'Multi-line pattern: rule' .woo-review/memory.md)
+[ "$ml_hits" = "1" ] || { echo "FAIL: multi-line learning not deduped, hits=$ml_hits"; exit 1; }
+# the stored bullet must be a single line (no orphan 'with extra context' line without a dash)
+orphan=$(grep -c '^with extra context' .woo-review/memory.md || true)
+[ "$orphan" = "0" ] || { echo "FAIL: multi-line learning corrupted file format"; exit 1; }
+
 echo "PASS memory-append.test.sh"

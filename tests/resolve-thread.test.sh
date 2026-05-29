@@ -4,6 +4,7 @@
 # (reply, then resolve) instead of calling gh. Asserts both are built with the
 # right thread id + body, and that a simulated reply failure still resolves.
 set -euo pipefail
+unset GITHUB_ACTIONS || true
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPT="$REPO_ROOT/skills/woo-review/scripts/resolve-thread.sh"
