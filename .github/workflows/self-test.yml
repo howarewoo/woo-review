@@ -59,6 +59,9 @@ jobs:
       - name: Run metrics-fold tests
         run: bash tests/metrics-fold.test.sh
 
+      - name: Run resolve-outdir tests
+        run: bash tests/resolve-outdir.test.sh
+
       - name: Run prefetch tests
         run: bash tests/prefetch.test.sh
 
@@ -81,6 +84,11 @@ jobs:
         # step would normally build in a real PR run.
         run: |
           set -euo pipefail
+          # Pin OUTDIR: this step runs the scripts directly (not via the action),
+          # so the action's GITHUB_ENV pin does not apply. resolve-outdir.sh would
+          # otherwise derive a per-project /tmp/pr-review-<hash>, mismatching the
+          # literal /tmp/pr-review paths this smoke test writes and asserts.
+          export OUTDIR=/tmp/pr-review
           GITHUB_WORKSPACE="$(mktemp -d)"
           GITHUB_OUTPUT="$(mktemp)"
           export GITHUB_WORKSPACE GITHUB_OUTPUT
