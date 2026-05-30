@@ -2,7 +2,7 @@
 # Prefetches PR diff, metadata, and rules for the agentic review.
 # Inputs (env): GH_TOKEN, GITHUB_REPOSITORY, INPUT_SKIP_LABELS, INPUT_INCREMENTAL,
 #               PR_NUMBER, EVENT_NAME, EVENT_ACTION, COMMENT_BODY.
-# Outputs: skip=true|false to $GITHUB_OUTPUT.
+# Outputs: skip=true|false and outdir=<path> to $GITHUB_OUTPUT (outdir also to stdout).
 # Side effects: writes /tmp/pr-review/{diff.txt,meta.json,last_sha.txt,prior-findings.json},
 #               and rules.md when project-rule files (AGENTS.md / CLAUDE.md / .cursorrules /
 #               .windsurfrules / GEMINI.md) are discovered.
@@ -39,6 +39,15 @@ else
   rm -rf "$OUTDIR"
 fi
 mkdir -p "$OUTDIR"
+
+# Announce the resolved OUTDIR so a chat-host orchestrator can capture it and
+# export OUTDIR verbatim to every sub-agent (no recompute drift). Emitted before
+# any early skip-exit below so the value is always available. stdout always;
+# GITHUB_OUTPUT additionally in CI.
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+  echo "outdir=$OUTDIR" >> "$GITHUB_OUTPUT"
+fi
+echo "outdir=$OUTDIR"
 
 PR_NUMBER="${PR_NUMBER:-}"
 EVENT_NAME="${EVENT_NAME:-}"
