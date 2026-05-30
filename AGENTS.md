@@ -17,9 +17,9 @@ The companion GitHub Action (`action.yml` + `.github/workflows/reusable-review.y
 ## Agent Mandates
 
 ### 1. Maintain the Parallel Contract
-The 2026 architecture depends on a strict 3-stage pipeline (Detect -> Fan-out -> Validate). The skill spawns sub-agents in parallel; the action runs them as GHA matrix jobs. Both share the same artifact tree under `/tmp/pr-review/`.
+The 2026 architecture depends on a strict 3-stage pipeline (Detect -> Fan-out -> Validate). The skill spawns sub-agents in parallel; the action runs them as GHA matrix jobs. Both share the same artifact tree under `$OUTDIR` (default: a per-project `/tmp/pr-review-<hash>` derived from the repo's git toplevel by `scripts/resolve-outdir.sh`; the GitHub Action pins it to `/tmp/pr-review`). The orchestrator resolves `$OUTDIR` once and exports it to every sub-agent.
 - **NEVER** introduce sequential dependencies between angle workers.
-- **ALWAYS** communicate via artifacts in `/tmp/pr-review/`.
+- **ALWAYS** communicate via artifacts in `$OUTDIR` (never a bare `/tmp/pr-review` literal — honor the exported env var so parallel runs on one machine stay isolated).
 - **ALWAYS** follow the JSON schema in `skills/woo-review/prompts/_header.md` for findings.
 - **ALWAYS** keep the skill (`skills/woo-review/SKILL.md`) and the action in sync — the skill is the source of truth; the action is its CI extension.
 

@@ -52,7 +52,7 @@ By default (`incremental: auto` on the GitHub Action), every posted review carri
 <!-- woo-review:sha=<headRefOid> -->
 ```
 
-On the next run, `prefetch.sh` scans **bot-authored** prior review bodies (the same `BOT_NAME_PATTERN` used elsewhere) for the marker — non-bot reviewers cannot forge a marker to narrow the window. If found, prefetch diffs `<last_sha>...HEAD` via the GitHub compare API instead of the full PR diff — only the new commits since the last pass are reviewed. Unresolved prior review threads (any author) are dumped to `/tmp/pr-review/prior-findings.json` and consumed by the posting stage as an **event floor**: any non-empty priors list keeps the new review at minimum `REQUEST_CHANGES`, a conservative gate so a stale open thread is never auto-resolved by a clean incremental pass.
+On the next run, `prefetch.sh` scans **bot-authored** prior review bodies (the same `BOT_NAME_PATTERN` used elsewhere) for the marker — non-bot reviewers cannot forge a marker to narrow the window. If found, prefetch diffs `<last_sha>...HEAD` via the GitHub compare API instead of the full PR diff — only the new commits since the last pass are reviewed. Unresolved prior review threads (any author) are dumped to `$OUTDIR/prior-findings.json` and consumed by the posting stage as an **event floor**: any non-empty priors list keeps the new review at minimum `REQUEST_CHANGES`, a conservative gate so a stale open thread is never auto-resolved by a clean incremental pass.
 
 Override paths:
 - Action input `incremental: off` (workflow-level opt-out).
@@ -69,7 +69,7 @@ Reviews stay useful across PRs through a single plain-markdown file in the consu
 
 ### How it's used
 
-- **Read as context.** `prefetch.sh` copies `.woo-review/memory.md` (if present, 100KB cap) into `/tmp/pr-review/memory.md`. Every angle worker and both validator passes treat it as additional rubric and **drop any finding the memory already records as known/accepted/wontfix**. This is what keeps re-reviews quiet: an issue the team has consciously accepted is not re-flagged on the next PR.
+- **Read as context.** `prefetch.sh` copies `.woo-review/memory.md` (if present, 100KB cap) into `$OUTDIR/memory.md`. Every angle worker and both validator passes treat it as additional rubric and **drop any finding the memory already records as known/accepted/wontfix**. This is what keeps re-reviews quiet: an issue the team has consciously accepted is not re-flagged on the next PR.
 - **Written inline (local).** When you run `/woo-review` locally and dismiss a finding (or note a gotcha worth remembering), the skill records the **learning** in `.woo-review/memory.md` — first checking that no existing entry already covers it, so the file stays a small deduplicated set of reusable rules rather than a log of every dismissal. The local skill has direct write access — no post-session hook, no permission-isolated job. See Stage 6 below.
 - **Curated by humans.** The file is meant to be edited directly. Add a bullet, delete a stale one, group entries under headings — whatever keeps it readable.
 
@@ -98,11 +98,11 @@ The audit frameworks themselves are embedded in `prompts/` (inside this skill bu
 
 ## Project Rules
 
-Prefetch auto-discovers project rule files (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.windsurfrules`, `GEMINI.md`) at the repo root, and additionally walks up from each changed file path to collect any `AGENTS.md` / `CLAUDE.md` along the way. The discovered content is concatenated (each section prefixed by a `## SOURCE: <path>` header, 100KB cap) into `/tmp/pr-review/rules.md` and surfaced to every angle as additional rubric. When that file is present, an extra `conventions` angle fires; the validator drops any finding that claims a rule violation but cannot quote the rule verbatim. Repos without rule files run unchanged.
+Prefetch auto-discovers project rule files (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.windsurfrules`, `GEMINI.md`) at the repo root, and additionally walks up from each changed file path to collect any `AGENTS.md` / `CLAUDE.md` along the way. The discovered content is concatenated (each section prefixed by a `## SOURCE: <path>` header, 100KB cap) into `$OUTDIR/rules.md` and surfaced to every angle as additional rubric. When that file is present, an extra `conventions` angle fires; the validator drops any finding that claims a rule violation but cannot quote the rule verbatim. Repos without rule files run unchanged.
 
 ## Per-repo Configuration (`.woo-review/config.json`)
 
-Drop an optional `.woo-review/config.json` in the consumer repo to tune the review without forking the skill. Prefetch parses it into `/tmp/pr-review/config.json` (canonical copy); downstream stages read from there. Missing file = defaults (`severity_floor: high`). **All keys are optional — specify only the ones you want to override; the rest keep their built-in defaults.** Invalid JSON or unknown keys → loud `::error file=.woo-review/config.json,line=N::<msg>` annotation and the workflow fails (no silent fallback).
+Drop an optional `.woo-review/config.json` in the consumer repo to tune the review without forking the skill. Prefetch parses it into `$OUTDIR/config.json` (canonical copy); downstream stages read from there. Missing file = defaults (`severity_floor: high`). **All keys are optional — specify only the ones you want to override; the rest keep their built-in defaults.** Invalid JSON or unknown keys → loud `::error file=.woo-review/config.json,line=N::<msg>` annotation and the workflow fails (no silent fallback).
 
 Minimal example — override one knob, everything else stays default:
 
@@ -175,11 +175,11 @@ export WOO_REVIEW_ACTION_PATH="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)
 
 ### Stage 1 — Prefetch
 
-Build the same `/tmp/pr-review/` artifact tree the GitHub Action builds.
+Build the same `$OUTDIR/` artifact tree the GitHub Action builds.
 
 > **Atomic state.** `prefetch.sh` wipes `$OUTDIR` (defaults to a per-project `/tmp/pr-review-<hash>` via `scripts/resolve-outdir.sh`) before recreating it. Hosts that invoke individual stages directly (skipping `prefetch.sh`) MUST do the same — stale `findings.<angle>.json` from a prior run will otherwise re-enter the merge step and contaminate the review.
 >
-> **OUTDIR override.** All scripts (`prefetch.sh`, `load-config.sh`, `detect-angles.sh`, `merge-findings.sh`, `intersect-findings.sh`, `chunk-diff.sh`, `resolve-diff-line.sh`) honor the `OUTDIR` environment variable. Hosts that cannot use `/tmp/pr-review/` (e.g. sandboxed runtimes with workspace-scoped temp dirs) MUST export `OUTDIR=<their_dir>` to **every** sub-agent. Without that, sub-agents will write findings to a different directory than the merge step reads, silently dropping them.
+> **OUTDIR override.** All scripts (`prefetch.sh`, `load-config.sh`, `detect-angles.sh`, `merge-findings.sh`, `intersect-findings.sh`, `chunk-diff.sh`, `resolve-diff-line.sh`) honor the `OUTDIR` environment variable. Hosts that cannot use `$OUTDIR/` (e.g. sandboxed runtimes with workspace-scoped temp dirs) MUST export `OUTDIR=<their_dir>` to **every** sub-agent. Without that, sub-agents will write findings to a different directory than the merge step reads, silently dropping them.
 >
 > **Default is per-project.** When `OUTDIR` is unset, scripts derive `/tmp/pr-review-<hash>` from the repo's git toplevel (via `scripts/resolve-outdir.sh`), so different repos on one machine isolate automatically. The orchestrator resolves it once and exports it to every sub-agent; `prefetch.sh` also prints `outdir=<path>`. Two concurrent runs of the *same* repo still share one dir — set `OUTDIR` explicitly to isolate those.
 
@@ -240,13 +240,13 @@ bash "$WOO_REVIEW_ACTION_PATH/scripts/load-config.sh"   # parses .woo-review/con
 bash "$WOO_REVIEW_ACTION_PATH/scripts/detect-angles.sh"
 ```
 
-Read the result from `/tmp/pr-review/angles.txt` (one angle per line). Always-on angles: `bugs`, `security`. Conditional (auto-detected from changed paths + diff body): `conventions` (when `rules.md` is present), `seo`, `aeo`, `design`, `react`, `database`, `tests`, `api`, `infra`, `observability`, `types`, `i18n`, `docs`, `deps`. See `scripts/detect-angles.sh` for per-angle gating heuristics.
+Read the result from `$OUTDIR/angles.txt` (one angle per line). Always-on angles: `bugs`, `security`. Conditional (auto-detected from changed paths + diff body): `conventions` (when `rules.md` is present), `seo`, `aeo`, `design`, `react`, `database`, `tests`, `api`, `infra`, `observability`, `types`, `i18n`, `docs`, `deps`. See `scripts/detect-angles.sh` for per-angle gating heuristics.
 
 Prefetch also produces optional chunking artifacts when the post-ignore diff exceeds `chunking.max_loc` (default 4000 LOC). When present, the host MUST fan out one sub-agent per `(angle, chunk)` pair in Stage 3:
 
-- `/tmp/pr-review/chunks.txt` — chunk IDs, one per line (`chunk-0`, `chunk-1`, …).
-- `/tmp/pr-review/chunks.json` — manifest: `[{id, files, loc, diff_path, boundary}]`.
-- `/tmp/pr-review/diff.chunk-<id>.txt` — per-chunk diff (a valid `diff --git` stream).
+- `$OUTDIR/chunks.txt` — chunk IDs, one per line (`chunk-0`, `chunk-1`, …).
+- `$OUTDIR/chunks.json` — manifest: `[{id, files, loc, diff_path, boundary}]`.
+- `$OUTDIR/diff.chunk-<id>.txt` — per-chunk diff (a valid `diff --git` stream).
 
 Boundary precedence: workspace packages (`packages/<name>/`, `apps/<name>/`, `services/<name>/`, `libs/<name>/`) → top-level directories → file-LOC-balanced split. When `chunks.txt` is absent the diff is under threshold and chunking is a no-op.
 
@@ -277,7 +277,7 @@ and drop the finding when the helper prints `null` (the line is not anchorable
 on the diff's RIGHT side and the GitHub API will reject the comment). EXIT.
 ```
 
-**Chunked fan-out.** When `/tmp/pr-review/chunks.txt` exists, spawn one sub-agent per `(angle, chunk_id)` instead of one per angle. Pass the chunk ID in the brief, and tell the sub-agent to read `/tmp/pr-review/diff.chunk-<id>.txt` and write `/tmp/pr-review/findings.<angle>.chunk-<id>.json`. The validator pass still runs **once globally** — `merge-findings.sh` collapses any within-angle duplicates across chunks before validation, and the validator handles cross-angle dedup as today.
+**Chunked fan-out.** When `$OUTDIR/chunks.txt` exists, spawn one sub-agent per `(angle, chunk_id)` instead of one per angle. Pass the chunk ID in the brief, and tell the sub-agent to read `$OUTDIR/diff.chunk-<id>.txt` and write `$OUTDIR/findings.<angle>.chunk-<id>.json`. The validator pass still runs **once globally** — `merge-findings.sh` collapses any within-angle duplicates across chunks before validation, and the validator handles cross-angle dedup as today.
 
 Sub-agents MUST NOT post comments, edit the PR, touch other angles' files, run `prefetch.sh`, or delete/recreate `$OUTDIR`. `prefetch.sh` is a Stage-1-only operation; re-running it mid-swarm wipes `meta.json` / `prior-findings.json` and corrupts the posting stage (issue #48).
 
@@ -317,20 +317,20 @@ After every sub-agent has finished:
 
 ```bash
 bash "$WOO_REVIEW_ACTION_PATH/scripts/merge-findings.sh"
-# Produces /tmp/pr-review/raw_findings.json
+# Produces $OUTDIR/raw_findings.json
 ```
 
 Validation runs as an **adversarial pipeline** (issue #13): two opposing-bias `deep`-tier validator passes followed by a deterministic intersection. The intersection (findings BOTH passes agree to keep) is what authors see — this trades 2× validator cost for materially higher signal-to-noise.
 
-Read `disable_adversarial` from `/tmp/pr-review/config.json`:
+Read `disable_adversarial` from `$OUTDIR/config.json`:
 
 ```bash
-DISABLE_ADV="$(jq -r '.disable_adversarial // false' /tmp/pr-review/config.json 2>/dev/null || echo false)"
+DISABLE_ADV="$(jq -r '.disable_adversarial // false' $OUTDIR/config.json 2>/dev/null || echo false)"
 ```
 
 **Stage 4a — Prosecutor pass** (skip if `DISABLE_ADV == true`):
 
-Run `prompts/validator-prosecutor.md`. Bias: assume each finding is real; drop only the clearly wrong. Writes `/tmp/pr-review/findings.prosecutor.json` and exits.
+Run `prompts/validator-prosecutor.md`. Bias: assume each finding is real; drop only the clearly wrong. Writes `$OUTDIR/findings.prosecutor.json` and exits.
 
 **Stage 4b — Defender pass** (`prompts/validator.md`):
 
@@ -339,7 +339,7 @@ Run `prompts/validator-prosecutor.md`. Bias: assume each finding is real; drop o
 3. Severity check: you MAY downgrade (HIGH → MEDIUM, blocking true → false). You MAY NOT upgrade.
 4. Comment-shape check: every surviving finding has `title` (bold headline ≤60 chars), `description` (issue only, no fix), and `fix` (recommended change in prose). Split overloaded `description` fields when an angle collapsed them.
 5. `fix_type` enforcement: every surviving finding MUST carry `fix_type` (`"suggestion"` or `"prose"`). Downgrade any `fix_type: "suggestion"` that violates the ≤10-line / single-file / self-contained / no-placeholder / no-fence-break rules — set `fix_type: "prose"` and `suggestion: null`. Full rule list lives in `prompts/validator.md` step 7.
-6. Writes `/tmp/pr-review/findings.defender.json`.
+6. Writes `$OUTDIR/findings.defender.json`.
 
 > **Swarm workers stop here.** In the chat-host swarm the defender writes `findings.defender.json` and EXITs — the orchestrator owns Stage 4c (intersect) and Stage 5 (post). Leave `WOO_REVIEW_SEQUENTIAL_VALIDATE` unset when running as a swarm worker — the GitHub Action's `validate` mode sets it because there one sequential agent owns the whole tail; a swarm host has separate orchestrator and worker roles, so the worker must not see it. Pointing a swarm defender at `validator.md` with the flag unset is the safe default — its Step 3/3b/4 gate keeps it from racing the prosecutor, posting prematurely, or mutating `$OUTDIR`.
 
@@ -353,7 +353,7 @@ bash "$WOO_REVIEW_ACTION_PATH/scripts/intersect-findings.sh"
 
 ```bash
 for f in findings.prosecutor.json findings.defender.json; do
-  if ! jq -e 'type == "array"' "/tmp/pr-review/$f" >/dev/null 2>&1; then
+  if ! jq -e 'type == "array"' "$OUTDIR/$f" >/dev/null 2>&1; then
     echo "missing/non-array: $f — orchestrator must re-launch this pass once (see below)"
   fi
 done
@@ -364,12 +364,12 @@ Re-launch a missing pass exactly **once** (prosecutor → `validator-prosecutor.
 **Surface degradation.** After intersect, read `validator-metrics.json`:
 
 ```bash
-jq -r '.degraded // false' /tmp/pr-review/validator-metrics.json
+jq -r '.degraded // false' $OUTDIR/validator-metrics.json
 ```
 
 If `true`, tell the user in your orchestrator summary that the review is defender-only / lower-confidence — the posting stage also appends a ⚠️ line to the review body (`_header.md`). A `disable_adversarial: true` opt-out reports `degraded: false` and needs no warning.
 
-Produces `/tmp/pr-review/findings.json` — the final validated set — and `/tmp/pr-review/validator-metrics.json` with `prosecutor_count`, `defender_count`, `kept_count`, `disagreement_count`. Intersection key is `(file, line, title-stem)`. When `disable_adversarial: true` is set or `findings.prosecutor.json` is absent, the script copies defender output verbatim and tags metrics `mode: defender-only`. Severity = `min(prosecutor, defender)`, blocking = `prosecutor.blocking AND defender.blocking`, other fields take the defender's copy.
+Produces `$OUTDIR/findings.json` — the final validated set — and `$OUTDIR/validator-metrics.json` with `prosecutor_count`, `defender_count`, `kept_count`, `disagreement_count`. Intersection key is `(file, line, title-stem)`. When `disable_adversarial: true` is set or `findings.prosecutor.json` is absent, the script copies defender output verbatim and tags metrics `mode: defender-only`. Severity = `min(prosecutor, defender)`, blocking = `prosecutor.blocking AND defender.blocking`, other fields take the defender's copy.
 
 ### Stage 5 — Report
 
@@ -387,7 +387,7 @@ After reporting, when the user **dismisses** a finding as a known/intentional/ac
 
 Before writing anything:
 
-1. **Read the existing `.woo-review/memory.md`** (it was already loaded to `/tmp/pr-review/memory.md` in Stage 1; re-read the repo copy in case it changed).
+1. **Read the existing `.woo-review/memory.md`** (it was already loaded to `$OUTDIR/memory.md` in Stage 1; re-read the repo copy in case it changed).
 2. **Check coverage.** If an existing entry already captures this learning — even phrased differently, or scoped more narrowly/broadly — do **NOT** append a duplicate. If the existing entry is close but the new dismissal generalizes it (e.g. the same pattern in a second file), edit that entry to widen its scope rather than adding a near-duplicate.
 3. **Only when the learning is genuinely new**, append one short bullet phrased as a reusable rule, then stop.
 
@@ -413,7 +413,7 @@ which the GitHub Action's `contents: read` validator job can do.
 
 **Lifecycle (A1→A6):**
 
-1. **Fetch** — resolve the PR# (explicit arg, else the current branch's open PR), then `bash "$WOO_REVIEW_ACTION_PATH/scripts/fetch-threads.sh"` writes every unresolved thread (any author) to `/tmp/pr-review/address-threads.json`. Memory + config are loaded as in Stage 1.
+1. **Fetch** — resolve the PR# (explicit arg, else the current branch's open PR), then `bash "$WOO_REVIEW_ACTION_PATH/scripts/fetch-threads.sh"` writes every unresolved thread (any author) to `$OUTDIR/address-threads.json`. Memory + config are loaded as in Stage 1.
 2. **Precondition** — the working tree must be clean **and** the current branch must be the PR head. Otherwise abort before any edit; tell the user to checkout the PR head on a clean tree.
 3. **Reception loop** — per thread, follow `prompts/address.md`: read → understand → verify → evaluate → decide `FIX` / `ACCEPT` / `CLARIFY`.
 4. **Commit + push** — one commit for all fixes → push to the PR head → capture `<sha>` (before any reply, so "Fixed in `<sha>`" is real). Never force-push.

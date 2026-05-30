@@ -12,7 +12,7 @@ assert_eq()  { local l="$1" g="$2" w="$3"; if [ "$g" = "$w" ]; then pass "$l"; e
 assert_ne()  { local l="$1" a="$2" b="$3"; if [ "$a" != "$b" ]; then pass "$l"; else fail "$l (both '$a')"; fi; }
 assert_match() { local l="$1" g="$2" re="$3"; if printf '%s' "$g" | grep -Eq "$re"; then pass "$l"; else fail "$l (got '$g' !~ $re)"; fi; }
 
-trap 'rm -rf "${REPO_A:-}" "${REPO_B:-}" "${NONREPO:-}" "${OUT_A:-}"' EXIT
+trap 'rm -rf "${REPO_A:-}" "${REPO_B:-}" "${NONREPO:-}" "${OUT_A:-}" "${OUT_A2:-}" "${OUT_B2:-}" "${SHARED:-}"' EXIT
 
 # Resolve OUTDIR by sourcing the helper inside a subshell, optionally cd'd into DIR
 # and with OUTDIR pre-set. Echoes the resolved value.
@@ -54,12 +54,26 @@ OUT_N2="$(resolve "$NONREPO" "")"
 assert_match "non-repo derived shape" "$OUT_N1" '^/tmp/pr-review-[0-9a-f]{12}$'
 assert_eq "non-repo stable" "$OUT_N1" "$OUT_N2"
 
-# Case 6: cross-project isolation reproduction — wiping repo B's tree must NOT
-# touch repo A's tree (today both default to /tmp/pr-review and B's rm -rf kills A).
-mkdir -p "$OUT_A" "$OUT_B"
-echo "A-sentinel" > "$OUT_A/findings.bugs.json"
-rm -rf "$OUT_B"          # simulate prefetch B's atomic wipe
-if [ -f "$OUT_A/findings.bugs.json" ]; then pass "cross-project wipe isolated"; else fail "cross-project wipe isolated (A clobbered)"; fi
+# Case 6: cross-project isolation — the regression this helper exists to prevent.
+# The hazard: prefetch.sh runs `rm -rf "$OUTDIR"`. If two repos resolve to the
+# SAME dir, reviewing repo B destroys repo A's in-flight artifacts.
+#
+# (a) The hazard is real: when two runs share one dir, the wipe IS destructive.
+SHARED="$(mktemp -d "${TMPDIR:-/tmp}/ro-shared.XXXXXX")"
+echo "A-sentinel" > "$SHARED/findings.bugs.json"   # repo A's in-flight artifact
+rm -rf "$SHARED"                                     # repo B's prefetch wipe (same dir)
+if [ ! -e "$SHARED/findings.bugs.json" ]; then pass "shared-dir wipe is destructive (hazard real)"; else fail "shared-dir wipe is destructive (hazard real)"; fi
+#
+# (b) The fix holds: with NEITHER repo setting OUTDIR, the helper derives DISTINCT
+# per-project dirs, so repo B's wipe cannot reach repo A. This is tied to the real
+# helper output — a regression to a constant default makes the two dirs equal and
+# FAILS this assertion (so the case is independently falsifiable, not tautological).
+OUT_A2="$(resolve "$REPO_A" "")"
+OUT_B2="$(resolve "$REPO_B" "")"
+mkdir -p "$OUT_A2" "$OUT_B2"
+echo "A-sentinel" > "$OUT_A2/findings.bugs.json"
+rm -rf "$OUT_B2"                                     # repo B's prefetch wipe (its own dir)
+if [ -f "$OUT_A2/findings.bugs.json" ]; then pass "per-project derivation isolates the wipe"; else fail "per-project derivation isolates the wipe (A clobbered — helper not per-project?)"; fi
 
 rm -rf "$REPO_A" "$REPO_B" "$NONREPO" "$OUT_A"
 echo
