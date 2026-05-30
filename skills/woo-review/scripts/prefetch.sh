@@ -31,7 +31,8 @@ set -euo pipefail
 # would otherwise destroy meta.json / prior-findings.json and break the posting
 # stage. prefetch is a Stage-1-only operation; set WOO_REVIEW_FRESH=1 to force a
 # wipe (the only legitimate caller is a genuinely fresh run).
-OUTDIR="${OUTDIR:-/tmp/pr-review}"
+# shellcheck source=skills/woo-review/scripts/resolve-outdir.sh
+source "$(dirname "${BASH_SOURCE[0]}")/resolve-outdir.sh"
 if [ "${WOO_REVIEW_FRESH:-}" != "1" ] && compgen -G "$OUTDIR/findings.*" >/dev/null 2>&1; then
   echo "::warning::prefetch: $OUTDIR holds in-flight findings.* — refusing rm -rf (set WOO_REVIEW_FRESH=1 to force a fresh wipe)" >&2
 else

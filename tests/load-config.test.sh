@@ -12,6 +12,7 @@ SCRIPT="$REPO_ROOT/skills/woo-review/scripts/load-config.sh"
 WORK="$(mktemp -d)"
 PREFETCH="/tmp/pr-review"
 mkdir -p "$PREFETCH"
+export OUTDIR="$PREFETCH"
 trap 'rm -rf "$WORK" "$PREFETCH"' EXIT
 
 export GITHUB_WORKSPACE="$WORK/workspace"

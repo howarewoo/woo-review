@@ -11,6 +11,7 @@ SCRIPT="$REPO_ROOT/skills/woo-review/scripts/detect-angles.sh"
 WORK="$(mktemp -d)"
 PREFETCH="/tmp/pr-review"
 mkdir -p "$PREFETCH"
+export OUTDIR="$PREFETCH"
 
 # Clean up scratch dirs on exit so consecutive runs (CI or local) start from a
 # known state. WORK is mktemp-owned; PREFETCH is a fixed path the test creates.
