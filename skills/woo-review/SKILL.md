@@ -177,20 +177,27 @@ export WOO_REVIEW_ACTION_PATH="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)
 
 Build the same `/tmp/pr-review/` artifact tree the GitHub Action builds.
 
-> **Atomic state.** `prefetch.sh` wipes `$OUTDIR` (defaults to `/tmp/pr-review`) before recreating it. Hosts that invoke individual stages directly (skipping `prefetch.sh`) MUST do the same — stale `findings.<angle>.json` from a prior run will otherwise re-enter the merge step and contaminate the review.
+> **Atomic state.** `prefetch.sh` wipes `$OUTDIR` (defaults to a per-project `/tmp/pr-review-<hash>` via `scripts/resolve-outdir.sh`) before recreating it. Hosts that invoke individual stages directly (skipping `prefetch.sh`) MUST do the same — stale `findings.<angle>.json` from a prior run will otherwise re-enter the merge step and contaminate the review.
 >
 > **OUTDIR override.** All scripts (`prefetch.sh`, `load-config.sh`, `detect-angles.sh`, `merge-findings.sh`, `intersect-findings.sh`, `chunk-diff.sh`, `resolve-diff-line.sh`) honor the `OUTDIR` environment variable. Hosts that cannot use `/tmp/pr-review/` (e.g. sandboxed runtimes with workspace-scoped temp dirs) MUST export `OUTDIR=<their_dir>` to **every** sub-agent. Without that, sub-agents will write findings to a different directory than the merge step reads, silently dropping them.
+>
+> **Default is per-project.** When `OUTDIR` is unset, scripts derive `/tmp/pr-review-<hash>` from the repo's git toplevel (via `scripts/resolve-outdir.sh`), so different repos on one machine isolate automatically. The orchestrator resolves it once and exports it to every sub-agent; `prefetch.sh` also prints `outdir=<path>`. Two concurrent runs of the *same* repo still share one dir — set `OUTDIR` explicitly to isolate those.
 
 **If a PR number was supplied** — export it and invoke `prefetch.sh` directly. The script handles diff fetch, meta fetch, project-rule discovery, auto-skip checks, and prior-findings extraction. Hosts whose tool gating blocks caller-side `$(...)` substitution (notably Gemini CLI) MUST use this path — `prefetch.sh` self-resolves the PR number from the current branch when none is exported and `GITHUB_ACTIONS != "true"`, so callers never need their own subshell.
 
 ```bash
+# Resolve the per-project OUTDIR once and export it so prefetch.sh and every
+# sub-agent share one tree. Default: /tmp/pr-review-<hash> derived from the git
+# toplevel (scripts/resolve-outdir.sh), so different repos on one machine never
+# collide. An explicit OUTDIR (e.g. a sandbox temp dir) is respected as-is.
+source "$WOO_REVIEW_ACTION_PATH/scripts/resolve-outdir.sh"   # sets + exports OUTDIR
 export PR_NUMBER=<n>   # optional; prefetch.sh derives it from the branch when unset
-bash "$WOO_REVIEW_ACTION_PATH/scripts/prefetch.sh"
+bash "$WOO_REVIEW_ACTION_PATH/scripts/prefetch.sh"   # prints outdir=<path>; honors the exported OUTDIR
 ```
 
 When prefetch resolves a PR number AND finds an open PR, it produces the full artifact tree (`diff.txt`, `meta.json`, `last_sha.txt`, `prior-findings.json`, `rules.md` when applicable, `memory.md` when the consumer repo has `.woo-review/memory.md`). When no PR resolves, it emits `skip=true` — the host then falls back to local-diff mode below.
 
-**Artifact reference.** All paths are under `$OUTDIR` (default `/tmp/pr-review/`):
+**Artifact reference.** All paths are under `$OUTDIR` (default per-project `/tmp/pr-review-<hash>/`):
 
 | Artifact | Written by | Consumed by | Notes |
 |---|---|---|---|
@@ -210,7 +217,7 @@ When prefetch resolves a PR number AND finds an open PR, it produces the full ar
 **If no PR number resolved (local mode):**
 
 ```bash
-OUTDIR="${OUTDIR:-/tmp/pr-review}"
+source "$WOO_REVIEW_ACTION_PATH/scripts/resolve-outdir.sh"   # per-project default OUTDIR (or honors an explicit override)
 rm -rf "$OUTDIR"
 mkdir -p "$OUTDIR"
 BASE="$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main)"
@@ -258,7 +265,7 @@ Each sub-agent receives the same brief:
 You are the <angle> reviewer for this PR. Read:
 - $WOO_REVIEW_ACTION_PATH/prompts/_header.md   (shared contract)
 - $WOO_REVIEW_ACTION_PATH/prompts/angles/<angle>.md   (your scope)
-- $OUTDIR/diff.txt, $OUTDIR/meta.json   (OUTDIR defaults to /tmp/pr-review)
+- $OUTDIR/diff.txt, $OUTDIR/meta.json   (OUTDIR is exported by the orchestrator; prefer it over any literal path)
 
 Execute any shell commands the angle prompt specifies (e.g. impeccable detect,
 react-doctor). Write your findings as a JSON array to

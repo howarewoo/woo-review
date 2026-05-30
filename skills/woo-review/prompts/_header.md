@@ -18,7 +18,7 @@ Every artifact you write under `$OUTDIR/findings.*.json` (default `/tmp/pr-revie
     --file "<path>" --line "<N>"
   ```
   When the helper prints `null`, the line is not anchorable on the diff's RIGHT side and GitHub will reject the comment (HTTP 422). DROP the finding entirely rather than guessing a different line. The merge step also runs a final-pass safety net on this, but resolving up-front saves a round-trip and keeps the finding count honest.
-- `$OUTDIR` defaults to `/tmp/pr-review` — when the host has set it to something else (e.g. a sandboxed workspace temp dir), prefer the env var over the literal path throughout this contract.
+- `$OUTDIR` defaults to a **per-project** path — `/tmp/pr-review-<hash>` derived from the repo's git toplevel (so concurrent reviews of different repos on one machine never share a tree). The orchestrator exports the resolved `OUTDIR` to you; **always prefer the exported `$OUTDIR` env var over any literal `/tmp/pr-review` path throughout this contract.** If `$OUTDIR` is somehow unset, re-derive it by sourcing `scripts/resolve-outdir.sh` — never fall back to a bare `/tmp/pr-review`.
 
 ## Prefetched Artifacts (do NOT re-fetch)
 
