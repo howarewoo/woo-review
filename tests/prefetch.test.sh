@@ -13,6 +13,7 @@ SCRIPT="$REPO_ROOT/skills/woo-review/scripts/prefetch.sh"
 WORK="$(mktemp -d)"
 PREFETCH="/tmp/pr-review"
 mkdir -p "$PREFETCH"
+export OUTDIR="$PREFETCH"
 
 trap 'rm -rf "$WORK" "$PREFETCH"' EXIT
 
@@ -576,6 +577,35 @@ if [ -f "$PREFETCH/memory.md" ]; then
   echo "FAIL case20: memory.md present in OUTDIR when source absent"; fail=1
 fi
 echo "ok   case20 memory absent -> no OUTDIR/memory.md"
+
+# --- Case 21: prefetch emits outdir= on stdout so the orchestrator can capture it ---
+# OUTDIR emit: prefetch announces the resolved dir on stdout so the orchestrator
+# can export it to sub-agents.
+reset
+unset GITHUB_ACTIONS || true
+OUT_EMIT="$(mktemp -d "${TMPDIR:-/tmp}/pf-emit.XXXXXX")"
+EMIT_OUT="$( WOO_REVIEW_TEST_MODE=1 \
+  WOO_REVIEW_FAKE_PR_REVIEWS_JSON='{"reviews":[]}' \
+  WOO_REVIEW_FAKE_PRIOR_THREADS_JSON='{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[]}}}}}' \
+  WOO_REVIEW_TEST_META_FIXTURE="$META_FIXTURE" \
+  WOO_REVIEW_TEST_FULL_DIFF_FIXTURE="$FULL_DIFF_FIXTURE" \
+  GITHUB_OUTPUT="$OUTPUT_FILE" \
+  GITHUB_REPOSITORY="owner/repo" \
+  GH_TOKEN="fake" \
+  PR_NUMBER="42" \
+  EVENT_NAME="pull_request" \
+  EVENT_ACTION="synchronize" \
+  OUTDIR="$OUT_EMIT" \
+  bash "$SCRIPT" 2>/dev/null || true )"
+if printf '%s\n' "$EMIT_OUT" | grep -qx "outdir=$OUT_EMIT"; then
+  echo "ok   case21 prefetch emits outdir= on stdout"
+else
+  echo "FAIL case21 prefetch emits outdir= on stdout"
+  echo "     stdout was:"
+  printf '%s\n' "$EMIT_OUT" | sed 's/^/     /'
+  fail=1
+fi
+rm -rf "$OUT_EMIT"
 
 # ---------- Guard: in-flight findings.* block the rm -rf wipe (issue #48) ----------
 # The guard runs at the very top of prefetch.sh (before any gh/PR work), so a

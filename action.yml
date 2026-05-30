@@ -106,6 +106,14 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Pin OUTDIR for CI
+      # CI matrix jobs run on isolated runners, so the per-project derivation in
+      # resolve-outdir.sh is unnecessary here. Pin the canonical path that this
+      # action's artifact steps, the chunk-swap logic, and the agent allowlist
+      # (Write(/tmp/pr-review/**)) all hardcode, keeping CI byte-identical.
+      shell: bash
+      run: echo "OUTDIR=/tmp/pr-review" >> "$GITHUB_ENV"
+
     - name: Resolve provider
       id: detect
       shell: bash

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OUTDIR="${OUTDIR:-/tmp/pr-review}"
+# shellcheck source=skills/woo-review/scripts/resolve-outdir.sh
+source "$(dirname "${BASH_SOURCE[0]}")/resolve-outdir.sh"
 MERGED_FILE="$OUTDIR/raw_findings.json"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 

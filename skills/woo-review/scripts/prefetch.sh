@@ -2,7 +2,7 @@
 # Prefetches PR diff, metadata, and rules for the agentic review.
 # Inputs (env): GH_TOKEN, GITHUB_REPOSITORY, INPUT_SKIP_LABELS, INPUT_INCREMENTAL,
 #               PR_NUMBER, EVENT_NAME, EVENT_ACTION, COMMENT_BODY.
-# Outputs: skip=true|false to $GITHUB_OUTPUT.
+# Outputs: skip=true|false and outdir=<path> to $GITHUB_OUTPUT (outdir also to stdout).
 # Side effects: writes /tmp/pr-review/{diff.txt,meta.json,last_sha.txt,prior-findings.json},
 #               and rules.md when project-rule files (AGENTS.md / CLAUDE.md / .cursorrules /
 #               .windsurfrules / GEMINI.md) are discovered.
@@ -31,13 +31,23 @@ set -euo pipefail
 # would otherwise destroy meta.json / prior-findings.json and break the posting
 # stage. prefetch is a Stage-1-only operation; set WOO_REVIEW_FRESH=1 to force a
 # wipe (the only legitimate caller is a genuinely fresh run).
-OUTDIR="${OUTDIR:-/tmp/pr-review}"
+# shellcheck source=skills/woo-review/scripts/resolve-outdir.sh
+source "$(dirname "${BASH_SOURCE[0]}")/resolve-outdir.sh"
 if [ "${WOO_REVIEW_FRESH:-}" != "1" ] && compgen -G "$OUTDIR/findings.*" >/dev/null 2>&1; then
   echo "::warning::prefetch: $OUTDIR holds in-flight findings.* — refusing rm -rf (set WOO_REVIEW_FRESH=1 to force a fresh wipe)" >&2
 else
   rm -rf "$OUTDIR"
 fi
 mkdir -p "$OUTDIR"
+
+# Announce the resolved OUTDIR so a chat-host orchestrator can capture it and
+# export OUTDIR verbatim to every sub-agent (no recompute drift). Emitted before
+# any early skip-exit below so the value is always available. stdout always;
+# GITHUB_OUTPUT additionally in CI.
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+  echo "outdir=$OUTDIR" >> "$GITHUB_OUTPUT"
+fi
+echo "outdir=$OUTDIR"
 
 PR_NUMBER="${PR_NUMBER:-}"
 EVENT_NAME="${EVENT_NAME:-}"

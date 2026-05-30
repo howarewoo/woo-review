@@ -14,7 +14,8 @@
 # truncation is logged below, never silent.
 set -euo pipefail
 
-OUTDIR="${OUTDIR:-/tmp/pr-review}"
+# shellcheck source=skills/woo-review/scripts/resolve-outdir.sh
+source "$(dirname "${BASH_SOURCE[0]}")/resolve-outdir.sh"
 mkdir -p "$OUTDIR"
 PR_NUMBER="${PR_NUMBER:?PR_NUMBER env var required}"
 [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || { echo "fetch-threads: PR_NUMBER must be numeric, got '$PR_NUMBER'" >&2; exit 1; }

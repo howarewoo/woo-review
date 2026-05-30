@@ -39,7 +39,8 @@
 
 set -euo pipefail
 
-OUTDIR="${OUTDIR:-/tmp/pr-review}"
+# shellcheck source=skills/woo-review/scripts/resolve-outdir.sh
+source "$(dirname "${BASH_SOURCE[0]}")/resolve-outdir.sh"
 mkdir -p "$OUTDIR"
 
 ROOT="${GITHUB_WORKSPACE:-$(pwd)}"
